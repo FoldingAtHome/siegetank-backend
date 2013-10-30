@@ -76,11 +76,10 @@ Delete a stream from a project, replies with HTTP 200 if successful
 <h3> DELETE x.com/st/projects/{project-sha1sum} </h3>
 Delete a stream from a project, replies with HTTP 200 if successful
 <h3> PUT x.com/st/projects/{project-sha1sum}/{stream-sha1sum} </h3>
-Move a stream from {projectX-sha1sum} to {projectY-sha1sum}, replies with HTTP 200 if successful
+Move a stream from {project-sha1sum}/{stream-sha1sum} to {destination-project-sha1sum}/{stream-sha1sum}, replies with HTTP 200 if successful
 ``` json
 {
-  "from_id" : "from_sha1sum",
-  "to_id" : "to_sha1sum",
+  "destination" : "destination_project_sha1sum",
 }
 ```
 <h2> GET </h2>
