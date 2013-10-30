@@ -85,7 +85,7 @@ Move a stream from {projectX-sha1sum} to {projectY-sha1sum}, replies with HTTP 2
 ```
 <h2> GET </h2>
 <h3> GET x.com/st/projects </h3>
-List projects available to authenticated user with __REP__:
+List projects available to authenticated user, __REP__ signature:
 ``` json
 {
   "project_ids" : [ 
@@ -94,8 +94,8 @@ List projects available to authenticated user with __REP__:
                   ]
 }
 ```
-<h3> GET x.com/st/projects/{project-sha1sum}
-List streams in the project.
+<h3> GET x.com/st/projects/{project-sha1sum}  
+List streams in the project, __REP__ signature:
 ``` json
 {
   "project_ids" : [ 
