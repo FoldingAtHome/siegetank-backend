@@ -74,7 +74,7 @@ __REP__
 <h3> DELETE x.com/st/projects/{project-sha1sum}/{stream-sha1sum} </h3>
 Delete a stream from a project, replies with HTTP 200 if successful
 <h3> DELETE x.com/st/projects/{project-sha1sum} </h3>
-Delete a stream from a project, replies with HTTP 200 if successful
+Delete a project and its streams, replies with HTTP 200 if successful
 <h3> PUT x.com/st/projects/{project-sha1sum}/{stream-sha1sum} </h3>
 Move a stream from {project-sha1sum}/{stream-sha1sum} to {destination-project-sha1sum}/{stream-sha1sum}, replies with HTTP 200 if successful
 ``` json
