@@ -99,8 +99,8 @@ List streams in the project.
 ``` json
 {
   "project_ids" : [ 
-                     {"sha1sum0": frames},
-                     {"sha1sum1": frames}
+                     {"sha1sum0": 5234},
+                     {"sha1sum1": 6234}
                   ]
 }
 ```
