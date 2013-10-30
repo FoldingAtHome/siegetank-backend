@@ -29,7 +29,7 @@ A stream is a conceptualized instance of an MD-run. A project consists of a coll
 
 <h2> Authentication </h2>
 
-OAuth or Google Auth
+OAuth or Google Auth. Authentication should show allocation available and disk space available.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
