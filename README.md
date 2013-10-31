@@ -33,7 +33,7 @@ OAuth or Google Auth. Authentication should show allocation available and disk s
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new project using a set of OpenMM generated XMLs. The user can choose to select additional options, whose default values are listed below. Each streams within a project has its own system, integrator, and XML files. The user may choose to add new ones as needed. Options are defined on a project basis, that is, all streams share the same properties. The project is an sha1sum of the union of the system and the integrator xmls.  
+Create a new project using a set of OpenMM generated XMLs. The user can choose to select additional options, whose default values are listed below. Each streams within a project has its own system, integrator, and XML files. The user may choose to add new ones as needed. Options are defined on a project basis, that is, all streams share the same properties. The project id is an sha1sum of the union of the system and the integrator xmls.  
 __REQ__
 ``` json
 {
