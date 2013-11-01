@@ -55,7 +55,7 @@ __REP__
   "stream_ids": ["sha1sum0", "sha1sum1", "sha1sum2"]
 }
 ```
-<h3> POST x.com/st/projects/{project-sha1sum} </h3>
+<h3> POST x.com/st/projects/{project-id} </h3>
 Add stream(s) to a pre-existing project
 __REQ__
 ``` json
@@ -71,12 +71,12 @@ __REP__
   "stream_ids": ["sha1sum3", "sha1sum4", "sha1sum5"]
 }
 ```
-<h3> DELETE x.com/st/projects/{project-sha1sum}/{stream-sha1sum} </h3>
+<h3> DELETE x.com/st/projects/{project-id}/{stream-id} </h3>
 Delete a stream from a project, replies with HTTP 200 if successful
-<h3> DELETE x.com/st/projects/{project-sha1sum} </h3>
+<h3> DELETE x.com/st/projects/{project-id} </h3>
 Delete a project and its streams, replies with HTTP 200 if successful
-<h3> PUT x.com/st/projects/{project-sha1sum}/{stream-sha1sum} </h3>
-Move a stream from {project-sha1sum}/{stream-sha1sum} to {destination-project-sha1sum}/{stream-sha1sum}, replies with HTTP 200 if successful
+<h3> PUT x.com/st/projects/{source-project-id}/{stream-id} </h3>
+Move a stream from {source-project-id}/{stream-id} to {destination-project-id}/{stream-id}, replies with HTTP 200 if successful
 ``` json
 {
   "destination" : "destination_project_sha1sum",
@@ -84,7 +84,7 @@ Move a stream from {project-sha1sum}/{stream-sha1sum} to {destination-project-sh
 ```
 <h2> GET </h2>
 <h3> GET x.com/st/projects </h3>
-List projects sha1 ids available to authenticated user along with their descriptions, __REP__ content:
+List projects ids available to authenticated user along with their descriptions, __REP__ content:
 ``` json
 {
   "project_ids" : [ 
@@ -93,7 +93,7 @@ List projects sha1 ids available to authenticated user along with their descript
                   ]
 }
 ```
-<h3> GET x.com/st/projects/{project-sha1sum} </h3>
+<h3> GET x.com/st/projects/{project-id} </h3>
 List streams in the project along with the number of frames, __REP__ content:
 ``` json
 {
