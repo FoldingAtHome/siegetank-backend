@@ -33,7 +33,7 @@ PUT x.com/st/auth
 __REQ__
 ``` json
 {
-  "username": "username"
+  "username": "username",
   "password": "password"
 }
 ```
