@@ -14,7 +14,7 @@ The major goals in the development of Siege Tank are:
 4. Common RESTful Web API with Python bindings
 5. Scalability on both generic servers and AWS
 6. Allow multiple users to manage a single server with authentication
-7. Emphasize Convention over Configuration
+7. Emphasize convention over configuration
 
 <h1> API </h1>
 
@@ -47,13 +47,11 @@ The token can be used by other APIs as well.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. This constraints provides a useful guarantee for apps such as MSM Accelerator, where it can start adaptive sampling simply by a pre-existing project (since all streams of the project are guaranteed to be from the same project!). All streams share the same options. The REP project_id is proposed to the SHA256 checksum of the input json object.  
+Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. The REP project_id is proposed to the SHA256 checksum of the input json object.  
 __REQ__
 ``` json
 {
   "description" : "kinase project",
-  "system" : "system.xml",
-  "integrator" : "integrator.xml",
   "options" : {
     "frame-format" : "xtc",
     "precision" : 3,
@@ -68,10 +66,12 @@ __REP__
 }
 ```
 <h3> POST x.com/st/projects/{project-id} </h3>
-Add stream(s) to a pre-existing project by giving it initial states.  
+Add stream(s) to a pre-existing project by giving it initial states.
 __REQ__
 ``` json
 {
+  "system" : "system.xml",
+  "integrator" : "integrator.xml",
   "states" : ["state0.xml","state3.xml","state2349.xml"]
 }
 ```
