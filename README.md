@@ -94,7 +94,7 @@ Move a stream from {source-project-id}/{stream-id} to {destination-project-id}/{
 ```
 <h2> GET </h2>
 <h3> GET x.com/st/projects </h3>
-List projects ids available to authenticated user along with their descriptions
+List projects ids available to authenticated user along with their descriptions  
 __REP__  
 ``` json
 {
@@ -105,7 +105,7 @@ __REP__
 }
 ```
 <h3> GET x.com/st/projects/{project-id} </h3>
-List streams in the project along with the number of frames
+List streams in the project along with the number of frames  
 __REP__ 
 ``` json
 {
