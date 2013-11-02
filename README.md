@@ -66,7 +66,7 @@ __REP__
 }
 ```
 <h3> POST x.com/st/projects/{project-id} </h3>
-Add stream(s) to a pre-existing project by giving it initial states.  
+Add stream(s) to a pre-existing project by giving it initial states. If neither a system nor an integrator is given, then the pre-existing states are used.   
 __REQ__
 ``` json
 {
