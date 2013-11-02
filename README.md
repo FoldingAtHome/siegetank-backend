@@ -47,7 +47,7 @@ The token can be used by other APIs as well.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. This constraints provides a useful guarantee for apps such as MSM Accelerator, where it can start adaptive sampling simply by a pre-existing project (since all streams of the project are guaranteed to be from the same project!). All streams share the same options. The REP project_id is proposed to the SHA256 checksum of the input json object. 
+Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. This constraints provides a useful guarantee for apps such as MSM Accelerator, where it can start adaptive sampling simply by a pre-existing project (since all streams of the project are guaranteed to be from the same project!). All streams share the same options. The REP project_id is proposed to the SHA256 checksum of the input json object.  
 __REQ__
 ``` json
 {
@@ -68,7 +68,7 @@ __REP__
 }
 ```
 <h3> POST x.com/st/projects/{project-id} </h3>
-Add stream(s) to a pre-existing project by giving it initial states.
+Add stream(s) to a pre-existing project by giving it initial states.  
 __REQ__
 ``` json
 {
@@ -94,7 +94,8 @@ Move a stream from {source-project-id}/{stream-id} to {destination-project-id}/{
 ```
 <h2> GET </h2>
 <h3> GET x.com/st/projects </h3>
-List projects ids available to authenticated user along with their descriptions, __REP__ content:
+List projects ids available to authenticated user along with their descriptions
+__REP__  
 ``` json
 {
   "project_ids" : [ 
@@ -104,7 +105,8 @@ List projects ids available to authenticated user along with their descriptions,
 }
 ```
 <h3> GET x.com/st/projects/{project-id} </h3>
-List streams in the project along with the number of frames, __REP__ content:
+List streams in the project along with the number of frames
+__REP__ 
 ``` json
 {
   "project_ids" : [ 
