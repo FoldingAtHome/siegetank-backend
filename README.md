@@ -47,14 +47,13 @@ The token is a JSON field in all REQs, as such will be ommitted.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new project using a set of OpenMM generated XMLs. The user can choose to select additional options, whose default values are listed below. Each streams within a project has its own system, integrator, and XML files. The user may choose to add new ones as needed. Options are defined on a project basis, that is, all streams share the same properties. The project id is an sha1sum of the union of the system and the integrator xmls.  
+Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. This guarantee can be useful for something like MSM Accelerator in the future, where it can start adaptive sampling using a pre-existing project. The user can choose to select additional options, whose default values are listed below. The user may choose to add new ones as needed. Options are defined on a project basis, that is, all streams share the same properties. The project id is an sha1sum of the union of the system and the integrator xmls.  
 __REQ__
 ``` json
 {
   "description" : "kinase project",
   "system" : "system.xml",
   "integrator" : "integrator.xml",
-  "states" : ["state0.xml","state1.xml","state2.xml"],
   "options" : {
     "frame-format" : "xtc",
     "precision" : 3,
@@ -70,12 +69,10 @@ __REP__
 }
 ```
 <h3> POST x.com/st/projects/{project-id} </h3>
-Add stream(s) to a pre-existing project
+Add stream(s) to a pre-existing project by giving it initial states.
 __REQ__
 ``` json
 {
-  "system" : "system.xml",
-  "integrator" : "integrator.xml",
   "states" : ["state3.xml","state4.xml","state5.xml"]
 }
 ```
