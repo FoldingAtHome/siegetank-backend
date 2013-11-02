@@ -29,7 +29,21 @@ A stream is a conceptualized instance of an MD-run. A project consists of a coll
 
 <h2> Authentication </h2>
 
-OAuth or Google Auth. Authentication should show allocation available and disk space available.
+PUT x.com/st/auth
+__REQ__
+``` json
+{
+  "username": "username"
+  "password": "password"
+}
+```
+__REP__
+``` json
+{
+  "token": "random_token"
+}
+```
+The token is a JSON field in all REQs, as such will be ommitted.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
