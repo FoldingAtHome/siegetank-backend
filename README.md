@@ -47,7 +47,7 @@ The token can be used by other APIs as well.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. The REP project_id is proposed to the SHA256 checksum of the input json object.  
+Create a new, empty, project. The REP project_id is a uuid.  
 __REQ__
 ``` json
 {
