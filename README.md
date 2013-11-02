@@ -29,14 +29,14 @@ A stream is a conceptualized instance of an MD-run. A project consists of a coll
 
 <h2> Authentication </h2>
 
-PUT x.com/st/auth
+PUT x.com/st/auth  
 __REQ__
 ``` json
 {
   "username": "username",
   "password": "password"
 }
-```
+```  
 __REP__
 ``` json
 {
@@ -66,7 +66,7 @@ __REP__
 }
 ```
 <h3> POST x.com/st/projects/{project-id} </h3>
-Add stream(s) to a pre-existing project by giving it initial states.
+Add stream(s) to a pre-existing project by giving it initial states.  
 __REQ__
 ``` json
 {
