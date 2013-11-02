@@ -43,11 +43,11 @@ __REP__
   "token": "random_token"
 }
 ```
-The token is a JSON field in all REQs, as such will be ommitted.
+The token can be used by other APIs as well.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. This guarantee can be useful for something like MSM Accelerator in the future, where it can start adaptive sampling using a pre-existing project. The user can choose to select additional options, whose default values are listed below. The user may choose to add new ones as needed. Options are defined on a project basis, that is, all streams share the same properties. The project id is an sha1sum of the union of the system and the integrator xmls.  
+Create a new project using a set of OpenMM generated XMLs. All streams in a project share identical system and integrator xml files, but varying in state. This constraints provides a useful guarantee for apps such as MSM Accelerator, where it can start adaptive sampling simply by a pre-existing project (since all streams of the project are guaranteed to be from the same project!). All streams share the same options. The REP project_id is proposed to the SHA256 checksum of the input json object. 
 __REQ__
 ``` json
 {
@@ -64,8 +64,7 @@ __REQ__
 __REP__
 ``` json
 {
-  "project_id": "sha1sump",
-  "stream_ids": ["sha1sum0", "sha1sum1", "sha1sum2"]
+  "project_id": "sha1sum",
 }
 ```
 <h3> POST x.com/st/projects/{project-id} </h3>
@@ -73,7 +72,7 @@ Add stream(s) to a pre-existing project by giving it initial states.
 __REQ__
 ``` json
 {
-  "states" : ["state3.xml","state4.xml","state5.xml"]
+  "states" : ["state0.xml","state3.xml","state2349.xml"]
 }
 ```
 __REP__
