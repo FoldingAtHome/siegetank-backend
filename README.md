@@ -47,11 +47,13 @@ The token can be used by other APIs as well.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new, empty, project. The REP project_id is a uuid.  
+Create a new, empty, project. All streams within a project have the same system and integrator.  
 __REQ__
 ``` json
 {
   "description" : "kinase project",
+  "system" : "system.xml",
+  "integrator" : "integrator.xml",
   "options" : {
     "frame-format" : "xtc",
     "precision" : 3,
@@ -70,8 +72,6 @@ Add stream(s) to a pre-existing project by giving it initial states. If neither 
 __REQ__
 ``` json
 {
-  "system" : "system.xml",
-  "integrator" : "integrator.xml",
   "states" : ["state0.xml","state3.xml","state2349.xml"]
 }
 ```
