@@ -13,8 +13,7 @@ The major goals in the development of Siege Tank are:
 3. Adopt modern technologies
 4. Common RESTful Web API with Python bindings
 5. Scalability on both generic servers and AWS
-6. Allow multiple users to manage a single server with authentication
-7. Emphasize convention over configuration
+6. Emphasize convention over configuration
 
 <h1> API </h1>
 
