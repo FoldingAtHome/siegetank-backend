@@ -55,9 +55,9 @@ __REQ__
   "system" : "system.xml",
   "integrator" : "integrator.xml",
   "options" : {
-    "frame-format" : "xtc",
+    "frame_format" : "xtc",
     "precision" : 3,
-    "steps-per-frame" : 50000
+    "steps_per_frame" : 50000
   }
 }
 ```
