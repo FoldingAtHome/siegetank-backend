@@ -59,42 +59,45 @@ def require_auth(func):
 @require_auth
 def post_project():
 
-	required_options = 'descriptions'
-
-	if 'description' in request.json:
-		description = request.json['description']
-	else:
-		abort(400)
-
-	if 'system' in request.json:
-		system = request.json['system']
-	else:
-		abort(400)
-
-	if 'integrator' in request.json:
-		integrator = request.json['integrator']
-	else:
-		abort(400)
-
-	allowed_formats = ['xtc']
-
-	if 'frame_format' in request.json:
-		frame_format = request.json['frame_format']
-		if not frame_format in allowed_formats:
+	for item in request.json:
+		# required
+		if item == 'description':
+			description = request.json[item]
+		elif item == 'system':
+			system = request.json[item]
+		elif item == 'integrator':
+			integrator = request.json[item]
+		# optional
+		elif item == 'frame_format':
+			frame_format = request.json[item]
+			if frame_format != 'xtc':
+				abort(400)
+		elif item == 'steps_per_frame':
+			steps_per_frame = request.json[item]
+		elif item == 'precision':
+			precision = request.json[item]
+		elif item == 'token':
+			pass
+		else:
 			abort(400)
-	else:
+
+	# defaults
+	try: 
+		frame_format
+	except NameError:
 		frame_format = 'xtc'
 
-	if 'steps_per_frame' in request.json:
-		steps_per_frame = request.json['steps_per_frame']
-	else:
+	try: 
+		steps_per_frame
+	except NameError:
 		steps_per_frame = 50000
 
-	if 'precision' in request.json:
-		precision = request.json['precision']
-	else:
-		precision = 3
+	try:
+		precision
+	except NameError:
+		precision =3
 
+	# add project
 	session = Session()
 
 	for instance in session.query(SQLTypes.User).filter(SQLTypes.User.token==request.json['token']):
