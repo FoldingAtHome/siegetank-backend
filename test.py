@@ -8,11 +8,7 @@ from server.types import initialize
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = initialize()
-
-from sqlalchemy.orm import sessionmaker
-Session = sessionmaker(bind=engine)
-session = Session()
+engine, session = initialize()
 
 with open('system.xml', 'rb') as f:
 	system = f.read()
@@ -28,7 +24,7 @@ proj1.streams = [
 				Stream(str(uuid.uuid4()), state)
 				]	
 
-user1 = User("proteneer", "Hw0K3psmzp5", "proteneer@gmail.com")
+user1 = User("eisley", "5serlkjser", "proteneer@gmail.com")
 user1.projects = [proj1]
 
 session.add(user1)

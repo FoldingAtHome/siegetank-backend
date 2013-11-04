@@ -1,8 +1,7 @@
-from sqlalchemy.orm import relationship, backref
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship, backref, sessionmaker
+from sqlalchemy import Column, Integer, String, ForeignKey, create_engine
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import create_engine
 import uuid
 Base = declarative_base()
 
@@ -66,4 +65,6 @@ class User(Base):
 def initialize():
     engine = create_engine('postgresql://localhost/sandbox2', echo=True)
     Base.metadata.create_all(engine)
-    return engine
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    return engine, session
