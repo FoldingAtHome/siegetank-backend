@@ -56,6 +56,7 @@ __REQ__
   "frame_format" : "xtc",
   "precision" : 3,
   "steps_per_frame" : 50000
+  "date" : "date_added"
 }
 ```
 __REP__
