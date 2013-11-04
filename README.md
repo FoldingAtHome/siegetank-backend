@@ -96,8 +96,18 @@ __REP__
 ``` json
 {
   "project_ids" : [ 
-                     {"sha1sum0": "description0"},
-                     {"sha1sum1": "description1"}
+                     "project_id_0" : 
+                     { 
+                       "description" : "kinase project",
+                       "creation date" : "date",
+                       "streams" : 59834
+                     }
+                     "project_id_1" : 
+                     { 
+                       "description" : "gpcrs",
+                       "creation date" : "date",
+                       "streams" : 29341
+                     }
                   ]
 }
 ```
