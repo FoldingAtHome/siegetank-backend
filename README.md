@@ -46,18 +46,16 @@ The token can be used by other APIs as well.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new, empty, project. All streams within a project have the same system and integrator.  
+Create a new, empty, project. All streams within a project have the same system and integrator. frame\_format, precision, steps\_per\_frame are optional, with default values listed below.
 __REQ__
 ``` json
 {
   "description" : "kinase project",
   "system" : "system.xml",
   "integrator" : "integrator.xml",
-  "options" : {
-    "frame_format" : "xtc",
-    "precision" : 3,
-    "steps_per_frame" : 50000
-  }
+  "frame_format" : "xtc",
+  "precision" : 3,
+  "steps_per_frame" : 50000
 }
 ```
 __REP__
