@@ -73,7 +73,7 @@ class User(Base):
         self.token = str(uuid.uuid4())
 
 def initialize():
-    engine = create_engine('postgresql://localhost/sandbox2', echo=True)
+    engine = create_engine('postgresql://postgres:random@localhost/sandbox2', echo=True)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     return Session

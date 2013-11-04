@@ -9,7 +9,7 @@ print Session()
 
 s1= Session()
 
-user1 = User("proteneer", "elite1", "proteneer@gmail.com")
+user1 = User("diwakar", "pass2", "dshukla@gmail.com")
 
 s1.add(user1)
 s1.commit()

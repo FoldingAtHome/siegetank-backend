@@ -36,28 +36,25 @@ def authenticate():
 
 	return jsonify( {'token': str(user_hash) } ) 
 
-def require_auth(func):
-	print 'require_auth'
-	@wraps(func)
-	def inner():
-		if 'token' in request.json:
-			token = request.json['token']
-			session = Session()
-			for instance in session.query(SQLTypes.User).filter(SQLTypes.User.token==token):
-				auth_user = instance.username
-			try:
-				auth_user
-				print 'authenticated!'
-			except NameError:
-				abort(401)
-		else:
+def _verify_token(session):
+	if 'token' in request.json:
+		token = request.json['token']
+		for instance in session.query(SQLTypes.User).filter(SQLTypes.User.token==token):
+			auth_user = instance
+		try:
+			auth_user
+			print 'authenticated!'
+		except NameError:
 			abort(401)
-		return func()
-	return inner
+		return instance
+	else:
+		abort(401)
 
 @app.route('/st/projects', methods=['POST'])
-@require_auth
 def post_project():
+
+	session = Session()
+	auth_user = _verify_token(session)
 
 	for item in request.json:
 		# required
@@ -97,14 +94,7 @@ def post_project():
 	except NameError:
 		precision =3
 
-	# add project
-	session = Session()
-
-	for instance in session.query(SQLTypes.User).filter(SQLTypes.User.token==request.json['token']):
-		auth_user = instance
-
 	project_id = str(uuid.uuid4())
-
 	auth_user.projects.append(SQLTypes.Project(project_id, description, base64.b64encode(system), base64.b64encode(integrator), steps_per_frame, frame_format, precision))
 
 	session.commit()
@@ -112,6 +102,25 @@ def post_project():
 
 	return jsonify( { 'project_id' : project_id} )
 
+@app.route('/st/projects/<project_id>', methods=['POST'])
+def post_stream(project_id):
+
+	session = Session()
+	auth_user = _verify_token(session)
+
+	auth_username = auth_user.username
+
+	for instance in session.query(SQLTypes.Project).filter(SQLTypes.Project.uuid==project_id):
+		project_owner = instance.owner
+
+	if auth_username != instance.owner:
+		abort(401)
+
+	session.commit()
+	session.close()
+
+	return jsonify( { 'test' : 5 } )
+
 if __name__ == '__main__':
 	Session = SQLTypes.initialize()
-	app.run(debug = True)
+	app.run(debug = True, host='0.0.0.0')
