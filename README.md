@@ -46,7 +46,7 @@ The token can be used by other APIs as well.
 
 <h2> POST,DELETE,PUT </h2>
 <h3> POST x.com/st/projects </h3>  
-Create a new, empty, project. All streams within a project have the same system and integrator. frame\_format, precision, steps\_per\_frame are optional, with default values listed below.
+Create a new, empty, project. All streams within a project have the same system and integrator. frame\_format, precision, steps\_per\_frame are optional, with default values listed below.  
 __REQ__
 ``` json
 {
