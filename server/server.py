@@ -59,6 +59,8 @@ def require_auth(func):
 @require_auth
 def post_project():
 
+	required_options = 'descriptions'
+
 	if 'description' in request.json:
 		description = request.json['description']
 	else:
