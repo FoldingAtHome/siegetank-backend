@@ -111,15 +111,24 @@ def post_stream(project_id):
 	auth_username = auth_user.username
 
 	for instance in session.query(SQLTypes.Project).filter(SQLTypes.Project.uuid==project_id):
-		project_owner = instance.owner
+		project = instance
 
-	if auth_username != instance.owner:
+	if auth_username != project.owner:
 		abort(401)
+
+	states = request.json['states']
+
+	stream_ids = []
+
+	for state in states:
+		stream_uuid = str(uuid.uuid4())
+		project.streams.append(SQLTypes.Stream(stream_uuid, base64.b64encode(state)))
+		stream_ids.append(stream_uuid)
 
 	session.commit()
 	session.close()
 
-	return jsonify( { 'test' : 5 } )
+	return jsonify( { 'stream_ids' : stream_ids } )
 
 if __name__ == '__main__':
 	Session = SQLTypes.initialize()
