@@ -4,6 +4,7 @@ from sqlalchemy.types import LargeBinary
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
 import datetime
+
 Base = declarative_base()
 
 class Project(Base):
@@ -71,9 +72,3 @@ class User(Base):
         self.password = password
         self.email = email
         self.token = str(uuid.uuid4())
-
-def initialize():
-    engine = create_engine('postgresql://postgres:random@localhost/sandbox2', echo=True)
-    Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    return Session
