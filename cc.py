@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 import uuid
 import base64
-from ws import ws_types
+from common import ws_types
 
 app = Flask(__name__)
 
