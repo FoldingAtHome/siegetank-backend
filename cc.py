@@ -1,4 +1,4 @@
-from flask import Flask, request, abort, jsonify
+from flask import Flask, Response, request, abort, jsonify
 from functools import wraps
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
@@ -7,6 +7,13 @@ import base64
 from common import ws_types
 
 app = Flask(__name__)
+
+# Role of CC:
+# 1. Handles on which WS to create new projects
+# 2. Keeps track of which project is on which WS
+# /cc/project
+# shoves 
+
 
 @app.route('/st/auth', methods=['POST'])
 def authenticate():
@@ -38,6 +45,9 @@ def authenticate():
     return jsonify( {'token': str(user_hash) } ) 
 
 def _verify_token(session):
+
+    # needs to be done via redis
+
     if 'token' in request.json:
         token = request.json['token']
         for instance in session.query(ws_types.User).filter(ws_types.User.token==token):
@@ -50,6 +60,23 @@ def _verify_token(session):
         return instance
     else:
         abort(401)
+
+@app.route('/largefile/largefile', methods=['GET'])
+def send_large_file():
+    fhandle = open('./largefile/filename', 'rb')
+    def generate():
+        while True:
+            chunk = fhandle.read(100)
+            print chunk
+            print '-------'
+            if not chunk: break
+            yield chunk
+    return Response(generate(), mimetype='application/octet-stream')
+
+
+@app.route('/ws/test', methods=['GET'])
+def get_random():
+    return jsonify( {'payload' : ['async_test']})
 
 @app.route('/st/projects', methods=['POST'])
 def post_project():
@@ -132,6 +159,8 @@ def post_stream(project_id):
     return jsonify( { 'stream_ids' : stream_ids } )
 
 if __name__ == "__main__":
+
+    # for each WS, maintain a DB connection
     engine = create_engine('postgresql://postgres:random@proline/sandbox2', echo=True)
     ws_types.Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
