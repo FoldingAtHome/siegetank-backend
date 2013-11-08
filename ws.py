@@ -1,4 +1,4 @@
-from flask import Flask, Response, request, abort, jsonify\
+from flask import Flask, Response, request, abort, jsonify
 from werkzeug.contrib.fixers import ProxyFix
 from functools import wraps
 from sqlalchemy.orm import sessionmaker
