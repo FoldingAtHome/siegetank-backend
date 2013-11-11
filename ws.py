@@ -55,17 +55,22 @@ def _verify_token(session):
     else:
         abort(401)
 
+@app.route('/get_file', methods=['GET'])
+def send_large_file2():
+    print 'foo4'
+    return Response(status=200, headers={'X-Accel-Redirect': '/protected/largefile'}, content_type='application/octet-stream')
+
 @app.route('/largefile/largefile', methods=['GET'])
 def send_large_file():
     fhandle = open('./largefile/filename', 'rb')
     def generate():
         while True:
-            chunk = fhandle.read(100)
+            chunk = fhandle.read(10)
             print chunk
             print '-------'
             if not chunk: break
             yield chunk
-    return Response(generate(), mimetype='application/octet-stream')
+    return Response(generate(), headers={'X-Accel-Redirect': url}, content_type='application/octet-stream')
 
 
 @app.route('/ws/test', methods=['GET'])
