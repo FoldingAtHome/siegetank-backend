@@ -1,167 +1,60 @@
-from flask import Flask, Response, request, abort, jsonify
-from functools import wraps
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
+from flask import Flask, Response, request, abort, jsonify, make_response
+import redis
 import uuid
-import base64
-from common import ws_types
+import hashlib
 
 app = Flask(__name__)
+redis_cli = redis.Redis()
 
-# Role of CC:
-# 1. Handles on which WS to create new projects
-# 2. Keeps track of which project is on which WS
-# /cc/project
-# shoves 
+# project:uuid - maps to IP of WS holding the project
+@app.route('/st/add_user', methods=['POST'])
+def add_user():
+    if not 'username' in request.json \
+        or not 'password' in request.json \
+        or not 'email' in request.json:
+        abort(401)
 
+    username = request.json['username']
+    password = request.json['password']
+    email = request.json['email']
 
-@app.route('/st/auth', methods=['POST'])
+    if len(username) > 10:
+        return 'username longer than 10 characters', 401
+
+    if username.isalnum() == False:
+        return 'username not alpha numeric', 401
+
+    # see if user already exists in db
+    if redis_cli.sismember('users', username) == True:
+        return 'user exists', 401
+    else:
+        redis_cli.sadd('users', username)
+        redis_cli.hset('user:'+username, 'username', username)
+        redis_cli.hset('user:'+username, 'password', password)
+        redis_cli.hset('user:'+username, 'email', email)
+        redis_cli.hset('user:'+username, 'token', hashlib.sha256(username+password).hexdigest())
+
+    return 'Success', 200
+
+@app.route('/st/auth', methods=['GET'])
 def authenticate():
     if not request.json:
         abort(400)
     if not 'username' in request.json or not 'password' in request.json:
             abort(400)
 
-    session = Session()
-
     username = request.json['username']
     password = request.json['password']
 
-    found_user = False
+    if not redis_cli.sismember('users', username):
+        return 'Bad username', 401
 
-    # each authentication generates a new token
-    for instance in session.query(ws_types.User).filter(ws_types.User.username==username):
-        if instance.password == password:
-            user_hash = str(uuid.uuid4())
-            found_user = True
-            instance.token = user_hash
+    real_pw, token = redis_cli.hmget('user:'+username, ['password', 'token'])
 
-    if not found_user:
-        abort(401)
+    if password != real_pw:
+        return 'Bad password', 401
 
-    session.commit()
-    session.close()
-
-    return jsonify( {'token': str(user_hash) } ) 
-
-def _verify_token(session):
-
-    # needs to be done via redis
-
-    if 'token' in request.json:
-        token = request.json['token']
-        for instance in session.query(ws_types.User).filter(ws_types.User.token==token):
-            auth_user = instance
-        try:
-            auth_user
-            print 'authenticated!'
-        except NameError:
-            abort(401)
-        return instance
-    else:
-        abort(401)
-
-@app.route('/largefile/largefile', methods=['GET'])
-def send_large_file():
-    fhandle = open('./largefile/filename', 'rb')
-    def generate():
-        while True:
-            chunk = fhandle.read(100)
-            print chunk
-            print '-------'
-            if not chunk: break
-            yield chunk
-    return Response(generate(), mimetype='application/octet-stream')
-
-
-@app.route('/ws/test', methods=['GET'])
-def get_random():
-    return jsonify( {'payload' : ['async_test']})
-
-@app.route('/st/projects', methods=['POST'])
-def post_project():
-
-    session = Session()
-    auth_user = _verify_token(session)
-
-    for item in request.json:
-        # required
-        if item == 'description':
-            description = request.json[item]
-        elif item == 'system':
-            system = request.json[item]
-        elif item == 'integrator':
-            integrator = request.json[item]
-        # optional
-        elif item == 'frame_format':
-            frame_format = request.json[item]
-            if frame_format != 'xtc':
-                abort(400)
-        elif item == 'steps_per_frame':
-            steps_per_frame = request.json[item]
-        elif item == 'precision':
-            precision = request.json[item]
-        elif item == 'token':
-            pass
-        else:
-            abort(400)
-
-    # defaults
-    try: 
-        frame_format
-    except NameError:
-        frame_format = 'xtc'
-
-    try: 
-        steps_per_frame
-    except NameError:
-        steps_per_frame = 50000
-
-    try:
-        precision
-    except NameError:
-        precision =3
-
-    project_id = str(uuid.uuid4())
-    auth_user.projects.append(ws_types.Project(project_id, description, base64.b64encode(system), base64.b64encode(integrator), steps_per_frame, frame_format, precision))
-
-    session.commit()
-    session.close()
-
-    return jsonify( { 'project_id' : project_id} )
-
-@app.route('/st/projects/<project_id>', methods=['POST'])
-def post_stream(project_id):
-
-    session = Session()
-    auth_user = _verify_token(session)
-
-    auth_username = auth_user.username
-
-    for instance in session.query(ws_types.Project).filter(ws_types.Project.uuid==project_id):
-        project = instance
-
-    if auth_username != project.owner:
-        abort(401)
-
-    states = request.json['states']
-
-    stream_ids = []
-
-    for state in states:
-        stream_uuid = str(uuid.uuid4())
-        project.streams.append(ws_types.Stream(stream_uuid, base64.b64encode(state)))
-        stream_ids.append(stream_uuid)
-
-    session.commit()
-    session.close()
-
-    return jsonify( { 'stream_ids' : stream_ids } )
+    return jsonify( {'token': str(token) } ) 
 
 if __name__ == "__main__":
-
-    # for each WS, maintain a DB connection
-    engine = create_engine('postgresql://postgres:random@proline/sandbox2', echo=True)
-    ws_types.Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
     app.run(debug = True, host='0.0.0.0')

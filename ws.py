@@ -1,4 +1,5 @@
 from flask import Flask, Response, request, abort, jsonify
+import redis
 from werkzeug.contrib.fixers import ProxyFix
 from functools import wraps
 from sqlalchemy.orm import sessionmaker
@@ -8,6 +9,22 @@ import base64
 from common import ws_types
 
 app = Flask(__name__)
+cc_redis = redis.Redis(host='171.65.103.121',port=6379)
+ws_redis = redis.Redis(host='localhost', port=6379)
+
+@app.route('/ws/verify', methods=['POST'])
+def _verify_token():
+    if 'token' in request.json:
+        token = request.json['token']
+
+        # O(N) method, can improve to O(1) by reversing k:v
+        for username in cc_redis.smembers('users'):
+            real_token = cc_redis.hmget('user:'+username, ['token'])[0]
+            if real_token == token:
+                auth_user = username
+        return auth_user
+    else:
+        abort(401)
 
 @app.route('/st/auth', methods=['POST'])
 def authenticate():
@@ -38,23 +55,6 @@ def authenticate():
 
     return jsonify( {'token': str(user_hash) } ) 
 
-def _verify_token(session):
-
-    # needs to be done via redis query to cc
-
-    if 'token' in request.json:
-        token = request.json['token']
-        for instance in session.query(ws_types.User).filter(ws_types.User.token==token):
-            auth_user = instance
-        try:
-            auth_user
-            print 'authenticated!'
-        except NameError:
-            abort(401)
-        return instance
-    else:
-        abort(401)
-
 @app.route('/get_file', methods=['GET'])
 def send_large_file2():
     print 'foo4'
@@ -72,14 +72,13 @@ def send_large_file():
             yield chunk
     return Response(generate(), headers={'X-Accel-Redirect': url}, content_type='application/octet-stream')
 
-
 @app.route('/ws/test', methods=['GET'])
 def get_random():
     return jsonify( {'payload' : ['async_test']})
 
 @app.route('/st/projects', methods=['POST'])
 def post_project():
-
+    
     session = Session()
     auth_user = _verify_token(session)
 
