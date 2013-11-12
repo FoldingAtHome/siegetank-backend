@@ -9,8 +9,18 @@ import base64
 from common import ws_types
 
 app = Flask(__name__)
-cc_redis = redis.Redis(host='171.65.103.121',port=6379)
+cc_redis = redis.Redis(host='localhost', port=6379)
 ws_redis = redis.Redis(host='localhost', port=6379)
+
+# Initialization:
+# 1. Load number of frames for each trajectory
+# 2. Build expiring priority queue (sorted) for each project based on frame count
+# When a core requests a job:
+# 1. ws rebuilds the priority queue by checking expiring variable block:stream_id
+# 2. streams with more frames completed are pushed onto the priority queue
+# 3. the top of priority queue is popped, and the stream is set to expire in 2 hour
+# 4. if no frame is returned within 2 hour, the block:stream_id expires
+# 5. system.xml, checkpoint.xml, integrator.xml are packaged and sent in the reply. 
 
 @app.route('/ws/verify', methods=['POST'])
 def _verify_token():
@@ -22,61 +32,17 @@ def _verify_token():
             real_token = cc_redis.hmget('user:'+username, ['token'])[0]
             if real_token == token:
                 auth_user = username
+
+        try:
+            auth_user
+        except NameError:
+            return "Invalid Token", 401
+        
         return auth_user
     else:
         abort(401)
 
-@app.route('/st/auth', methods=['POST'])
-def authenticate():
-    if not request.json:
-        abort(400)
-    if not 'username' in request.json or not 'password' in request.json:
-            abort(400)
-
-    session = Session()
-
-    username = request.json['username']
-    password = request.json['password']
-
-    found_user = False
-
-    # each authentication generates a new token
-    for instance in session.query(ws_types.User).filter(ws_types.User.username==username):
-        if instance.password == password:
-            user_hash = str(uuid.uuid4())
-            found_user = True
-            instance.token = user_hash
-
-    if not found_user:
-        abort(401)
-
-    session.commit()
-    session.close()
-
-    return jsonify( {'token': str(user_hash) } ) 
-
-@app.route('/get_file', methods=['GET'])
-def send_large_file2():
-    print 'foo4'
-    return Response(status=200, headers={'X-Accel-Redirect': '/protected/largefile'}, content_type='application/octet-stream')
-
-@app.route('/largefile/largefile', methods=['GET'])
-def send_large_file():
-    fhandle = open('./largefile/filename', 'rb')
-    def generate():
-        while True:
-            chunk = fhandle.read(10)
-            print chunk
-            print '-------'
-            if not chunk: break
-            yield chunk
-    return Response(generate(), headers={'X-Accel-Redirect': url}, content_type='application/octet-stream')
-
-@app.route('/ws/test', methods=['GET'])
-def get_random():
-    return jsonify( {'payload' : ['async_test']})
-
-@app.route('/st/projects', methods=['POST'])
+@app.route('/ws/projects', methods=['POST'])
 def post_project():
     
     session = Session()
@@ -128,7 +94,7 @@ def post_project():
 
     return jsonify( { 'project_id' : project_id} )
 
-@app.route('/st/projects/<project_id>', methods=['POST'])
+@app.route('/ws/projects/<project_id>', methods=['POST'])
 def post_stream(project_id):
 
     session = Session()
@@ -161,7 +127,26 @@ app.wsgi_app = ProxyFix(app.wsgi_app)
 if __name__ == "__main__":
 
     # for each WS, maintain a DB connection
-    engine = create_engine('postgresql://postgres:random@localhost/sandbox2', echo=True)
+    engine = create_engine('postgresql://postgres:random@proline/sandbox2', echo=True)
     ws_types.Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     app.run(debug = True, host='0.0.0.0')
+
+
+
+#@app.route('/get_file', methods=['GET'])
+#def send_large_file2():
+#    print 'foo4'
+#    return Response(status=200, headers={'X-Accel-Redirect': '/protected/largefile'}, content_type='application/octet-stream')
+#
+#@app.route('/largefile/largefile', methods=['GET'])
+#def send_large_file():
+#    fhandle = open('./largefile/filename', 'rb')
+#    def generate():
+#        while True:
+#            chunk = fhandle.read(10)
+#            print chunk
+#            print '-------'
+#            if not chunk: break
+#            yield chunk
+#    return Response(generate(), headers={'X-Accel-Redirect': url}, content_type='application/octet-stream')
