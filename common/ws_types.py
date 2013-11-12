@@ -60,15 +60,15 @@ class Stream(Base):
         self.state = state
         self.frames = 0
 
-class User(Base):
-    __tablename__ = 'users'
-    username = Column(String, nullable=False, primary_key = True)
-    password = Column(String, nullable=False)
-    email = Column(String, nullable=False)
-    token = Column(String, nullable=False)
-
-    def __init__(self, username, password, email):
-        self.username = username
-        self.password = password
-        self.email = email
-        self.token = str(uuid.uuid4())
+#class User(Base):
+#    __tablename__ = 'users'
+#    username = Column(String, nullable=False, primary_key = True)
+#    password = Column(String, nullable=False)
+#    email = Column(String, nullable=False)
+#    token = Column(String, nullable=False)
+#
+#    def __init__(self, username, password, email):
+#        self.username = username
+#        self.password = password
+#        self.email = email
+#        self.token = str(uuid.uuid4())

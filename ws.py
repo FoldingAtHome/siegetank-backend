@@ -125,7 +125,6 @@ def post_stream(project_id):
 app.wsgi_app = ProxyFix(app.wsgi_app)
 
 if __name__ == "__main__":
-
     # for each WS, maintain a DB connection
     engine = create_engine('postgresql://postgres:random@proline/sandbox2', echo=True)
     ws_types.Base.metadata.create_all(engine)

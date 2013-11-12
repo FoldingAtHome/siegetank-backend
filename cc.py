@@ -6,6 +6,9 @@ import hashlib
 app = Flask(__name__)
 redis_cli = redis.Redis()
 
+# Redis always serves as the communication interface
+# User, project, data are stored in the underlying database()
+
 # project:uuid - maps to IP of WS holding the project
 @app.route('/st/add_user', methods=['POST'])
 def add_user():
