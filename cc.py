@@ -1,12 +1,14 @@
-from datetime import date
 import tornado.escape
 import tornado.ioloop
 import tornado.web
 import tornado.auth
 
+import datetime
 import hashlib
 import json
 import os
+import uuid
+import random
 
 import redis
 
@@ -19,18 +21,18 @@ class TargetHandler(tornado.web.RequestHandler):
         try:
             system = content['system']
             system_sha = hashlib.sha256(system).hexdigest()
-            open('./files/'+system_sha,'w').write(system)
+            path = './files/'+system_sha
+            if not os.path.isfile(path):
+                open(path,'w').write(system)
             integrator = content['integrator']
             integrator_sha = hashlib.sha256(integrator).hexdigest()
-            open('./files/'+integrator_sha,'w').write(integrator)
+            path = './files/'+integrator_sha
+            if not os.path.isfile(path):
+                open(path,'w').write(integrator)
             description = content['description']
-            description_sha = hashlib.sha256(description).hexdigest()
             creation_time = cc_redis.time()[0]
-            target_id = hashlib.sha256(system_sha+integrator_sha+\
-                                       description_sha+str(creation_time)).hexdigest()
+            target_id = hashlib.sha256(str(uuid.uuid4())).hexdigest()
             owner = 'yutong'
-
-            print target_id
 
             # store data into redis
             cc_redis.hset(target_id,'system',system_sha)
@@ -46,9 +48,28 @@ class TargetHandler(tornado.web.RequestHandler):
             print str(e)
             return self.write('bad request')
 
+        return self.write('OK')
+
     def get(self):
-        ''' Get a list of stream IDs and its properties '''
-        print self.request.body
+        user = 'yutong'
+        response = []
+        targets = cc_redis.smembers(user+':targets')
+        for target_id in targets:
+            prop = {}
+
+            stamp = datetime.datetime.fromtimestamp(float(cc_redis.hget(target_id,'date')))
+            prop['date'] = stamp.strftime('%m/%d/%Y, %H:%M:%S')
+            prop['description'] = cc_redis.hget(target_id,'description')
+            prop['frames'] = random.randint(0,200)
+            response.append(prop)
+
+        return self.write(json.dumps(response,indent=4, separators=(',', ': ')))
+
+    def delete(self):
+        # delete all streams
+
+        # delete the project
+        return
 
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):
@@ -62,7 +83,7 @@ application = tornado.web.Application([
 ])
  
 if __name__ == "__main__":
-    cc_redis.flushdb()
+    #cc_redis.flushdb()
     application.listen(8888)
     if not os.path.exists('files'):
         os.makedirs('files')
