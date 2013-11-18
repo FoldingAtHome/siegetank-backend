@@ -1,7 +1,6 @@
 import tornado.escape
 import tornado.ioloop
 import tornado.web
-import tornado.auth
 
 import datetime
 import hashlib
@@ -13,6 +12,7 @@ import random
 import redis
 
 cc_redis = redis.Redis(host='localhost', port=6379)
+ws_redis = redis.Redis(host='localhost', port=6380)
 
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
@@ -60,7 +60,7 @@ class TargetHandler(tornado.web.RequestHandler):
             stamp = datetime.datetime.fromtimestamp(float(cc_redis.hget(target_id,'date')))
             prop['date'] = stamp.strftime('%m/%d/%Y, %H:%M:%S')
             prop['description'] = cc_redis.hget(target_id,'description')
-            prop['frames'] = random.randint(0,200)
+             prop['frames'] = random.randint(0,200)
             response.append(prop)
 
         return self.write(json.dumps(response,indent=4, separators=(',', ': ')))
@@ -71,10 +71,15 @@ class TargetHandler(tornado.web.RequestHandler):
         # delete the project
         return
 
+class JobHandler(tornado.web.RequestHandler):
+    def get(self):
+
+
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PGI: Add new streams to an existing target. The input must be compressed
-            state.xml files encoded as base64 '''
+            state.xml files encoded as base64. Streams are routed directly to the WS via 
+            redis using a pub-sub mechanism '''
         print self.request.body
 
 application = tornado.web.Application([
