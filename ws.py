@@ -18,7 +18,7 @@ class FrameHandler(tornado.web.RequestHandler):
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):       
         ''' PRIVATE - Add a new stream to WS. The POST method on this URI
-            can only be accessed by known CCs (ip restriction) '''
+            can only be accessed by known CCs (ip restrziction) '''
         print self.request.remote_ip
 
     def get(self):
@@ -28,12 +28,11 @@ class StreamHandler(tornado.web.RequestHandler):
 
             RESPONDS with a state.xml '''
 
-        head = ws_redis.zrange('queue',0,0)
+        head = ws_redis.zrevrange('queue',0,0)[0]
+        print head
         ws_redis.zrem('queue',head)
-        ws_redis.set('expire:'+stream_id,0)
-        ws_redis.expire('expire:'+stream_id,5)
-
-        print 'expired'
+        ws_redis.set('expire:'+head,0)
+        ws_redis.expire('expire:'+head,5)
 
 class QueueHandler(tornado.web.RequestHandler):
     def get(self):
@@ -54,7 +53,7 @@ class Listener(threading.Thread):
                 stream_id = item['data'][7:]
                 score = ws_redis.get('stream:'+stream_id+':frames')
                 print stream_id, score
-                ws_redis.zadd(item['data'], score, 'expire:'+stream_id)
+                ws_redis.zadd('queue', stream_id, score)
             except:
                 pass
 
@@ -70,11 +69,11 @@ if __name__ == "__main__":
     for i in range(10):
         stream_id = str(uuid.uuid4())
         ws_redis.sadd('streams', stream_id)
-        ws_redis.set('streams:'+stream_id+':frames', random.randint(0,10))
+        ws_redis.set('stream:'+stream_id+':frames', random.randint(0,10))
 
     streams = ws_redis.smembers('streams')
     for stream_id in streams:
-        score = ws_redis.get('streams:'+stream_id+':frames')
+        score = ws_redis.get('stream:'+stream_id+':frames')
         print stream_id, score
         ws_redis.zadd('queue', stream_id, score)
 
