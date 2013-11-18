@@ -60,7 +60,7 @@ class TargetHandler(tornado.web.RequestHandler):
             stamp = datetime.datetime.fromtimestamp(float(cc_redis.hget(target_id,'date')))
             prop['date'] = stamp.strftime('%m/%d/%Y, %H:%M:%S')
             prop['description'] = cc_redis.hget(target_id,'description')
-             prop['frames'] = random.randint(0,200)
+            prop['frames'] = random.randint(0,200)
             response.append(prop)
 
         return self.write(json.dumps(response,indent=4, separators=(',', ': ')))
