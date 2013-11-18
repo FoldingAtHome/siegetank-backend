@@ -3,6 +3,8 @@ import tornado.ioloop
 import tornado.web
 import redis
 
+import uuid
+import random
 import threading
 # each ws has a uuid
 
@@ -25,7 +27,13 @@ class StreamHandler(tornado.web.RequestHandler):
             purposes.
 
             RESPONDS with a state.xml '''
-        print 'foo'
+
+        head = ws_redis.zrange('queue',0,0)
+        ws_redis.zrem('queue',head)
+        ws_redis.set('expire:'+stream_id,0)
+        ws_redis.expire('expire:'+stream_id,5)
+
+        print 'expired'
 
 class QueueHandler(tornado.web.RequestHandler):
     def get(self):
@@ -39,12 +47,16 @@ class Listener(threading.Thread):
         self.pubsub = self.redis.pubsub()
         self.pubsub.subscribe(channels)
     
-    def work(self, item):
-        print item['channel'], ":", item['data']
-    
     def run(self):
         for item in self.pubsub.listen():
-            print item['data']
+            print item['data'], 'expired'
+            try:
+                stream_id = item['data'][7:]
+                score = ws_redis.get('stream:'+stream_id+':frames')
+                print stream_id, score
+                ws_redis.zadd(item['data'], score, 'expire:'+stream_id)
+            except:
+                pass
 
 application = tornado.web.Application([
     (r'/frame', FrameHandler),
@@ -53,8 +65,21 @@ application = tornado.web.Application([
 ])
 
 if __name__ == "__main__":
+    ws_redis.flushdb()
     ws_redis.config_set('notify-keyspace-events','Elx')
+    for i in range(10):
+        stream_id = str(uuid.uuid4())
+        ws_redis.sadd('streams', stream_id)
+        ws_redis.set('streams:'+stream_id+':frames', random.randint(0,10))
+
+    streams = ws_redis.smembers('streams')
+    for stream_id in streams:
+        score = ws_redis.get('streams:'+stream_id+':frames')
+        print stream_id, score
+        ws_redis.zadd('queue', stream_id, score)
+
     queue_updater = Listener(ws_redis, ['__keyevent@0__:expired'])
+    # needed for child thread to exit when main thread terminates
     queue_updater.daemon = True
     queue_updater.start()
 

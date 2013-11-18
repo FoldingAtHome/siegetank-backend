@@ -71,10 +71,6 @@ class TargetHandler(tornado.web.RequestHandler):
         # delete the project
         return
 
-class JobHandler(tornado.web.RequestHandler):
-    def get(self):
-
-
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PGI: Add new streams to an existing target. The input must be compressed
