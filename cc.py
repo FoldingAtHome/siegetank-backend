@@ -13,6 +13,56 @@ import redis
 
 cc_redis = redis.Redis(host='localhost', port=6379)
 ws_redis = redis.Redis(host='localhost', port=6380)
+ws2_redis = redis.Redis(host='localhost', port=6381)
+
+class Singleton:
+    '''
+    Note: Normally I HATE singletons, but unfortunately I have no way of dealing
+    with the async nature of multiple GETS '''
+    def __init__(self, decorated):
+        self._decorated = decorated
+
+    def Instance(self):
+        try:
+            return self._instance
+        except AttributeError:
+            self._instance = self._decorated()
+            return self._instance
+
+    def __call__(self):
+        raise TypeError('Singletons must be accessed through Instance().')
+
+    def __instancecheck__(self, inst):
+        return isinstance(inst, self._decorated)
+
+@Singleton
+class DPQ:
+    ''' Distributed priority queue '''
+    def __init__(self, clients, keys):
+        self.clients = clients
+        self.keys = keys
+        self.block = False
+
+    def max(self):
+        while not self.block:
+            self.block = True
+            max_key = None
+            max_score = -1
+            for client in self.clients:
+                for key in keys:
+                    result = client.zrevrange(key, 0, 0, withScores=True)
+                    if result:
+                        if result[1] > max_score:
+                            max_score = result
+                            max_key = result[0]
+
+            if max_key:
+                return max_key
+
+            self.block = False
+            return
+
+
 
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
@@ -51,6 +101,7 @@ class TargetHandler(tornado.web.RequestHandler):
         return self.write('OK')
 
     def get(self):
+        ''' PGI '''
         user = 'yutong'
         response = []
         targets = cc_redis.smembers(user+':targets')
@@ -77,6 +128,11 @@ class StreamHandler(tornado.web.RequestHandler):
             state.xml files encoded as base64. Streams are routed directly to the WS via 
             redis using a pub-sub mechanism '''
         print self.request.body
+
+    def get(self):
+        ''' PUBLIC: Assign a job
+            1) Query all redis dbs for the 
+        '''
 
 application = tornado.web.Application([
     (r'/target', TargetHandler),

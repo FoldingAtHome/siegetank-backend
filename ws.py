@@ -10,8 +10,7 @@ import os
 import json
 # each ws has a uuid
 
-ws_redis = redis.Redis(host='localhost', port=6380)
-
+ws_redis = redis.Redis(host='localhost', port=sys.argv[1])
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
@@ -67,7 +66,7 @@ class StreamHandler(tornado.web.RequestHandler):
         return self.write('OK')
 
     def get(self):
-        ''' PRIVATE - Get a state.xml from the WS for the core. 
+        ''' PRIVATE - Assign a job. 
             The CC creates a token given to the Core for identification
             purposes.
 
@@ -97,8 +96,10 @@ class StreamHandler(tornado.web.RequestHandler):
 class QueueHandler(tornado.web.RequestHandler):
     def get(self):
         ''' PRIVATE - Return the idle stream for a given project with the most number of frames '''
-        print 'foo'
-
+        content = json.loads(self.request.body)
+        target_id = content['target_id']
+        stream_id = ws_redis.zrevrange('target:'+target_id+':queue',0,0)
+        return self.write(stream_id)
 
 class Listener(threading.Thread):
     ''' This class subscribes to the ws redis server to listen for expire notifications. Upon a stream expiring,
