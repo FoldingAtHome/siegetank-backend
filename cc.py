@@ -8,6 +8,7 @@ import json
 import os
 import uuid
 import random
+import requests
 
 import redis
 
@@ -15,58 +16,11 @@ cc_redis = redis.Redis(host='localhost', port=6379)
 ws_redis = redis.Redis(host='localhost', port=6380)
 ws2_redis = redis.Redis(host='localhost', port=6381)
 
-class Singleton:
-    '''
-    Note: Normally I HATE singletons, but unfortunately I have no way of dealing
-    with the async nature of multiple GETS '''
-    def __init__(self, decorated):
-        self._decorated = decorated
-
-    def Instance(self):
-        try:
-            return self._instance
-        except AttributeError:
-            self._instance = self._decorated()
-            return self._instance
-
-    def __call__(self):
-        raise TypeError('Singletons must be accessed through Instance().')
-
-    def __instancecheck__(self, inst):
-        return isinstance(inst, self._decorated)
-
-@Singleton
-class DPQ:
-    ''' Distributed priority queue '''
-    def __init__(self, clients, keys):
-        self.clients = clients
-        self.keys = keys
-        self.block = False
-
-    def max(self):
-        while not self.block:
-            self.block = True
-            max_key = None
-            max_score = -1
-            for client in self.clients:
-                for key in keys:
-                    result = client.zrevrange(key, 0, 0, withScores=True)
-                    if result:
-                        if result[1] > max_score:
-                            max_score = result
-                            max_key = result[0]
-
-            if max_key:
-                return max_key
-
-            self.block = False
-            return
-
-
+ws_clients = [ws_redis, ws2_redis]
 
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
-        ''' PGI: Post a new target '''
+        ''' PGI - Post a new target '''
         content = json.loads(self.request.body)
         try:
             system = content['system']
@@ -84,15 +38,21 @@ class TargetHandler(tornado.web.RequestHandler):
             target_id = hashlib.sha256(str(uuid.uuid4())).hexdigest()
             owner = 'yutong'
 
-            # store data into redis
+            # store target details into redis
             cc_redis.hset(target_id,'system',system_sha)
             cc_redis.hset(target_id,'integrator',integrator_sha)
             cc_redis.hset(target_id,'description',description)
             cc_redis.hset(target_id,'date',creation_time)
             cc_redis.hset(target_id,'owner',owner)
 
-            # add id to the owner's list of targets
+            # add target_id to the owner's list of targets
             cc_redis.sadd(owner+':targets',target_id)
+
+            # add target_id to list of targets managed by this WS
+            cc_redis.sadd('targets',target_id)
+
+            # set number of streams of this target to 0
+            cc_redis.set('target:'+target_id+':count',0)
 
         except Exception as e:
             print str(e)
@@ -101,7 +61,7 @@ class TargetHandler(tornado.web.RequestHandler):
         return self.write('OK')
 
     def get(self):
-        ''' PGI '''
+        ''' PGI - Fetch details on a project'''
         user = 'yutong'
         response = []
         targets = cc_redis.smembers(user+':targets')
@@ -122,26 +82,87 @@ class TargetHandler(tornado.web.RequestHandler):
         # delete the project
         return
 
+class WSHandler(tornado.web.RequestHandler):
+    def post(self):
+        ''' PGI: Registers the work server to the Command Center
+
+        '''
+        content = json.loads(self.request.body)
+        ip = self.request.remote_ip
+        print 'ip detected: ', ip
+        try:
+            ws_id = content['ws_id']
+            cc_redis.sadd('wss', ws_id)
+            cc_redis.set('ws:'+ws_id+':ip',ip)
+        except Exception as e:
+            print str(e)
+            return self.write('bad request')
+
+        self.write('REGISTERED')
+
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PGI: Add new streams to an existing target. The input must be compressed
             state.xml files encoded as base64. Streams are routed directly to the WS via 
-            redis using a pub-sub mechanism '''
+            redis using a pubsub mechanism - (Request Forwarded to WS) '''
+        content = json.loads(self.request.body)
+        try:
+            target_id = content['target_id']
+            cc_redis.incr('target:'+target_id+':count')
+        except Exception as e:
+            print str(e)
+            return self.write('bad request')
+
+        # shove stream to random workserver
+        random_ws_id = cc_redis.srandmember('wss')
+        # record the WSs used by this target
+        cc_redis.sadd('target:'+target_id+':wss', random_ws_id)
+
+        random_ws_ip = cc.redis.get('ws:'+target_id+':ip')
+
+        # forward the request to the WS
+
+        response = requests.post('')
+
+    def delete(self):
+        ''' PGI: Delete a particular stream - (Request Forwarded to WS) '''
         print self.request.body
 
+class JobHandler(tornado.web.RequestHandler):
     def get(self):
-        ''' PUBLIC: Assign a job
-            1) Query all redis dbs for the 
-        '''
+        ''' DI: Fetch a job from a random WS for the core
+            Returns system.xml, integrator.xml, token, ws:ip'''
+
+        # for a random target
+        target_id = random.choice()
+
+        # pick a random ws from the list of targets
+
+        client = random.choice(ws_clients)
+        pipe = client.pipeline()
+        pipe.zrevrange('target:'+target_id+':queue',0,0)
+        pipe.zremrangebyrank('target:'+target_id+':queue',-1,-1)
+        result = pipe.execute()
+        head = result[0]
+
+        if head:
+            stream_id = head[0]
+            client.set('expire:'+stream_id,0)
+            client.expire('expire:'+stream_id,5)
+            return self.write('Popped stream_id:' + stream_id)
+        else:
+            return self.write('No jobs available!')
 
 application = tornado.web.Application([
     (r'/target', TargetHandler),
-    (r'/stream', StreamHandler)
+    (r'/stream', StreamHandler),
+    (r'/job', JobHandler),
+    (r'/add_ws', WSHandler)
 ])
  
 if __name__ == "__main__":
-    #cc_redis.flushdb()
-    application.listen(8888)
+    cc_redis.flushdb()
+    application.listen(8888, '0.0.0.0')
     if not os.path.exists('files'):
         os.makedirs('files')
     tornado.ioloop.IOLoop.instance().start()

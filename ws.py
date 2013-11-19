@@ -8,9 +8,10 @@ import random
 import threading
 import os
 import json
-# each ws has a uuid
+import requests
+import sys
 
-ws_redis = redis.Redis(host='localhost', port=sys.argv[1])
+ws_redis = redis.Redis(host='localhost', port=int(sys.argv[1]))
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
@@ -77,21 +78,7 @@ class StreamHandler(tornado.web.RequestHandler):
 
             RESPONDS with a state.xml '''
 
-        content = json.loads(self.request.body)
 
-        pipe = ws_redis.pipeline()
-        pipe.zrevrange('target:'+target_id+':queue',0,0)
-        pipe.zremrangebyrank('target:'+target_id+':queue',-1,-1)
-        result = pipe.execute()
-        head = result[0]
-
-        if head:
-            stream_id = head[0]
-            ws_redis.set('expire:'+stream_id,0)
-            ws_redis.expire('expire:'+stream_id,5)
-            return self.write('Popped stream_id:' + stream_id)
-        else:
-            return self.write('No jobs available!')
 
 class QueueHandler(tornado.web.RequestHandler):
     def get(self):
@@ -130,10 +117,20 @@ application = tornado.web.Application([
     (r'/queue', QueueHandler)
 ])
 
+CCs = ['http://localhost:8888']
+
 if __name__ == "__main__":
 
     if not os.path.exists('targets'):
         os.makedirs('targets')
+
+    # inform the CCs that the WS is now online
+
+    ws_uuid = 'firebat'
+    for cc in CCs:
+        payload = {'trusted_key' : 'protoss_sucks', 'ws_id' : ws_uuid}
+        r = requests.post(cc+'/add_ws', json.dumps(payload))
+        print'r.text', r.text
 
     # redis routines
     ws_redis.flushdb()
@@ -155,5 +152,5 @@ if __name__ == "__main__":
     queue_updater.daemon = True
     queue_updater.start()
 
-    application.listen(8888)
+    application.listen(8890, '0.0.0.0')
     tornado.ioloop.IOLoop.instance().start()
