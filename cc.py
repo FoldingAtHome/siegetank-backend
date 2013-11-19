@@ -12,6 +12,9 @@ import requests
 
 import redis
 
+# All WS must authenticate themselves with the CC_WS_KEY
+CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
+
 cc_redis = redis.Redis(host='localhost', port=6379)
 ws_redis = redis.Redis(host='localhost', port=6380)
 ws2_redis = redis.Redis(host='localhost', port=6381)
@@ -61,7 +64,7 @@ class TargetHandler(tornado.web.RequestHandler):
         return self.write('OK')
 
     def get(self):
-        ''' PGI - Fetch details on a project'''
+        ''' PGI - Fetch details on a target'''
         user = 'yutong'
         response = []
         targets = cc_redis.smembers(user+':targets')
@@ -84,14 +87,18 @@ class TargetHandler(tornado.web.RequestHandler):
 
 class WSHandler(tornado.web.RequestHandler):
     def post(self):
-        ''' PGI: Registers the work server to the Command Center
+        ''' PGI: Called by WS to register CC
 
         '''
         content = json.loads(self.request.body)
         ip = self.request.remote_ip
-        print 'ip detected: ', ip
         try:
             ws_id = content['ws_id']
+            test_key = content['cc_key']
+            if test_key != CC_WS_KEY:
+                return self.write('unauthorized')
+            else:
+                print 'WS identified'
             cc_redis.sadd('wss', ws_id)
             cc_redis.set('ws:'+ws_id+':ip',ip)
         except Exception as e:

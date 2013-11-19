@@ -117,7 +117,7 @@ application = tornado.web.Application([
     (r'/queue', QueueHandler)
 ])
 
-CCs = ['http://localhost:8888']
+CCs = {'http://localhost:8888' : 'PROTOSS_IS_FOR_NOOBS'}
 
 if __name__ == "__main__":
 
@@ -127,10 +127,10 @@ if __name__ == "__main__":
     # inform the CCs that the WS is now online
 
     ws_uuid = 'firebat'
-    for cc in CCs:
-        payload = {'trusted_key' : 'protoss_sucks', 'ws_id' : ws_uuid}
-        r = requests.post(cc+'/add_ws', json.dumps(payload))
-        print'r.text', r.text
+    for server_address, secret_key in CCs.iteritems():
+        payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid}
+        r = requests.post(server_address+'/add_ws', json.dumps(payload))
+        print 'r.text', r.text
 
     # redis routines
     ws_redis.flushdb()
@@ -152,5 +152,5 @@ if __name__ == "__main__":
     queue_updater.daemon = True
     queue_updater.start()
 
-    application.listen(8890, '0.0.0.0')
+    application.listen(8889, '0.0.0.0')
     tornado.ioloop.IOLoop.instance().start()
