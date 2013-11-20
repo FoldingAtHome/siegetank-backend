@@ -24,19 +24,33 @@ ws_clients = [ws_redis, ws2_redis]
 class WSManager:
 
     def __init__(self):
-        self.redis_clients = set()
+        self.redis_clients = {}
 
     def add_ws(self, ws_id, ip, redis_port):
         cc_redis.sadd('wss', ws_id)
         cc_redis.set('ws:'+ws_id+':ip', ip)
         cc_redis.set('ws:'+ws_id+':redis_port', redis_port)
         ws_redis = redis.Redis(host=ip, port=redis_port)
-        self.redis_clients.add(ws_redis)
+        self.redis_clients[ws_id] = ws_redis
+
+    def get_redis_client(self, ws_id):
+        return self.redis_clients[ws_id]
 
     def get_idle_ws(self):
-        n_available_ws = cc_redis.card(ws_id)
+        n_available_ws = cc_redis.card('wss')
         while n_available_ws > 0:
             ws_id = cc_redis.srandmember('wss')
+
+
+
+
+
+            n_available_ws = cc_redis.card(ws_id)
+
+        if n_available_ws == 0:
+            return None
+
+        return ws_id, ws_ip, redis_client
             # test and see if this WS is still alive
 
 WSManager Workservers;
@@ -49,11 +63,14 @@ class WSHandler(tornado.web.RequestHandler):
         content = json.loads(self.request.body)
         ip = self.request.remote_ip
         try:
-            ws_id = content['ws_id']
             test_key = content['cc_key']
             if test_key != CC_WS_KEY:
                 return self.write('Bad CC_WS_KEY')
-            Workservers.add_ws(ws_id, ip)
+
+            ws_id = content['ws_id']
+            redis_port = content['redis_port']
+
+            Workservers.add_ws(ws_id, ip, redis_port)
         except Exception as e:
             print str(e)
             return self.write('bad request')
@@ -63,14 +80,20 @@ class WSHandler(tornado.web.RequestHandler):
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PGI - Post a new target '''
+        self.set_status(400)
         content = json.loads(self.request.body)
         try:
             system = content['system']
+            integrator = content['integrator']
+            
+            if len(system) == 0 or len(integrator) == 0:
+                return self.write('bad request')
+
             system_sha = hashlib.sha256(system).hexdigest()
             path = './files/'+system_sha
             if not os.path.isfile(path):
                 open(path,'w').write(system)
-            integrator = content['integrator']
+ 
             integrator_sha = hashlib.sha256(integrator).hexdigest()
             path = './files/'+integrator_sha
             if not os.path.isfile(path):
@@ -81,11 +104,11 @@ class TargetHandler(tornado.web.RequestHandler):
             owner = 'yutong'
 
             # store target details into redis
-            cc_redis.hset(target_id,'system',system_sha)
-            cc_redis.hset(target_id,'integrator',integrator_sha)
-            cc_redis.hset(target_id,'description',description)
-            cc_redis.hset(target_id,'date',creation_time)
-            cc_redis.hset(target_id,'owner',owner)
+            cc_redis.hset('target:'+target_id,'system',system_sha)
+            cc_redis.hset('target:'+target_id,'integrator',integrator_sha)
+            cc_redis.hset('target:'+target_id,'description',description)
+            cc_redis.hset('target:'+target_id,'date',creation_time)
+            cc_redis.hset('target:'+target_id,'owner',owner)
 
             # add target_id to the owner's list of targets
             cc_redis.sadd(owner+':targets',target_id)
@@ -93,13 +116,11 @@ class TargetHandler(tornado.web.RequestHandler):
             # add target_id to list of targets managed by this WS
             cc_redis.sadd('targets',target_id)
 
-            # set number of streams of this target to 0
-            cc_redis.set('target:'+target_id+':count',0)
-
         except Exception as e:
             print str(e)
             return self.write('bad request')
 
+        self.set_status(200)
         return self.write('OK')
 
     def get(self):

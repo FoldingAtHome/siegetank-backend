@@ -55,26 +55,23 @@ class StreamHandler(tornado.web.RequestHandler):
         try:
             stream_id = content['stream_id']
             state_bin = content['state_bin']
-            path = 'streams/'+stream_id
-            if not os.path.exists(path):
-                try:
-                    os.makedirs(path)
-                except:
-                    pass
             open(path+'/'+'state.xml.tar.gz','w').write(state_bin)
             required_strings = ['system','integrator']
             for s in required_strings:
                 if s+'_bin' in content:
                     binary = content[s+'_bin']
                     bin_hash = hashlib.md5(binary).hexdigest()
-                    if not ws_redis.sismember('file_hashes', bin_hash):
-                        ws_redis.sadd('file_hashes', bin_hash)
+                    if len(bin_hash) == 0:
+                        return self.write('binary and bin_hash empty')
+                    if not os.path.exists('files/'+bin_hash):
                         open('files/'+bin_hash, 'w').write(binary)
                     else:
                         print 'found duplicate hash'
                 elif s+'_hash' in content: 
                     bin_hash = content[s+'_hash']
-                    if not ws_redis.sismember('file_hashes', bin_hash):
+                    if len(bin_hash) == 0:
+                        return self.write('binary and bin_hash empty')
+                    if not os.path.exists('files/'+bin_hash):
                         return self.write('Gave me a hash for a file not in files directory')
                 else:
                     return self.write('missing content: '+s+'_bin/hash')
