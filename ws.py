@@ -3,6 +3,7 @@ import tornado.ioloop
 import tornado.web
 import redis
 
+import signal
 import uuid
 import random
 import threading
@@ -10,11 +11,12 @@ import os
 import json
 import requests
 import sys
+import subprocess
 import hashlib
+import time
 
-ws_port = sys.argv[1]
-ws_redis = redis.Redis(host='localhost', port=int(ws_port))
-
+redis_port = sys.argv[1]
+http_port = sys.argv[2]
 
 CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
@@ -138,27 +140,48 @@ application = tornado.web.Application([
     (r'/queue', QueueHandler)
 ])
 
+def clean_exit(signal, frame):
+    print 'shutting down redis...'
+    ws_redis.shutdown()
+    print 'shutting down tornado...'
+    tornado.ioloop.IOLoop.instance().stop()
+    sys.exit(0)
+
 if __name__ == "__main__":
+
+    signal.signal(signal.SIGINT, clean_exit)
 
     if not os.path.exists('files'):
         os.makedirs('files')
     if not os.path.exists('streams'):
         os.makedirs('streams')
 
-    # inform the CCs that the WS is now online and ready for work
+    args = ("redis/src/redis-server", "--port", redis_port)
+    redis_process = subprocess.Popen(args)
+    if redis_process.poll() is not None:
+        print 'could not start redis-server, aborting'
+        sys.exit(0)
+    ws_redis = redis.Redis(host='localhost', port=int(redis_port))
+    # wait until redis is alive
+    alive = False
+    while not alive:
+        try:
+            alive = ws_redis.ping() 
+        except:
+            pass
 
+    # inform the CCs that the WS is now online and ready for work
     ws_uuid = 'firebat'
     try:
         for server_address, secret_key in CCs.iteritems():
             payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'redis_port' : ws_port}
-            r = requests.post('http://'+server_address+':8888/add_ws', json.dumps(payload))
+            r = requests.post('http://'+server_address+':80/add_ws', json.dumps(payload))
             print 'r.text', r.text
     except:
         print 'cc is down'
 
     # clear db
     # ws_redis.flushdb()
-
 
     ws_redis.config_set('notify-keyspace-events','Elx')
     '''
