@@ -21,6 +21,45 @@ ws2_redis = redis.Redis(host='localhost', port=6381)
 
 ws_clients = [ws_redis, ws2_redis]
 
+class WSManager:
+
+    def __init__(self):
+        self.redis_clients = set()
+
+    def add_ws(self, ws_id, ip, redis_port):
+        cc_redis.sadd('wss', ws_id)
+        cc_redis.set('ws:'+ws_id+':ip', ip)
+        cc_redis.set('ws:'+ws_id+':redis_port', redis_port)
+        ws_redis = redis.Redis(host=ip, port=redis_port)
+        self.redis_clients.add(ws_redis)
+
+    def get_idle_ws(self):
+        n_available_ws = cc_redis.card(ws_id)
+        while n_available_ws > 0:
+            ws_id = cc_redis.srandmember('wss')
+            # test and see if this WS is still alive
+
+WSManager Workservers;
+
+class WSHandler(tornado.web.RequestHandler):
+    def post(self):
+        ''' PGI: Called by WS to register CC
+
+        '''
+        content = json.loads(self.request.body)
+        ip = self.request.remote_ip
+        try:
+            ws_id = content['ws_id']
+            test_key = content['cc_key']
+            if test_key != CC_WS_KEY:
+                return self.write('Bad CC_WS_KEY')
+            Workservers.add_ws(ws_id, ip)
+        except Exception as e:
+            print str(e)
+            return self.write('bad request')
+
+        self.write('REGISTERED')
+
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PGI - Post a new target '''
@@ -84,28 +123,6 @@ class TargetHandler(tornado.web.RequestHandler):
 
         # delete the project
         return
-
-class WSHandler(tornado.web.RequestHandler):
-    def post(self):
-        ''' PGI: Called by WS to register CC
-
-        '''
-        content = json.loads(self.request.body)
-        ip = self.request.remote_ip
-        try:
-            ws_id = content['ws_id']
-            test_key = content['cc_key']
-            if test_key != CC_WS_KEY:
-                return self.write('unauthorized')
-            else:
-                print 'WS identified'
-            cc_redis.sadd('wss', ws_id)
-            cc_redis.set('ws:'+ws_id+':ip',ip)
-        except Exception as e:
-            print str(e)
-            return self.write('bad request')
-
-        self.write('REGISTERED')
 
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):

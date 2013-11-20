@@ -1,0 +1,113 @@
+===========
+WORK SERVER
+===========
+
+WS is contains sharded streams. It contains no information on targets, systems, etc. It contains only a whole bunch of hashes and files. 
+
+Internals:
+----------
+
+Accessible both the WS and the managing CC
+
+HASH stream:stream_id 
+	system "file_hash" 
+	integrator "file_hash" 
+	options "hash" 
+	token "none" 
+	user "owner" 
+	frames 0
+KEY token:shared_token:stream_id
+
+WS HTTP Interface:
+-------------
+
+POST /stream - used by CC to add a new stream. XMLs and options are hashed. Duplicate
+ 			   entries are removed. system.xml, integrator.xml, options, are stored in 
+ 			   /files/, and are never deleted. Hard drives are cheap!
+	
+	REQ: [uuid1, uuid2, uuid3, ...], 
+		 [state1.xml, state2.xml, state3.xml, ...], 
+		 system.xml, integrator.xml, options
+	REP: OK
+
+DELETE /stream - used by CC to delete a stream 
+	
+	REQ: uuid
+	REP: OK
+
+GET /job - used by the Core to get a job
+	REQ: shared_token
+	REP: state.xml, system.xml, integrator.xml
+
+POST /frame - used by Donor to post a frame. Base
+	REQ: shared_token, frame.pb
+	REP: OK / BAD / STOPPED
+
+GET /stream - used by a special Python interface to download the xtcs
+	REQ: uuid 
+	REP: positions.xtc
+
+Stopping a stream and assigning streams to donors are done directly via the redis client. 
+
+#PUT /stream - used by CC to stop a stream. Implemented by resetting the token to an empty 	#	string so that on the next frame POST by the core, the core will dump and 
+#	forget. 
+#	
+#   REQ: uuid
+#	
+#	MULTI
+#	GET token_id stream:stream_id:token
+#	SET stream:stream_id:token 0
+#	DEL token_id
+#	EXEC
+#
+#	REP: OK
+
+#POST /job - used by CC to assign a stream to a donor, or to stop a stream
+#	REQ: uuid, shared_token
+#	REP: OK
+
+==============
+COMMAND CENTER
+==============
+
+CC coordinates targets and streams. It keeps a priority queue on all the targets and their respective streams. CCs queries WS via HTTP (since WS block all ports except 80).
+
+Getting/Modifying certain properties.
+
+Stopping a stream is easy, connect to the redis_db of the WS, and issue:
+	HSET stream:stream_id stopped True
+Getting number of frames is also easy:
+	HGET stream:stream_id frames
+
+Internals:
+----------
+For security and sanity reasons, these are not accessible by anyone except the CC itself!
+
+ORDERED SET queue:target_id stream_id score1 stream_id score2 ...
+
+target:target_id:streams stream_id1 stream_id2 stream_id3 ...
+stream:stream_id:ws_id
+stream:stream_id:frames
+SET wss ws_id1 ws_id2 ...
+KEY ws:ws_id:ws_ip
+KEY ws:ws_id:r_port
+
+CC Interface:
+-------------
+
+POST /target - used by PG to add a new target. The files and options are stored directly in 	 		 /files folder as hashes
+	REQ: description, system.xml, integrator.xml, options
+	REP: 
+
+POST /stream - used by PG to add a new stream to a given targets. The hashes for target's 	               required files and options are looked up, and passed to the WS
+	REQ: target_id, state.xml
+	REP: OK
+
+POST /queue - 	used by WS to update internals. When a stream expires on the 
+				WS, a request is sent to this URI. The stream is placed back into the priority queue
+	REQ: uuid, n_frames
+	REP: OK
+
+GET /job - used by Core to get a new job.
+	REQ: (none)
+	REP: shared_token, ws_ip

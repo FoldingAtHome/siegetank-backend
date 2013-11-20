@@ -124,11 +124,10 @@ if __name__ == "__main__":
     if not os.path.exists('targets'):
         os.makedirs('targets')
 
-    # inform the CCs that the WS is now online
-
+    # inform the CCs that the WS is now online and ready for work
     ws_uuid = 'firebat'
     for server_address, secret_key in CCs.iteritems():
-        payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid}
+        payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'redis_port' : port}
         r = requests.post(server_address+'/add_ws', json.dumps(payload))
         print 'r.text', r.text
 
