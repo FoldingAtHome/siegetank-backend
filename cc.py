@@ -76,6 +76,17 @@ class WSHandler(tornado.web.RequestHandler):
             ws_redis_clients[ws_id] = redis.Redis(host=content['ip'], 
                                                   port=int(content['redis_port']))
 
+            # see if this ws existed in the past
+            existing_streams = cc_redis.smembers('ws:'+ws_id+':streams') > 0:
+            if existing_streams:
+                for stream in existing_streams:
+                    
+                    # ONLY DO THIS IF STREAM IS ACTIVE
+                    target = cc_redis.get('stream:'+stream+':target')
+                    priority_queue
+
+
+
         except Exception as e:
             print str(e)
             self.set_status(400)
