@@ -15,6 +15,9 @@ import hashlib
 ws_port = sys.argv[1]
 ws_redis = redis.Redis(host='localhost', port=int(ws_port))
 
+
+CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
+
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PUBLIC - Used by Core to add a frame
@@ -40,6 +43,12 @@ class StreamHandler(tornado.web.RequestHandler):
             stored as:
             /targets/target_id/stream_id/state.xml.tar.gz
         '''
+
+        if not self.request.remote_ip in CCs:
+            print self.request.remote_ip
+            self.set_status(401)
+            return self.write('not authorized')
+
         content = json.loads(self.request.body)
         self.set_status(400)
         
@@ -55,16 +64,14 @@ class StreamHandler(tornado.web.RequestHandler):
             open(path+'/'+'state.xml.tar.gz','w').write(state_bin)
             required_strings = ['system','integrator']
             for s in required_strings:
-                print s    
                 if s+'_bin' in content:
                     binary = content[s+'_bin']
                     bin_hash = hashlib.md5(binary).hexdigest()
-                    print bin_hash
-                    if not ws_redis.sismember('file_hashes',bin_hash):
+                    if not ws_redis.sismember('file_hashes', bin_hash):
                         ws_redis.sadd('file_hashes', bin_hash)
                         open('files/'+bin_hash, 'w').write(binary)
                     else:
-                        print 'FOUND DUPLICATE HASH, WHY ARE YOU GIVING THIS FILE TO ME?'
+                        print 'found duplicate hash'
                 elif s+'_hash' in content: 
                     bin_hash = content[s+'_hash']
                     if not ws_redis.sismember('file_hashes', bin_hash):
@@ -80,8 +87,6 @@ class StreamHandler(tornado.web.RequestHandler):
         except Exception as e:
             print e
             return self.write('bad request')
-
-
 
         return
 
@@ -136,8 +141,6 @@ application = tornado.web.Application([
     (r'/queue', QueueHandler)
 ])
 
-CCs = {'http://localhost:8888' : 'PROTOSS_IS_FOR_NOOBS'}
-
 if __name__ == "__main__":
 
     if not os.path.exists('files'):
@@ -151,13 +154,15 @@ if __name__ == "__main__":
     try:
         for server_address, secret_key in CCs.iteritems():
             payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'redis_port' : ws_port}
-            r = requests.post(server_address+'/add_ws', json.dumps(payload))
+            r = requests.post('http://'+server_address+':8888/add_ws', json.dumps(payload))
             print 'r.text', r.text
     except:
         print 'cc is down'
 
-    # redis routines
-    ws_redis.flushdb()
+    # clear db
+    # ws_redis.flushdb()
+
+
     ws_redis.config_set('notify-keyspace-events','Elx')
     '''
     for i in range(10):
