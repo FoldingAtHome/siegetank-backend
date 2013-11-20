@@ -10,8 +10,10 @@ import os
 import json
 import requests
 import sys
+import hashlib
 
-ws_redis = redis.Redis(host='localhost', port=int(sys.argv[1]))
+ws_port = sys.argv[1]
+ws_redis = redis.Redis(host='localhost', port=int(ws_port))
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
@@ -26,45 +28,62 @@ class FrameHandler(tornado.web.RequestHandler):
 
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):       
-        ''' PRIVATE - Add a new stream to WS. The POST method on this URI
+        ''' PRIVATE - Add new stream(s) to WS. The POST method on this URI
             can only be accessed by known CCs (ip restricted) 
             Parameters:
 
-            target_id: uuid # 
-            stream_id: uuid #
-            state_bin: state.xml.tar.gz #
+            REQUIRED:
+            stream_ids: uuid1 #
+            state_bin: state.xml.tar.gz  #
+            system_hash or system_bin #
 
             stored as:
             /targets/target_id/stream_id/state.xml.tar.gz
         '''
-
         content = json.loads(self.request.body)
-
+        self.set_status(400)
+        
         try:
-            target_id = content['target_id']
             stream_id = content['stream_id']
             state_bin = content['state_bin']
-
-            path = 'targets/'+target_id+'/'+stream_id
-
+            path = 'streams/'+stream_id
             if not os.path.exists(path):
                 try:
                     os.makedirs(path)
                 except:
                     pass
-
             open(path+'/'+'state.xml.tar.gz','w').write(state_bin)
+            required_strings = ['system','integrator']
+            for s in required_strings:
+                print s    
+                if s+'_bin' in content:
+                    binary = content[s+'_bin']
+                    bin_hash = hashlib.md5(binary).hexdigest()
+                    print bin_hash
+                    if not ws_redis.sismember('file_hashes',bin_hash):
+                        ws_redis.sadd('file_hashes', bin_hash)
+                        open('files/'+bin_hash, 'w').write(binary)
+                    else:
+                        print 'FOUND DUPLICATE HASH, WHY ARE YOU GIVING THIS FILE TO ME?'
+                elif s+'_hash' in content: 
+                    bin_hash = content[s+'_hash']
+                    if not ws_redis.sismember('file_hashes', bin_hash):
+                        return self.write('Gave me a hash for a file not in files directory')
+                else:
+                    return self.write('missing content: '+s+'_bin/hash')
+                ws_redis.hset('stream:'+stream_id, s, bin_hash)
 
-            ws_redis.sadd('targets', target_id)
-            ws_redis.sadd('target:'+target_id+':streams', stream_id)
-            ws_redis.set('stream:'+stream_id+':frames', 0)
-            ws_redis.set('stream:'+stream_id+':target', target_id)
+            ws_redis.hset('stream:'+stream_id, 'owner', content['owner'])
+            ws_redis.hset('stream:'+stream_id, 'frames', 0)
+            self.set_status(200)
 
         except Exception as e:
             print e
             return self.write('bad request')
 
-        return self.write('OK')
+
+
+        return
 
     def get(self):
         ''' PRIVATE - Assign a job. 
@@ -121,15 +140,21 @@ CCs = {'http://localhost:8888' : 'PROTOSS_IS_FOR_NOOBS'}
 
 if __name__ == "__main__":
 
-    if not os.path.exists('targets'):
-        os.makedirs('targets')
+    if not os.path.exists('files'):
+        os.makedirs('files')
+    if not os.path.exists('streams'):
+        os.makedirs('streams')
 
     # inform the CCs that the WS is now online and ready for work
+
     ws_uuid = 'firebat'
-    for server_address, secret_key in CCs.iteritems():
-        payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'redis_port' : port}
-        r = requests.post(server_address+'/add_ws', json.dumps(payload))
-        print 'r.text', r.text
+    try:
+        for server_address, secret_key in CCs.iteritems():
+            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'redis_port' : ws_port}
+            r = requests.post(server_address+'/add_ws', json.dumps(payload))
+            print 'r.text', r.text
+    except:
+        print 'cc is down'
 
     # redis routines
     ws_redis.flushdb()

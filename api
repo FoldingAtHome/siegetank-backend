@@ -17,6 +17,7 @@ HASH stream:stream_id
 	user "owner" 
 	frames 0
 KEY token:shared_token:stream_id
+SET file_hashes systemxmlhash integratorxmlhash
 
 WS HTTP Interface:
 -------------
