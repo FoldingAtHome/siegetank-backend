@@ -12,67 +12,73 @@ import requests
 
 import redis
 
-# All WS must authenticate themselves with the CC_WS_KEY
 CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
 
 cc_redis = redis.Redis(host='localhost', port=6379)
-ws_redis = redis.Redis(host='localhost', port=6380)
-ws2_redis = redis.Redis(host='localhost', port=6381)
+ws_redis_clients = {}
 
-ws_clients = [ws_redis, ws2_redis]
+def remove_ws(ws_id):
+    streams = cc_redis.smembers('ws:'+ws_id+':streams')
+    for stream in streams:
+        target_id = cc_redis.get('stream:'+stream+':target')
+        cc_redis.zrem('queue:'+target_id, stream)
+    ws_redis_clients.pop(ws_id, None)
 
-class WSManager:
+def test_ws(ws_id):
+    ''' If WS is up, returns True.
+        If WS is down, remove_ws() is called. Returns False.
+    '''
+    # test redis
+    try:
+        ws_redis_clients(ws_id).ping()
+    except:
+        remove_ws(ws_id)
 
-    def __init__(self):
-        self.redis_clients = {}
+def get_idle_ws():
+    n_available_ws = cc_redis.card('workservers')
+    while n_available_ws > 0:
+        ws_id = cc_redis.srandmember('workservers')
 
-    def add_ws(self, ws_id, ip, redis_port):
-        cc_redis.sadd('wss', ws_id)
-        cc_redis.set('ws:'+ws_id+':ip', ip)
-        cc_redis.set('ws:'+ws_id+':redis_port', redis_port)
-        ws_redis = redis.Redis(host=ip, port=redis_port)
-        self.redis_clients[ws_id] = ws_redis
+        ws = test_ws(ws_id) 
 
-    def get_redis_client(self, ws_id):
-        return self.redis_clients[ws_id]
+        n_available_ws = cc_redis.card(ws_id)
 
-    def get_idle_ws(self):
-        n_available_ws = cc_redis.card('wss')
-        while n_available_ws > 0:
-            ws_id = cc_redis.srandmember('wss')
+    if n_available_ws == 0:
+        return None
 
+    return ws_id, ws_ip, redis_client
+        # test and see if this WS is still alive
 
-
-
-
-            n_available_ws = cc_redis.card(ws_id)
-
-        if n_available_ws == 0:
-            return None
-
-        return ws_id, ws_ip, redis_client
-            # test and see if this WS is still alive
-
-WSManager Workservers;
-
+# dictionary of name : redis_client
+# to get names of all workservers, cc_redis.smembers('workservers')
+# to get ip, cc_redis.hget('ws:'+name,'ip')
+# to get redis_port, cc_redis.hget('ws:'+name,'redis_port')
+# to get http_port, cc_redis.hget('ws:'+name,'http_port')
 class WSHandler(tornado.web.RequestHandler):
     def post(self):
-        ''' PGI: Called by WS to register CC
-
-        '''
+        ''' PGI: Called by WS for registration '''
         content = json.loads(self.request.body)
         ip = self.request.remote_ip
         try:
             test_key = content['cc_key']
             if test_key != CC_WS_KEY:
+                self.set_status(401)
                 return self.write('Bad CC_WS_KEY')
 
             ws_id = content['ws_id']
-            redis_port = content['redis_port']
+            cc_redis.add('workservers',ws_id)
 
-            Workservers.add_ws(ws_id, ip, redis_port)
+            require_strings = ['ip','redis_port','http_port']
+            for string in require_strings:
+                item = content[string]
+                cc_redis.hset('ws:'+ws_id, string, item)
+
+            ws_redis_clients[ws_id] = redis.Redis(host=content['ip'], 
+                                                  port=int(content['redis_port']))
+
         except Exception as e:
             print str(e)
+            self.set_status(400)
             return self.write('bad request')
 
         self.write('REGISTERED')
@@ -153,7 +159,6 @@ class StreamHandler(tornado.web.RequestHandler):
         content = json.loads(self.request.body)
         try:
             target_id = content['target_id']
-            cc_redis.incr('target:'+target_id+':count')
         except Exception as e:
             print str(e)
             return self.write('bad request')
@@ -165,8 +170,6 @@ class StreamHandler(tornado.web.RequestHandler):
 
         random_ws_ip = cc.redis.get('ws:'+target_id+':ip')
 
-        # forward the request to the WS
-
         response = requests.post('')
 
     def delete(self):
@@ -176,7 +179,12 @@ class StreamHandler(tornado.web.RequestHandler):
 class JobHandler(tornado.web.RequestHandler):
     def get(self):
         ''' DI: Fetch a job from a random WS for the core
-            Returns system.xml, integrator.xml, token, ws:ip'''
+            Returns system.xml, integrator.xml, token, ws:ip
+
+            notes: when popping off priority queue, need to make sure that the WS 
+            is still ALIVE. 
+
+            '''
 
         # for a random target
         target_id = random.choice()
@@ -207,6 +215,10 @@ application = tornado.web.Application([
  
 if __name__ == "__main__":
     cc_redis.flushdb()
+
+    # when CC starts, we need to:
+    # rebuild all priority queues. 
+
     application.listen(8888, '0.0.0.0')
     if not os.path.exists('files'):
         os.makedirs('files')

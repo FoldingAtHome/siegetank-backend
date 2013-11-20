@@ -50,7 +50,8 @@ GET /stream - used by a special Python interface to download the xtcs
 
 Stopping a stream and assigning streams to donors are done directly via the redis client. 
 
-#PUT /stream - used by CC to stop a stream. Implemented by resetting the token to an empty 	#	string so that on the next frame POST by the core, the core will dump and 
+#PUT /stream - used by CC to stop a stream. Implemented by resetting the token to an empty 	
+#	string so that on the next frame POST by the core, the core will dump and 
 #	forget. 
 #	
 #   REQ: uuid
@@ -104,11 +105,46 @@ POST /stream - used by PG to add a new stream to a given targets. The hashes for
 	REQ: target_id, state.xml
 	REP: OK
 
-POST /queue - 	used by WS to update internals. When a stream expires on the 
-				WS, a request is sent to this URI. The stream is placed back into the priority queue
+POST /queue  - used by WS to update internals. When a stream expires on the 
+			 	WS, a request is sent to this URI. The stream is placed back into the priority queue
 	REQ: uuid, n_frames
 	REP: OK
 
 GET /job - used by Core to get a new job.
 	REQ: (none)
 	REP: shared_token, ws_ip
+
+==========
+RECONNECTS
+==========
+
+WS dies gracefully:
+
+1. CC remove_ws is called. All streams on the WS are removed from their corresponding priority queues.  
+
+WS dies ungracefully:
+
+1. Detected when popping head of work queue for a target, see if WS is alive or not. remove_ws() is called
+
+CC dies (un)gracefully:
+
+All WSes stop getting assigned jobs. Old jobs can still finish. 
+WSs's expire updates no longer work. 
+
+Contact points:
+
+WS contacts CC when:
+	1. Initializing WS (stick in whileloop until succeeds)
+	2. A stream on WS becomes inactive (REQ/REP) 
+	   (failable is OK, since when CC gets back online, all streams on this WS will be queried in order to rebuild priority queue on CC)
+
+When a stream becomes inactive, the stream id is sent to the WS. (Authenticated by WS:ID WS:IP pair, since IP is known!)
+
+CC contacts WS when:
+	1. Popping stream from queue and giving to WS.
+	2. Querying stream properties.
+	3. Sending a newly constructed stream (via PG).
+	4. Initializing a download request.
+
+	All these methods call get_ws(ws_id) or get_idle_ws() - which guards the request to make sure the WS is alive first. If not, 
+	get_ws returns False, else returns a WS object 

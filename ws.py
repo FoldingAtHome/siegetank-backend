@@ -15,9 +15,6 @@ import subprocess
 import hashlib
 import time
 
-redis_port = sys.argv[1]
-http_port = sys.argv[2]
-
 CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 class FrameHandler(tornado.web.RequestHandler):
@@ -148,6 +145,9 @@ def clean_exit(signal, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
+    
+    redis_port = sys.argv[1]
+    http_port = sys.argv[2]
 
     signal.signal(signal.SIGINT, clean_exit)
 
@@ -174,7 +174,7 @@ if __name__ == "__main__":
     ws_uuid = 'firebat'
     try:
         for server_address, secret_key in CCs.iteritems():
-            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'redis_port' : ws_port}
+            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'http_port', http_port, redis_port' : ws_port}
             r = requests.post('http://'+server_address+':80/add_ws', json.dumps(payload))
             print 'r.text', r.text
     except:
@@ -201,5 +201,5 @@ if __name__ == "__main__":
     queue_updater.daemon = True
     queue_updater.start()
 
-    application.listen(8889, '0.0.0.0')
+    application.listen(http_port, '0.0.0.0')
     tornado.ioloop.IOLoop.instance().start()
