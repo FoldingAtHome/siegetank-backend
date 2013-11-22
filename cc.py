@@ -49,11 +49,53 @@ def get_idle_ws():
     return ws_id, ws_ip, redis_client
         # test and see if this WS is still alive
 
-# dictionary of name : redis_client
-# to get names of all workservers, cc_redis.smembers('workservers')
-# to get ip, cc_redis.hget('ws:'+name,'ip')
-# to get redis_port, cc_redis.hget('ws:'+name,'redis_port')
-# to get http_port, cc_redis.hget('ws:'+name,'http_port')
+# Redis memory usage:
+# http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
+
+# [ WS ]
+#
+# SET   KEY     'active_ws'             [ set of active ws ids ]
+# HASH  KEY     'ws:'+id     
+#       FIELD   'ip'                    [ ip address ]
+#       FIELD   'http_port'             [ port of the ws's webserver ]
+#       FIELD   'redis_port'            [ port of the ws's redis-server ]
+# SET KEY 'ws:'+ws_id+':streams'        [ list of all the streams owned by the ws ]
+
+# [ STREAMS ]
+#
+# SET   KEY     'streams'               [ set of all the streams ]
+# HASH  KEY     'stream:'+id
+#       FIELD   'active'                [ if the stream is active or stopped ]
+#       FIELD   'ws'                    [ id of the ws the stream is on ]
+#       FIELD   'target'                [ target the stream belongs to ]
+
+# [ TARGETS ]
+#       
+# SET   KEY     'targets'               [ set of all the targets ]
+# HASH  KEY     'target:'+id
+#       FIELD   'description'           [ description of the target ]
+#       FIELD   'owner'                 [ owner of the target ]
+#       FIELD   'system'                [ md5sum of the system file ]
+#       FIELD   'integrator'            [ md5sum of the integrator file ]
+#       FIELD   'date'                  [ creation date of in seconds since 1/1/70 ]    
+# SET   KEY     'target:'+id+':streams' [ list of all streams of the target ]
+# OSET  KEY     'queue:'+id             [ priority queue of streams ]
+
+# WS Connect:
+# -sadd ws_id to active_ws
+# -(re)configure hash ws:ws_id, as ip and ports may have changed
+# -for stream in 'ws:'+ws_id+':streams' 
+#      add stream to 'queue:'+hget('stream:'+id,target)
+
+# WS Clean Disconnect:
+# -srem ws_id from active_ws
+# -remove HASH key 'ws:'+ws_id
+# -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
+
+# CC Initialization
+# -figure out which ws are still active by looking through cached active_ws, and 'ws:'+id
+# -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
+
 class WSHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PGI: Called by WS for registration '''
@@ -84,8 +126,6 @@ class WSHandler(tornado.web.RequestHandler):
                     # ONLY DO THIS IF STREAM IS ACTIVE
                     target = cc_redis.get('stream:'+stream+':target')
                     priority_queue
-
-
 
         except Exception as e:
             print str(e)

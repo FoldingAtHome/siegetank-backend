@@ -98,8 +98,6 @@ class StreamHandler(tornado.web.RequestHandler):
 
             RESPONDS with a state.xml '''
 
-
-
 class QueueHandler(tornado.web.RequestHandler):
     def get(self):
         ''' PRIVATE - Return the idle stream for a given project with the most number of frames '''
