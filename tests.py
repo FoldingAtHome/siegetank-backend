@@ -5,9 +5,9 @@ from tornado.testing import AsyncHTTPTestCase
 import unittest
 import subprocess
 import requests
+import json
 
 class BasicHandlerTestCase(AsyncHTTPTestCase):
-
     def setUp(self):
         redis_port = 6827
         self.http_port = 7346
@@ -18,7 +18,6 @@ class BasicHandlerTestCase(AsyncHTTPTestCase):
                         (r'/heartbeat', ws.HeartbeatHandler, 
                                         dict(redis_port=redis_port))
                         ])
-        #self.test_app.listen(self.http_port, '0.0.0.0')
         pcb = tornado.ioloop.PeriodicCallback(ws.check_heartbeats, 10000, 
                                     tornado.ioloop.IOLoop.instance())
         pcb.start()
@@ -27,26 +26,14 @@ class BasicHandlerTestCase(AsyncHTTPTestCase):
     def get_app(self):
         return self.app
 
-    def test_app(self):
-        print 'TESTING APP'
+    def test_heartbeat(self):
+        response = self.fetch('/heartbeat', method='POST', body=json({'core_token' : '12345'}))
+        print response
 
     def tearDown(self):
         print 'TEARING DOWN'
         self.ws_redis.shutdown()
         tornado.ioloop.IOLoop.instance().stop()
-'''
-class BasicHandlerTestCase(unittest.TestCase):
-    def setUp(self):
-        print 'SETTING UP'
-        
-        tornado.ioloop.IOLoop.instance().start()
 
-
-    def test_heartbeat(self):
-        print 'testing heartbeat'
-        r = requests.get('https://localhost:'+self.http_port+'/heartbeat')
-
-    def tearDown(self):
-'''
 if __name__ == '__main__':
     unittest.main()
