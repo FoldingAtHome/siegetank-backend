@@ -15,6 +15,13 @@ The major goals in the development of Siege Tank are:
 5. Scalability on both generic servers and AWS
 6. Emphasize convention over configuration
 
+<h1> Dependencies </h1>
+
+1. Redis - super fast in-memory database.
+2. Protocol Buffers - for communicating frames back to WS.
+3. Tornado - WS base
+4. POCO - C++ HTTPSession library
+
 <h1> API </h1>
 
 Currently, the allowed RESTful requests are: 

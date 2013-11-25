@@ -19,18 +19,23 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 # [ STREAMS ]
 
-# SET   KEY     'ws:'+ws_id+':streams'          [ set of all the streams owned by the ws ]
+# SET   KEY     'ws:'+ws_id+':streams'  | set of streams owned by the ws     
 # HASH  KEY     'stream:'+id    
-#       FIELD   'frames'                        [ total number of frames of the stream ]
-#       FIELD   'state'                         [ 0 - OK, 1 - PG disabled, 2 - Stream NaN ]
-#       FIELD   'target'                        [ target the stream belongs to ]
+#       FIELD   'frames'                | frame count of the stream          
+#       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
+#       FIELD   'target'                | target the stream belongs to       
 
-# SET   KEY     'active_streams'                [ set of active streams owned by the ws ]
-# HASH  KEY{EXP}'active_stream:'+id+':steps'    [ expirable hash of an active stream ]
-#       FIELD   'shared_token'                  [ core must authenticate using this token ]
-#       FIELD   'donor'                         [ which donor the stream belongs to ]
-#       FIELD   'start_time'                    [ if stream is active, records elapsed time ]
-#       FIELD   'steps'                         [ number of steps completed by donor ]
+# SET   KEY     'active_streams'        | active streams owned by the ws 
+# HASH  KEY     'active_stream:'+id     | expirable 
+#       FIELD   'shared_token'          | core authentication token 
+#       FIELD   'donor'                 | which donor the stream belongs to 
+#       FIELD   'start_time'            | elapsed time in seconds  
+#       FIELD   'expire_time'           | time stream expires
+#       FIELD   'steps'                 | steps completed by donor 
+
+# Each POST to /update contains modifies the internals. Each heartbeat resets 
+# the expiration timer. Upon expiration, the 
+#'active_streams:'+id is deleted entirely.
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
@@ -113,14 +118,6 @@ class StreamHandler(tornado.web.RequestHandler):
 
             RESPONDS with a state.xml '''
 
-class QueueHandler(tornado.web.RequestHandler):
-    def get(self):
-        ''' PRIVATE - Return the idle stream for a given project with the most number of frames '''
-        content = json.loads(self.request.body)
-        target_id = content['target_id']
-        stream_id = ws_redis.zrevrange('target:'+target_id+':queue',0,0)
-        return self.write(stream_id)
-
 class Listener(threading.Thread):
     ''' This class subscribes to the ws redis server to listen for expire notifications. Upon a stream expiring,
         a notification is sent, and the stream is added back into the queue whose score is equal to the number
@@ -146,8 +143,7 @@ class Listener(threading.Thread):
 
 application = tornado.web.Application([
     (r'/frame', FrameHandler),
-    (r'/stream', StreamHandler),
-    (r'/queue', QueueHandler)
+    (r'/stream', StreamHandler)
 ])
 
 def clean_exit(signal, frame):
@@ -156,6 +152,9 @@ def clean_exit(signal, frame):
     print 'shutting down tornado...'
     tornado.ioloop.IOLoop.instance().stop()
     sys.exit(0)
+
+def pingpong():
+    print 'pingpong!'
 
 if __name__ == "__main__":
     
@@ -187,7 +186,7 @@ if __name__ == "__main__":
     ws_uuid = 'firebat'
     try:
         for server_address, secret_key in CCs.iteritems():
-            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'http_port', http_port, redis_port' : ws_port}
+            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'http_port' : http_port, 'redis_port' : ws_port}
             r = requests.post('http://'+server_address+':80/add_ws', json.dumps(payload))
             print 'r.text', r.text
     except:
@@ -215,4 +214,6 @@ if __name__ == "__main__":
     queue_updater.start()
 
     application.listen(http_port, '0.0.0.0')
+    pcb = tornado.ioloop.PeriodicCallback(pingpong,1000, tornado.ioloop.IOLoop.instance())
+    pcb.start()
     tornado.ioloop.IOLoop.instance().start()

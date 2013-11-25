@@ -9,8 +9,66 @@ import os
 import uuid
 import random
 import requests
-
 import redis
+
+# Siegetank uses redis extensively as NoSQL store mainly because of 
+# its blazing fast speed. Binary blobs such as states, systems, and 
+# frames are written directly to disk.
+
+# For more information on redis memory usage, visit:
+# http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
+
+# On average, we expect the load of the CC to be significantly lower 
+# than that of the WS. If each stream takes about 4 hours until 
+# termination, then each stream makes about 6 requests per day. 
+# A single CC handles is expected to handle 500,000 streams. This is 
+# about 3 million requests per day - translating to about 35 requests 
+# per second. Each request needs to be handled by the CC in 30 ms. 
+
+# [ WS ]
+#
+# SET   KEY     'active_ws'             | set of active ws ids
+# HASH  KEY     'ws:'+id     
+#       FIELD   'ip'                    | ip address
+#       FIELD   'http_port'             | port of ws's webserver
+#       FIELD   'redis_port'            | port of ws's redis server
+
+# DICT  NAME    'ws_redis_clients'      | {ws_id : redis_client}
+
+# [ STREAMS ]
+#
+# STRNG KEY     'stream:'+id+':ws'      | ws the stream is on
+
+# [ TARGETS ]
+#       
+# SET   KEY     'targets'               | set of all the targets
+# HASH  KEY     'target:'+id
+#       FIELD   'description'           | description of the target
+#       FIELD   'owner'                 | owner of the target
+#       FIELD   'system'                | checksum of file
+#       FIELD   'integrator'            | checksum of file
+#       FIELD   'creation_date'         | in seconds since 1/1/70  
+#       FIELD   'type'                  | full fah or beta
+# SET   KEY     'target:'+id+':streams' | set of stream ids
+# OSET  KEY     'queue:'+id             | queue of inactive streams
+
+# WS Connect:
+# -sadd ws_id to active_ws
+# -(re)configure hash ws:ws_id, as ip and ports may have changed
+# -ws_redis_clients[ws_id] = redis.Redis('ip','redis_port')
+# -for stream in 'ws:'+ws_id+':streams' 
+#       frame_count = ws_redis_clients[ws_id].hget(streams)
+#       cc_redis.zadd('queue:'+cc.hget('stream:'+id,target), 'frame_count')
+
+# WS Clean Disconnect:
+# -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
+# -srem ws_id from active_ws
+# -remove HASH KEY 'ws:'+ws_id
+
+# CC Initialization (assumes RDB or AOF file is present)
+# -figure out which ws are still active by looking through saved active_ws, and 'ws:'+id
+# -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
+
 
 CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
 
@@ -48,60 +106,6 @@ def get_idle_ws():
 
     return ws_id, ws_ip, redis_client
         # test and see if this WS is still alive
-
-# Redis memory usage:
-# http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
-
-# On average, we expect the load of the CC to be significantly lower than that of the WS.
-# The CC issues assignments. If each stream takes about 4 hours until termination, then each stream
-# makes about 6 requests per day. A single CC handles is expected to handle 500,000 streams. 
-# This is about 3 million requests per day - translating to about 35 requests per second. 
-# So each request needs to be handled by the CC in 30 milliseconds or less. This is plenty of time.
-# A single redis query adds an overhead of at most 1 millsecond by going over the wire. 
-
-# [ WS ]
-#
-# SET   KEY     'active_ws'             [ set of active ws ids ]
-# HASH  KEY     'ws:'+id     
-#       FIELD   'ip'                    [ ip address ]
-#       FIELD   'http_port'             [ port of the ws's webserver ]
-#       FIELD   'redis_port'            [ port of the ws's redis server ]
-
-# DICT  NAME    'ws_redis_clients'      [ { ws_id1 : client1, ws_id2 : client2 } ]
-
-# [ STREAMS ]
-#
-# STRNG KEY     'stream:'+id+':ws'      [ ws the stream is on ]
-
-# [ TARGETS ]
-#       
-# SET   KEY     'targets'               [ set of all the targets ]
-# HASH  KEY     'target:'+id
-#       FIELD   'description'           [ description of the target ]
-#       FIELD   'owner'                 [ owner of the target ]
-#       FIELD   'system'                [ md5sum of the system file ]
-#       FIELD   'integrator'            [ md5sum of the integrator file ]
-#       FIELD   'date'                  [ creation date of in seconds since 1/1/70 ]    
-#       FIELD   'type'                  [ full fah or beta ]
-# SET   KEY     'target:'+id+':streams' [ list of all streams of the target ]
-# OSET  KEY     'queue:'+id             [ priority queue of inactive streams ]
-
-# WS Connect:
-# -sadd ws_id to active_ws
-# -(re)configure hash ws:ws_id, as ip and ports may have changed
-# -ws_redis_clients[ws_id] = redis.Redis('ip','redis_port')
-# -for stream in 'ws:'+ws_id+':streams' 
-#       frame_count = ws_redis_clients[ws_id].hget(streams)
-#       cc_redis.zadd('queue:'+cc.hget('stream:'+id,target), 'frame_count')
-
-# WS Clean Disconnect:
-# -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
-# -srem ws_id from active_ws
-# -remove HASH KEY 'ws:'+ws_id
-
-# CC Initialization (assumes RDB or AOF file is present)
-# -figure out which ws are still active by looking through saved active_ws, and 'ws:'+id
-# -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
 
 class WSHandler(tornado.web.RequestHandler):
     def post(self):
