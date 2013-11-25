@@ -30,12 +30,17 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 #       FIELD   'shared_token'          | core authentication token 
 #       FIELD   'donor'                 | which donor the stream belongs to 
 #       FIELD   'start_time'            | elapsed time in seconds  
-#       FIELD   'expire_time'           | time stream expires
 #       FIELD   'steps'                 | steps completed by donor 
+# ZSET  FIELD   'heartbeats'            | { stream_id : expire_time }
 
-# Each POST to /update contains modifies the internals. Each heartbeat resets 
-# the expiration timer. Upon expiration, the 
-#'active_streams:'+id is deleted entirely.
+# PYTH  DICT    'timeouts'              | { stream_id : opaque_handle }
+
+# Expiration mechanism:
+# Redis maintains an ordered set. Each POST updates the expire_time in 
+# heartbeats. A checker callback is passed into ioloop.PeriodicCallback(), 
+# expired_streams = redis.zrangebyscore('heartbeat',0,current_time)
+
+timeouts[stream_id] = ioloop.add_timeout()
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
@@ -156,6 +161,14 @@ def clean_exit(signal, frame):
 def pingpong():
     print 'pingpong!'
 
+def expire_stream(stream_id):
+    ''' Notifies CC that stream_id on this WS has expired. 
+        1. stream_id is removed from 'active_streams' 
+        2. 'active_streams:'+stream_id hash is deleted
+        3. a POST is sent to cc/update with the stream_id
+        '''
+    return
+
 if __name__ == "__main__":
     
     redis_port = sys.argv[1]
@@ -214,6 +227,6 @@ if __name__ == "__main__":
     queue_updater.start()
 
     application.listen(http_port, '0.0.0.0')
-    pcb = tornado.ioloop.PeriodicCallback(pingpong,1000, tornado.ioloop.IOLoop.instance())
+    pcb = tornado.ioloop.PeriodicCallback(pingpong, 1000, tornado.ioloop.IOLoop.instance())
     pcb.start()
     tornado.ioloop.IOLoop.instance().start()
