@@ -19,7 +19,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 # [ STREAMS ]
 
-# SET   KEY     'ws:'+ws_id+':streams'  | set of streams owned by the ws     
+# SET   KEY     'ws:'+id+':streams'     | set of streams owned by the ws     
 # HASH  KEY     'stream:'+id    
 #       FIELD   'frames'                | frame count of the stream          
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
@@ -27,20 +27,21 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | expirable 
-#       FIELD   'shared_token'          | core authentication token 
+#       FIELD   'shared_token'          | each update must include this token 
 #       FIELD   'donor'                 | which donor the stream belongs to 
 #       FIELD   'start_time'            | elapsed time in seconds  
-#       FIELD   'steps'                 | steps completed by donor 
-# ZSET  FIELD   'heartbeats'            | { stream_id : expire_time }
+#       FIELD   'steps'                 | steps completed thus far
 
-# PYTH  DICT    'timeouts'              | { stream_id : opaque_handle }
+# [ MISC ]
+
+# ZSET  KEY     'heartbeats'                | { stream_id : expire_time }
+# STRNG KEY     'shared_token:'+id+':stream'| reverse mapping
 
 # Expiration mechanism:
-# Redis maintains an ordered set. Each POST updates the expire_time in 
+# hearbeats is a sorted set. A POST to ws/update extends expire_time in 
 # heartbeats. A checker callback is passed into ioloop.PeriodicCallback(), 
-# expired_streams = redis.zrangebyscore('heartbeat',0,current_time)
-
-timeouts[stream_id] = ioloop.add_timeout()
+# which checks for expired streams against the current time. Streams that 
+# expire can be obtained by: redis.zrangebyscore('heartbeat',0,current_time)
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
@@ -73,10 +74,10 @@ class StreamHandler(tornado.web.RequestHandler):
             self.set_status(401)
             return self.write('not authorized')
 
-        content = json.loads(self.request.body)
         self.set_status(400)
         
         try:
+            content = json.loads(self.request.body)
             stream_id = content['stream_id']
             state_bin = content['state_bin']
             open(path+'/'+'state.xml.tar.gz','w').write(state_bin)
@@ -96,7 +97,8 @@ class StreamHandler(tornado.web.RequestHandler):
                     if len(bin_hash) == 0:
                         return self.write('binary and bin_hash empty')
                     if not os.path.exists('files/'+bin_hash):
-                        return self.write('Gave me a hash for a file not in files directory')
+                        return self.write('Gave me a hash for a file not \
+                                           in files directory')
                 else:
                     return self.write('missing content: '+s+'_bin/hash')
                 ws_redis.hset('stream:'+stream_id, s, bin_hash)
@@ -123,33 +125,48 @@ class StreamHandler(tornado.web.RequestHandler):
 
             RESPONDS with a state.xml '''
 
-class Listener(threading.Thread):
-    ''' This class subscribes to the ws redis server to listen for expire notifications. Upon a stream expiring,
-        a notification is sent, and the stream is added back into the queue whose score is equal to the number
-        of frames
-    '''
-    def __init__(self, r, channels):
-        threading.Thread.__init__(self)
-        self.redis = r
-        self.pubsub = self.redis.pubsub()
-        self.pubsub.subscribe(channels)
-    
-    def run(self):
-        for item in self.pubsub.listen():
-            print item['data'], 'expired'
-            try:
-                stream_id = item['data'][7:]
-                target_id = ws_redis.get('stream:'+stream_id+':target', target_id)
-                score = ws_redis.get('stream:'+stream_id+':frames')
-                print stream_id, target_id, score
-                ws_redis.zadd('target:'+target_id+':queue', stream_id, score)
-            except TypeError as e:
-                pass
+class HeartbeatHandler(tornado.web.RequestHandler):
+    def initialize(self, increment=30*60):
+        ''' Each heartbeat received by the core increments the timer by
+            increment amount. Defaults to once every 30 minutes '''
+        self._increment = increment
 
-application = tornado.web.Application([
-    (r'/frame', FrameHandler),
-    (r'/stream', StreamHandler)
-])
+    def post(self):
+        ''' Cores POST to this handler to notify the WS that it is still 
+            alive. '''
+        try:
+            content = json.loads(self.request.body)
+            token_id = content['core_token']
+            stream_id = ws_redis.get('core_token:'+token_id+':stream')
+            ws_redis.zadd('heartbeats',stream_id,
+                          time.time()+self._increment)
+            self.set_status(200)
+        except KeyError:
+            self.set_status(400)
+
+def init_redis(redis_port):
+    args = ("redis/src/redis-server", "--port", redis_port)
+    redis_process = subprocess.Popen(args)
+    if redis_process.poll() is not None:
+        print 'COUDL NOT START REDIS-SERVER, aborting'
+        sys.exit(0)
+    ws_redis = redis.Redis(host='localhost', port=int(redis_port))
+    # wait until redis is alive
+    alive = False
+    while not alive:
+        try:
+            alive = ws_redis.ping() 
+        except:
+            pass
+    return ws_redis
+
+def check_heartbeats():
+    ''' Queries heartbeats to find dead streams. Streams that have died are
+        removed from the active_streams key and the hash is removed. '''
+    dead_streams = ws_redis.zrangebyscore('heartbeats', 0, time.time())
+    if dead_streams:
+        ws_redis.srem('active_streams', dead_streams)
+        ws_redis.delete('active_streams:'+s for s in dead_streams)
 
 def clean_exit(signal, frame):
     print 'shutting down redis...'
@@ -158,19 +175,14 @@ def clean_exit(signal, frame):
     tornado.ioloop.IOLoop.instance().stop()
     sys.exit(0)
 
-def pingpong():
-    print 'pingpong!'
-
-def expire_stream(stream_id):
-    ''' Notifies CC that stream_id on this WS has expired. 
-        1. stream_id is removed from 'active_streams' 
-        2. 'active_streams:'+stream_id hash is deleted
-        3. a POST is sent to cc/update with the stream_id
-        '''
-    return
-
 if __name__ == "__main__":
     
+    application = tornado.web.Application([
+        (r'/frame', FrameHandler),
+        (r'/stream', StreamHandler),
+        (r'/heartbeat', HeartbeatHandler)
+    ])
+
     redis_port = sys.argv[1]
     http_port = sys.argv[2]
 
@@ -181,52 +193,25 @@ if __name__ == "__main__":
     if not os.path.exists('streams'):
         os.makedirs('streams')
 
-    args = ("redis/src/redis-server", "--port", redis_port)
-    redis_process = subprocess.Popen(args)
-    if redis_process.poll() is not None:
-        print 'could not start redis-server, aborting'
-        sys.exit(0)
-    ws_redis = redis.Redis(host='localhost', port=int(redis_port))
-    # wait until redis is alive
-    alive = False
-    while not alive:
-        try:
-            alive = ws_redis.ping() 
-        except:
-            pass
+    ws_redis = init_redis(redis_port)
 
     # inform the CCs that the WS is now online and ready for work
     ws_uuid = 'firebat'
     try:
         for server_address, secret_key in CCs.iteritems():
-            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, 'http_port' : http_port, 'redis_port' : ws_port}
-            r = requests.post('http://'+server_address+':80/add_ws', json.dumps(payload))
+            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, \
+                    'http_port' : http_port, 'redis_port' : ws_port}
+            r = requests.post('http://'+server_address+':80/add_ws', 
+                              json.dumps(payload))
             print 'r.text', r.text
     except:
         print 'cc is down'
 
     # clear db
-    # ws_redis.flushdb()
-
-    ws_redis.config_set('notify-keyspace-events','Elx')
-    '''
-    for i in range(10):
-        stream_id = str(uuid.uuid4())
-        ws_redis.sadd('streams', stream_id)
-        ws_redis.set('stream:'+stream_id+':frames', random.randint(0,10))
-
-    streams = ws_redis.smembers('streams')
-    for stream_id in streams:
-        score = ws_redis.get('stream:'+stream_id+':frames')
-        print stream_id, score
-        ws_redis.zadd('queue', stream_id, score)
-    '''
-    queue_updater = Listener(ws_redis, ['__keyevent@0__:expired'])
-    # needed for child thread to exit when main thread terminates
-    queue_updater.daemon = True
-    queue_updater.start()
+    ws_redis.flushdb()
 
     application.listen(http_port, '0.0.0.0')
-    pcb = tornado.ioloop.PeriodicCallback(pingpong, 1000, tornado.ioloop.IOLoop.instance())
+    pcb = tornado.ioloop.PeriodicCallback(check_heartbeats, 10000, 
+          tornado.ioloop.IOLoop.instance())
     pcb.start()
     tornado.ioloop.IOLoop.instance().start()

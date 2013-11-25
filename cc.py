@@ -33,7 +33,7 @@ import redis
 #       FIELD   'http_port'             | port of ws's webserver
 #       FIELD   'redis_port'            | port of ws's redis server
 
-# DICT  NAME    'ws_redis_clients'      | {ws_id : redis_client}
+# PYTH  DICT    'ws_redis_clients'      | {ws_id : redis_client}
 
 # [ STREAMS ]
 #
@@ -50,7 +50,7 @@ import redis
 #       FIELD   'creation_date'         | in seconds since 1/1/70  
 #       FIELD   'type'                  | full fah or beta
 # SET   KEY     'target:'+id+':streams' | set of stream ids
-# OSET  KEY     'queue:'+id             | queue of inactive streams
+# ZSET  KEY     'queue:'+id             | queue of inactive streams
 
 # WS Connect:
 # -sadd ws_id to active_ws
