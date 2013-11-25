@@ -17,6 +17,21 @@ import time
 
 CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
+# [ STREAMS ]
+
+# SET   KEY     'ws:'+ws_id+':streams'          [ set of all the streams owned by the ws ]
+# HASH  KEY     'stream:'+id    
+#       FIELD   'frames'                        [ total number of frames of the stream ]
+#       FIELD   'state'                         [ 0 - OK, 1 - PG disabled, 2 - Stream NaN ]
+#       FIELD   'target'                        [ target the stream belongs to ]
+
+# SET   KEY     'active_streams'                [ set of active streams owned by the ws ]
+# HASH  KEY{EXP}'active_stream:'+id+':steps'    [ expirable hash of an active stream ]
+#       FIELD   'shared_token'                  [ core must authenticate using this token ]
+#       FIELD   'donor'                         [ which donor the stream belongs to ]
+#       FIELD   'start_time'                    [ if stream is active, records elapsed time ]
+#       FIELD   'steps'                         [ number of steps completed by donor ]
+
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PUBLIC - Used by Core to add a frame

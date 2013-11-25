@@ -52,22 +52,26 @@ def get_idle_ws():
 # Redis memory usage:
 # http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
 
+# On average, we expect the load of the CC to be significantly lower than that of the WS.
+# The CC issues assignments. If each stream takes about 4 hours until termination, then each stream
+# makes about 6 requests per day. A single CC handles is expected to handle 500,000 streams. 
+# This is about 3 million requests per day - translating to about 35 requests per second. 
+# So each request needs to be handled by the CC in 30 milliseconds or less. This is plenty of time.
+# A single redis query adds an overhead of at most 1 millsecond by going over the wire. 
+
 # [ WS ]
 #
 # SET   KEY     'active_ws'             [ set of active ws ids ]
 # HASH  KEY     'ws:'+id     
 #       FIELD   'ip'                    [ ip address ]
 #       FIELD   'http_port'             [ port of the ws's webserver ]
-#       FIELD   'redis_port'            [ port of the ws's redis-server ]
-# SET KEY 'ws:'+ws_id+':streams'        [ list of all the streams owned by the ws ]
+#       FIELD   'redis_port'            [ port of the ws's redis server ]
+
+# DICT  NAME    'ws_redis_clients'      [ { ws_id1 : client1, ws_id2 : client2 } ]
 
 # [ STREAMS ]
 #
-# SET   KEY     'streams'               [ set of all the streams ]
-# HASH  KEY     'stream:'+id
-#       FIELD   'active'                [ if the stream is active or stopped ]
-#       FIELD   'ws'                    [ id of the ws the stream is on ]
-#       FIELD   'target'                [ target the stream belongs to ]
+# STRNG KEY     'stream:'+id+':ws'      [ ws the stream is on ]
 
 # [ TARGETS ]
 #       
@@ -78,22 +82,25 @@ def get_idle_ws():
 #       FIELD   'system'                [ md5sum of the system file ]
 #       FIELD   'integrator'            [ md5sum of the integrator file ]
 #       FIELD   'date'                  [ creation date of in seconds since 1/1/70 ]    
+#       FIELD   'type'                  [ full fah or beta ]
 # SET   KEY     'target:'+id+':streams' [ list of all streams of the target ]
-# OSET  KEY     'queue:'+id             [ priority queue of streams ]
+# OSET  KEY     'queue:'+id             [ priority queue of inactive streams ]
 
 # WS Connect:
 # -sadd ws_id to active_ws
 # -(re)configure hash ws:ws_id, as ip and ports may have changed
+# -ws_redis_clients[ws_id] = redis.Redis('ip','redis_port')
 # -for stream in 'ws:'+ws_id+':streams' 
-#      add stream to 'queue:'+hget('stream:'+id,target)
+#       frame_count = ws_redis_clients[ws_id].hget(streams)
+#       cc_redis.zadd('queue:'+cc.hget('stream:'+id,target), 'frame_count')
 
 # WS Clean Disconnect:
-# -srem ws_id from active_ws
-# -remove HASH key 'ws:'+ws_id
 # -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
+# -srem ws_id from active_ws
+# -remove HASH KEY 'ws:'+ws_id
 
-# CC Initialization
-# -figure out which ws are still active by looking through cached active_ws, and 'ws:'+id
+# CC Initialization (assumes RDB or AOF file is present)
+# -figure out which ws are still active by looking through saved active_ws, and 'ws:'+id
 # -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
 
 class WSHandler(tornado.web.RequestHandler):
@@ -108,7 +115,7 @@ class WSHandler(tornado.web.RequestHandler):
                 return self.write('Bad CC_WS_KEY')
 
             ws_id = content['ws_id']
-            cc_redis.add('workservers',ws_id)
+            cc_redis.add('active_ws',ws_id)
 
             require_strings = ['ip','redis_port','http_port']
             for string in require_strings:
@@ -118,14 +125,19 @@ class WSHandler(tornado.web.RequestHandler):
             ws_redis_clients[ws_id] = redis.Redis(host=content['ip'], 
                                                   port=int(content['redis_port']))
 
+            # extract list of streams owned by this ws (may be empty)
+            # add these streams into 
+            # this can be directly fetched by accessing the client using smembers! (as the streams ids 
+            # are knownn! )
+
             # see if this ws existed in the past
-            existing_streams = cc_redis.smembers('ws:'+ws_id+':streams') > 0:
+            existing_streams = cc_redis.smembers('ws:'+ws_id+':streams')
             if existing_streams:
-                for stream in existing_streams:
-                    
-                    # ONLY DO THIS IF STREAM IS ACTIVE
-                    target = cc_redis.get('stream:'+stream+':target')
-                    priority_queue
+                for stream_id in existing_streams:
+                    if cc_redis.hget('stream:'+stream,'state') == 0:
+                        target_id = cc_redis.hget('stream:'+stream_id+':target')
+                        # ws needs to send a list of 
+                        cc_redis.zadd('target_id',target_id,frame_count??)
 
         except Exception as e:
             print str(e)
