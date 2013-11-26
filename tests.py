@@ -71,7 +71,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         if not os.path.exists('streams'):
             os.makedirs('streams')
         
-        stream_id = str(uuid.uuid4())
+        #stream_id = str(uuid.uuid4())
 
         system_bin     = 'system.xml.tar.gz'
         state_bin      = 'state.xml.tar.gz'
@@ -80,10 +80,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         system_hash = hashlib.md5(system_bin).hexdigest()
         integrator_hash = hashlib.md5(integrator_bin).hexdigest()
 
-        print system_hash, integrator_hash
-
         message = {
-            'stream_id'      : stream_id
+            'frame_format' : 'xtc'
         }
 
         files = {
@@ -95,8 +93,15 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
         req = requests.Request('POST','http://myurl',files=files)
         prepped = req.prepare()
-        self.fetch('/stream', method='POST', headers=prepped.headers,
+        resp = self.fetch('/stream', method='POST', headers=prepped.headers,
                      body=prepped.body)
+
+        self.assertEqual(resp.code, 200)
+
+
+        stream_id = resp.body
+
+        print stream_id
 
         self.assertTrue(
             self.redis_client.sismember('file_hashes',system_hash) and 
@@ -105,6 +110,9 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             os.path.exists(os.path.join('files',integrator_hash)) and 
             os.path.exists(os.path.join('streams',
                                          stream_id,'state.xml.tar.gz')))
+
+
+
 
         # clean up misc files
         os.remove(os.path.join('files',system_hash))

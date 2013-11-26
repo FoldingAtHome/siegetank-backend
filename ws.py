@@ -20,7 +20,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 # [ STREAMS ]
 
-# SET   KEY     'ws:'+id+':streams'     | set of streams owned by the ws     
+# SET   KEY     'streams'               | set of streams owned by this ws     
 # HASH  KEY     'stream:'+id    
 #       FIELD   'frames'                | frame count of the stream          
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
@@ -80,32 +80,35 @@ class StreamHandler(tornado.web.RequestHandler):
             query the redis db 'file_hashes' to see if some of files exist. CC
             can choose send in either 'system_hash', or 'system_bin'. The CC
             queries the WS's own list of hashes to make sure.
+
+            The WS checks to see if this request is valid, and generates a 
+            unique stream_id if so, and returns the id back to the CC.
             '''
         if not self.request.remote_ip in CCs:
             print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
 
+        # Assume request is bad by default
+        self.set_status(400)
+
+        print 'OOO'
+
         try:
+            # Step 1. Check if request is valid.
             content = json.loads(self.request.files['json'][0]['body'])
-            stream_id = content['stream_id']
             state_bin = self.request.files['state_bin'][0]['body']
-
-            stream_folder = os.path.join('streams',stream_id)
-            if not os.path.exists(stream_folder):
-                os.makedirs(stream_folder)
-
-            path = os.path.join(stream_folder,'state.xml.tar.gz')
-            open(path,'w').write(state_bin)
-
             required_strings = ['system','integrator']
+            redis_pipe = ws_redis.pipeline()
+            file_hashes = {}
+            file_buffer = {}
             for s in required_strings:
                 if s+'_bin' in self.request.files:
                     binary = self.request.files[s+'_bin'][0]['body']
                     bin_hash = hashlib.md5(binary).hexdigest()
                     if not ws_redis.sismember('file_hashes', bin_hash):
                         ws_redis.sadd('file_hashes', bin_hash)
-                        open('files/'+bin_hash, 'w').write(binary)
+                        file_buffer[bin_hash] = binary
                     else:
                         print 'found duplicate hash'
                 elif s+'_hash' in content: 
@@ -114,14 +117,33 @@ class StreamHandler(tornado.web.RequestHandler):
                         return self.write('Gave me a hash for a file not \
                                            in files directory')
                 else:
-                    self.set_status(400)
                     return self.write('missing content: '+s+'_bin/hash')
-                ws_redis.hset('stream:'+stream_id, s, bin_hash)
+                file_hashes[s+'_hash'] = bin_hash
+                
+            # Step 2. Valid Request from this point onwards. Generate uuid and
+            #         write to disk
 
-            print ws_redis.smembers('file_hashes')
+            stream_id = str(uuid.uuid4())
 
-            ws_redis.hset('stream:'+stream_id, 'frames', 0)
+            stream_folder = os.path.join('streams',stream_id)
+            if not os.path.exists(stream_folder):
+                os.makedirs(stream_folder)
+            path = os.path.join(stream_folder,'state.xml.tar.gz')
+            open(path,'w').write(state_bin)
+
+            for f_hash,f_bin in file_buffer.iteritems():
+                open(os.path.join('files',f_hash),'w').write(f_bin)
+
+            redis_pipe.sadd('streams',stream_id)
+            redis_pipe.hset('stream:'+stream_id, 'frames', 0)
+            redis_pipe.hset('stream:'+stream_id, 'state', 0)
+            for k,v in file_hashes.iteritems():
+                redis_pipe.hset('stream:'+stream_id, k, v)
+
+            redis_pipe.execute()
+
             self.set_status(200)
+            return self.write(stream_id)
 
 
         except Exception as e:
@@ -185,7 +207,9 @@ def init_redis(redis_port):
 
 def check_heartbeats():
     ''' Queries heartbeats to find dead streams. Streams that have died are
-        removed from the active_streams key and the hash is removed. '''
+        removed from the active_streams key and the hash is removed. 
+        CC is then notified of the dead_streams and pushes them back
+        into the appropriate queue '''
     dead_streams = ws_redis.zrangebyscore('heartbeats', 0, time.time())
     if dead_streams:
         ws_redis.srem('active_streams', *dead_streams)
