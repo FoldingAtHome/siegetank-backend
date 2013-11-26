@@ -11,6 +11,7 @@ import base64
 import os
 import random
 import struct
+import requests
 
 class WSHandlerTestCase(AsyncHTTPTestCase):
     @classmethod
@@ -62,7 +63,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertFalse(self.redis_client.smembers('active_streams'))
         self.assertFalse(self.redis_client.hvals('active_stream:'+stream_id))
 
-    def test_add_stream(self):
+    def test_post_stream(self):
         if not os.path.exists('files'):
             os.makedirs('files')
         if not os.path.exists('streams'):
@@ -74,14 +75,21 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         state_bin      = 'state.xml.tar.gz'
         integrator_bin = 'integrator.xml.tar.gz'
 
-        body = {
-            'stream_id'      : stream_id,
-            'system_b64'     : system_bin,
-            'state_b64'      : state_bin,
-            'integrator_b64' : integrator_bin,
+        message = {
+            'stream_id'      : stream_id
         }
 
-        print self.fetch('/stream', method='POST', body=json.dumps(body))
+        files = {
+            'json' : json.dumps(message),
+            'state_bin' : state_bin,
+            'system_bin' : system_bin,
+            'integrator_bin' : integrator_bin
+        }
+
+        req = requests.Request('POST','http://myurl',files=files)
+        prepped = req.prepare()
+        self.fetch('/stream', method='POST', headers=prepped.headers,
+                     body=prepped.body)
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,6 +1,7 @@
 import tornado.escape
 import tornado.ioloop
 import tornado.web
+import tornado.httputil
 import redis
 
 import signal
@@ -24,6 +25,8 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 #       FIELD   'frames'                | frame count of the stream          
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
 #       FIELD   'download_token'        | (optional) used for file transfers
+#       FIELD   'system_hash'           | hash for system.xml.tar.gz
+#       FIELD   'integrator_hash'       | hash for integrator.xml.tar.gz
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | expirable 
@@ -36,6 +39,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 # ZSET  KEY     'heartbeats'                | { stream_id : expire_time }
 # STRNG KEY     'shared_token:'+id+':stream'| reverse mapping
+# SET   KEY     'file_hashes'               | files that exist in /files
 
 # Expiration mechanism:
 # hearbeats is a sorted set. A POST to ws/update extends expire_time in 
@@ -62,47 +66,49 @@ class StreamHandler(tornado.web.RequestHandler):
             can only be accessed by known CCs (ip restricted) 
             Parameters:
 
-            REQUIRED:
-            stream_ids: uuid1 #
-            state_bin: state.xml.tar.gz  #
-            system_hash or system_bin #
+            While JSON would be nice, file transfers are handled differently
+            in order to avoid the base64 overhead. The encoding should use a
+            multi-part/form-data. This is inspired by Amazon AWS S3's method
+            of POSTing objects. 
 
-            stored as:
-            /targets/target_id/stream_id/state.xml.tar.gz
+            Note: Base64 incurs a 33 percent size overhead.
 
-            Note that base64 incurs a significant overhead. A 3MB string is
-            ~786k chars, which take 860ms to encode and decode! 10000 streams
-            would take about 2.8 hours to process. Instead we encode using 
+             Instead we encode using 
             multipart/form-data encoding to directly transfer the binaries
-            '''
 
+            The required files are: system, state, and integrator. The CC can
+            query the redis db 'file_hashes' to see if some of files exist. CC
+            can choose send in either 'system_hash', or 'system_bin'. If a 
+            hash is sent, the WS checks its own
+
+            Header Specifications:
+            Content-Type: multi-part/form-data
+
+            '''
         if not self.request.remote_ip in CCs:
             print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
 
-        self.set_status(400)
-
-        print '---headers---'
-        print self.request.headers
-        print '---body---'
-        print self.request.body
-        print '---files---'
-        print self.request.files
         for k,v in self.request.files.iteritems():
-            print k,v
-
-        print self.request.files['message'][0]['body']
+            print k,v[0]
 
         try:
-            content = json.loads(self.request.files['message']['body'])
+            content = json.loads(self.request.files['json'][0]['body'])
             stream_id = content['stream_id']
-            state_b64 = content['state_bin']
-            open(path+'/'+'state.xml.tar.gz','w').write(state_bin)
+            state_bin = self.request.files['state_bin'][0]['body']
+
+            stream_folder = os.path.join('streams',stream_id)
+            if not os.path.exists(stream_folder):
+                os.makedirs(stream_folder)
+
+            path = os.path.join(stream_folder,'state.xml.tar.gz')
+            open(path,'w').write(state_bin)
+
             required_strings = ['system','integrator']
             for s in required_strings:
-                if s+'_bin' in content:
-                    binary = content[s+'_bin']
+                if s+'_bin' in self.request.files:
+                    binary = self.request.files[s+'_bin'][0]['body']
                     bin_hash = hashlib.md5(binary).hexdigest()
                     if len(bin_hash) == 0:
                         return self.write('binary and bin_hash empty')
