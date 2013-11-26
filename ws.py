@@ -139,7 +139,6 @@ class HeartbeatHandler(tornado.web.RequestHandler):
         try:
             content = json.loads(self.request.body)
             token_id = content['shared_token']
-            print 'TOKEN', token_id
             stream_id = ws_redis.get('shared_token:'+token_id+':stream')
             ws_redis.zadd('heartbeats',stream_id,
                           time.time()+self._increment)
@@ -171,8 +170,8 @@ def check_heartbeats():
         removed from the active_streams key and the hash is removed. '''
     dead_streams = ws_redis.zrangebyscore('heartbeats', 0, time.time())
     if dead_streams:
-        ws_redis.srem('active_streams', dead_streams)
-        ws_redis.delete('active_streams:'+s for s in dead_streams)
+        ws_redis.srem('active_streams', *dead_streams)
+        ws_redis.delete(*('active_stream:'+s for s in dead_streams))
 
 def clean_exit(signal, frame):
     print 'shutting down redis...'
