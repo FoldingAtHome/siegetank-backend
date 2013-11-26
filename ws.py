@@ -78,12 +78,8 @@ class StreamHandler(tornado.web.RequestHandler):
 
             The required files are: system, state, and integrator. The CC can
             query the redis db 'file_hashes' to see if some of files exist. CC
-            can choose send in either 'system_hash', or 'system_bin'. If a 
-            hash is sent, the WS checks its own
-
-            Header Specifications:
-            Content-Type: multi-part/form-data
-
+            can choose send in either 'system_hash', or 'system_bin'. The CC
+            queries the WS's own list of hashes to make sure.
             '''
         if not self.request.remote_ip in CCs:
             print self.request.remote_ip
@@ -110,20 +106,17 @@ class StreamHandler(tornado.web.RequestHandler):
                 if s+'_bin' in self.request.files:
                     binary = self.request.files[s+'_bin'][0]['body']
                     bin_hash = hashlib.md5(binary).hexdigest()
-                    if len(bin_hash) == 0:
-                        return self.write('binary and bin_hash empty')
-                    if not os.path.exists('files/'+bin_hash):
-                        open('files/'+bin_hash, 'w').write(binary)
+                    if not ws_redis.sismember('file_hashes', bin_hash):
+                       open('files/'+bin_hash, 'w').write(binary)
                     else:
                         print 'found duplicate hash'
                 elif s+'_hash' in content: 
                     bin_hash = content[s+'_hash']
-                    if len(bin_hash) == 0:
-                        return self.write('binary and bin_hash empty')
-                    if not os.path.exists('files/'+bin_hash):
+                    if not ws_redis.sismember('file_hashes', bin_hash):
                         return self.write('Gave me a hash for a file not \
                                            in files directory')
                 else:
+                    self.set_status(400)
                     return self.write('missing content: '+s+'_bin/hash')
                 ws_redis.hset('stream:'+stream_id, s, bin_hash)
 
