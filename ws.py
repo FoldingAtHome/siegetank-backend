@@ -43,6 +43,8 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # which checks for expired streams against the current time. Streams that 
 # expire can be obtained by: redis.zrangebyscore('heartbeat',0,current_time)
 
+ws_redis = None
+
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PUBLIC - Used by Core to add a frame
@@ -126,7 +128,7 @@ class StreamHandler(tornado.web.RequestHandler):
             RESPONDS with a state.xml '''
 
 class HeartbeatHandler(tornado.web.RequestHandler):
-    def initialize(self, increment=30*60):
+    def initialize(self, redis_client=ws_redis, increment=30*60):
         ''' Each heartbeat received by the core increments the timer by
             increment amount. Defaults to once every 30 minutes '''
         self._increment = increment
@@ -137,6 +139,7 @@ class HeartbeatHandler(tornado.web.RequestHandler):
         try:
             content = json.loads(self.request.body)
             token_id = content['core_token']
+            print 'TOKEN', token_id
             stream_id = ws_redis.get('core_token:'+token_id+':stream')
             ws_redis.zadd('heartbeats',stream_id,
                           time.time()+self._increment)
@@ -145,10 +148,13 @@ class HeartbeatHandler(tornado.web.RequestHandler):
             self.set_status(400)
 
 def init_redis(redis_port):
+    ''' Initializes the global redis client used by the ws and returns a ref
+        to the client (eg. used by test cases) '''
+    global ws_redis
     args = ("redis/src/redis-server", "--port", redis_port)
     redis_process = subprocess.Popen(args)
     if redis_process.poll() is not None:
-        print 'COUDL NOT START REDIS-SERVER, aborting'
+        print 'COULD NOT START REDIS-SERVER, aborting'
         sys.exit(0)
     ws_redis = redis.Redis(host='localhost', port=int(redis_port))
     # wait until redis is alive
@@ -186,14 +192,14 @@ if __name__ == "__main__":
     redis_port = sys.argv[1]
     http_port = sys.argv[2]
 
+    init_redis(redis_port)
+
     signal.signal(signal.SIGINT, clean_exit)
 
     if not os.path.exists('files'):
         os.makedirs('files')
     if not os.path.exists('streams'):
         os.makedirs('streams')
-
-    ws_redis = init_redis(redis_port)
 
     # inform the CCs that the WS is now online and ready for work
     ws_uuid = 'firebat'
