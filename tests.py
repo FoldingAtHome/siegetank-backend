@@ -6,6 +6,7 @@ import unittest
 import subprocess
 import requests
 import json
+import time
 
 class HandlerTestCase(AsyncHTTPTestCase):
     @classmethod
@@ -38,11 +39,17 @@ class HandlerTestCase(AsyncHTTPTestCase):
         return self.app
 
     def test_heartbeat(self):
-        ''' Make sure the expire time increments by self.increment amount '''
+        print 'test_heartbeat'
         self.redis_client.flushdb()
-
+        token_id = '3u293e48'
+        stream_id = 'n20fj3ma'
+        self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
+        start_time = time.time()
         response = self.fetch('/heartbeat', method='POST',
-                            body=json.dumps({'core_token' : '12345'}))
+                            body=json.dumps({'shared_token' : token_id}))
+        hb = self.redis_client.zscore('heartbeats',stream_id)
+        self.assertAlmostEqual(start_time+self.increment, hb, places=1)
+        print hb-(start_time+self.increment)
 
     def test_expire(self):
         print 'test expire'

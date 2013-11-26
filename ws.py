@@ -138,9 +138,9 @@ class HeartbeatHandler(tornado.web.RequestHandler):
             alive. '''
         try:
             content = json.loads(self.request.body)
-            token_id = content['core_token']
+            token_id = content['shared_token']
             print 'TOKEN', token_id
-            stream_id = ws_redis.get('core_token:'+token_id+':stream')
+            stream_id = ws_redis.get('shared_token:'+token_id+':stream')
             ws_redis.zadd('heartbeats',stream_id,
                           time.time()+self._increment)
             self.set_status(200)
