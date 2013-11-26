@@ -1,4 +1,5 @@
 import ws
+import hashlib
 import redis
 import tornado.ioloop
 from tornado.testing import AsyncHTTPTestCase
@@ -12,6 +13,7 @@ import os
 import random
 import struct
 import requests
+import shutil
 
 class WSHandlerTestCase(AsyncHTTPTestCase):
     @classmethod
@@ -75,6 +77,11 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         state_bin      = 'state.xml.tar.gz'
         integrator_bin = 'integrator.xml.tar.gz'
 
+        system_hash = hashlib.md5(system_bin).hexdigest()
+        integrator_hash = hashlib.md5(integrator_bin).hexdigest()
+
+        print system_hash, integrator_hash
+
         message = {
             'stream_id'      : stream_id
         }
@@ -90,6 +97,19 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         prepped = req.prepare()
         self.fetch('/stream', method='POST', headers=prepped.headers,
                      body=prepped.body)
+
+        self.assertTrue(
+            self.redis_client.sismember('file_hashes',system_hash) and 
+            self.redis_client.sismember('file_hashes',integrator_hash) and
+            os.path.exists(os.path.join('files',system_hash)) and
+            os.path.exists(os.path.join('files',integrator_hash)) and 
+            os.path.exists(os.path.join('streams',
+                                         stream_id,'state.xml.tar.gz')))
+
+        # clean up misc files
+        os.remove(os.path.join('files',system_hash))
+        os.remove(os.path.join('files',integrator_hash))
+        shutil.rmtree(os.path.join('streams',stream_id))
 
 if __name__ == '__main__':
     unittest.main()

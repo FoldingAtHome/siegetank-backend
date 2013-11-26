@@ -86,9 +86,6 @@ class StreamHandler(tornado.web.RequestHandler):
             self.set_status(401)
             return self.write('not authorized')
 
-        for k,v in self.request.files.iteritems():
-            print k,v[0]
-
         try:
             content = json.loads(self.request.files['json'][0]['body'])
             stream_id = content['stream_id']
@@ -107,7 +104,8 @@ class StreamHandler(tornado.web.RequestHandler):
                     binary = self.request.files[s+'_bin'][0]['body']
                     bin_hash = hashlib.md5(binary).hexdigest()
                     if not ws_redis.sismember('file_hashes', bin_hash):
-                       open('files/'+bin_hash, 'w').write(binary)
+                        ws_redis.sadd('file_hashes', bin_hash)
+                        open('files/'+bin_hash, 'w').write(binary)
                     else:
                         print 'found duplicate hash'
                 elif s+'_hash' in content: 
@@ -120,8 +118,11 @@ class StreamHandler(tornado.web.RequestHandler):
                     return self.write('missing content: '+s+'_bin/hash')
                 ws_redis.hset('stream:'+stream_id, s, bin_hash)
 
+            print ws_redis.smembers('file_hashes')
+
             ws_redis.hset('stream:'+stream_id, 'frames', 0)
             self.set_status(200)
+
 
         except Exception as e:
             print e
