@@ -21,6 +21,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         ''' Start a single server for all test cases '''
         redis_port = str(6827)
         self.redis_client = ws.init_redis(redis_port)
+        # Use a single DB session
+        self.redis_client.flushdb()
         self.increment = 3
         self.app = tornado.web.Application([
                         (r'/frame', ws.FrameHandler),
@@ -71,8 +73,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         if not os.path.exists('streams'):
             os.makedirs('streams')
         
-        #stream_id = str(uuid.uuid4())
-
         system_bin     = 'system.xml.tar.gz'
         state_bin      = 'state.xml.tar.gz'
         integrator_bin = 'integrator.xml.tar.gz'
@@ -80,6 +80,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         system_hash = hashlib.md5(system_bin).hexdigest()
         integrator_hash = hashlib.md5(integrator_bin).hexdigest()
 
+        # Test 1. Send binaries of system.xml and integrator
         message = {
             'frame_format' : 'xtc'
         }
@@ -91,17 +92,13 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             'integrator_bin' : integrator_bin
         }
 
-        req = requests.Request('POST','http://myurl',files=files)
-        prepped = req.prepare()
-        resp = self.fetch('/stream', method='POST', headers=prepped.headers,
-                     body=prepped.body)
+        prep = requests.Request('POST','http://myurl',files=files).prepare()
+        resp = self.fetch('/stream', method='POST', headers=prep.headers,
+                          body=prep.body)
 
         self.assertEqual(resp.code, 200)
 
-
-        stream_id = resp.body
-
-        print stream_id
+        stream_id1 = resp.body
 
         self.assertTrue(
             self.redis_client.sismember('file_hashes',system_hash) and 
@@ -109,15 +106,37 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             os.path.exists(os.path.join('files',system_hash)) and
             os.path.exists(os.path.join('files',integrator_hash)) and 
             os.path.exists(os.path.join('streams',
-                                         stream_id,'state.xml.tar.gz')))
+                                         stream_id1,'state.xml.tar.gz')))
 
+        # Test 2. Send hashes of existing files
+        message = {
+            'frame_format' : 'xtc',
+            'system_hash' : system_hash,
+            'integrator_hash' : integrator_hash
+        }
 
+        files = { 
+            'json' : json.dumps(message),
+            'state_bin' : state_bin
+        }
 
+        prep = requests.Request('POST','http://myurl',files=files).prepare()
+        resp = self.fetch('/stream', method='POST', headers=prep.headers,
+                          body=prep.body)
 
-        # clean up misc files
+        print resp.code
+
+        stream_id2 = resp.body
+
+        server_streams = self.redis_client.smembers('streams')
+        print server_streams
+        self.assertTrue(stream_id1 in server_streams)
+        self.assertTrue(stream_id2 in server_streams)
+
         os.remove(os.path.join('files',system_hash))
         os.remove(os.path.join('files',integrator_hash))
-        shutil.rmtree(os.path.join('streams',stream_id))
+        shutil.rmtree(os.path.join('streams',stream_id1))
+        shutil.rmtree(os.path.join('streams',stream_id2))
 
 if __name__ == '__main__':
     unittest.main()

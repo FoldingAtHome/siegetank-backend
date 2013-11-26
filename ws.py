@@ -92,8 +92,6 @@ class StreamHandler(tornado.web.RequestHandler):
         # Assume request is bad by default
         self.set_status(400)
 
-        print 'OOO'
-
         try:
             # Step 1. Check if request is valid.
             content = json.loads(self.request.files['json'][0]['body'])
@@ -120,9 +118,7 @@ class StreamHandler(tornado.web.RequestHandler):
                     return self.write('missing content: '+s+'_bin/hash')
                 file_hashes[s+'_hash'] = bin_hash
                 
-            # Step 2. Valid Request from this point onwards. Generate uuid and
-            #         write to disk
-
+            # Step 2. Valid Request. Generate uuid and write to disk
             stream_id = str(uuid.uuid4())
 
             stream_folder = os.path.join('streams',stream_id)
