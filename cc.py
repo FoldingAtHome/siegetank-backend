@@ -37,7 +37,9 @@ import redis
 
 # [ STREAMS ]
 #
-# STRNG KEY     'stream:'+id+':ws'      | ws the stream is on
+# SET   HASH     'stream:'+id                
+#       FIELD    'ws'                   | ws the stream is on
+#       FIELD    'target'               | target the stream belongs to
 
 # [ TARGETS ]
 #       

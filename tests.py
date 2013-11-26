@@ -4,11 +4,15 @@ import tornado.ioloop
 from tornado.testing import AsyncHTTPTestCase
 import unittest
 import subprocess
-import requests
 import json
 import time
+import uuid
+import base64
+import os
+import random
+import struct
 
-class HandlerTestCase(AsyncHTTPTestCase):
+class WSHandlerTestCase(AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
         ''' Start a single server for all test cases '''
@@ -34,9 +38,8 @@ class HandlerTestCase(AsyncHTTPTestCase):
         return self.app
 
     def test_heartbeat(self):
-        self.redis_client.flushdb()
-        token_id = '3u293e48'
-        stream_id = 'n20fj3ma'
+        token_id = str(uuid.uuid4())
+        stream_id = str(uuid.uuid4())
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
 
         # test sending request to uri: /heartbeat extends the expiration time
@@ -59,11 +62,26 @@ class HandlerTestCase(AsyncHTTPTestCase):
         self.assertFalse(self.redis_client.smembers('active_streams'))
         self.assertFalse(self.redis_client.hvals('active_stream:'+stream_id))
 
+    def test_add_stream(self):
+        if not os.path.exists('files'):
+            os.makedirs('files')
+        if not os.path.exists('streams'):
+            os.makedirs('streams')
+        
+        stream_id = str(uuid.uuid4())
 
+        system_bin     = 'system.xml.tar.gz'
+        state_bin      = 'state.xml.tar.gz'
+        integrator_bin = 'integrator.xml.tar.gz'
 
+        body = {
+            'stream_id'      : stream_id,
+            'system_b64'     : system_bin,
+            'state_b64'      : state_bin,
+            'integrator_b64' : integrator_bin,
+        }
 
-    def test_expire(self):
-        print 'test expire'
+        print self.fetch('/stream', method='POST', body=json.dumps(body))
 
 if __name__ == '__main__':
     unittest.main()

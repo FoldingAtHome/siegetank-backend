@@ -23,7 +23,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # HASH  KEY     'stream:'+id    
 #       FIELD   'frames'                | frame count of the stream          
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
-#       FIELD   'target'                | target the stream belongs to       
+#       FIELD   'download_token'        | (optional) used for file transfers
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | expirable 
@@ -69,7 +69,12 @@ class StreamHandler(tornado.web.RequestHandler):
 
             stored as:
             /targets/target_id/stream_id/state.xml.tar.gz
-        '''
+
+            Note that base64 incurs a significant overhead. A 3MB string is
+            ~786k chars, which take 860ms to encode and decode! 10000 streams
+            would take about 2.8 hours to process. Instead we encode using 
+            multipart/form-data encoding to directly transfer the binaries
+            '''
 
         if not self.request.remote_ip in CCs:
             print self.request.remote_ip
@@ -77,11 +82,22 @@ class StreamHandler(tornado.web.RequestHandler):
             return self.write('not authorized')
 
         self.set_status(400)
-        
+
+        print '---headers---'
+        print self.request.headers
+        print '---body---'
+        print self.request.body
+        print '---files---'
+        print self.request.files
+        for k,v in self.request.files.iteritems():
+            print k,v
+
+        print self.request.files['message'][0]['body']
+
         try:
-            content = json.loads(self.request.body)
+            content = json.loads(self.request.files['message']['body'])
             stream_id = content['stream_id']
-            state_bin = content['state_bin']
+            state_b64 = content['state_bin']
             open(path+'/'+'state.xml.tar.gz','w').write(state_bin)
             required_strings = ['system','integrator']
             for s in required_strings:
@@ -105,7 +121,6 @@ class StreamHandler(tornado.web.RequestHandler):
                     return self.write('missing content: '+s+'_bin/hash')
                 ws_redis.hset('stream:'+stream_id, s, bin_hash)
 
-            ws_redis.hset('stream:'+stream_id, 'owner', content['owner'])
             ws_redis.hset('stream:'+stream_id, 'frames', 0)
             self.set_status(200)
 
@@ -116,16 +131,18 @@ class StreamHandler(tornado.web.RequestHandler):
         return
 
     def get(self):
-        ''' PRIVATE - Assign a job. 
+        ''' PRIVATE - Download a stream. 
             The CC creates a token given to the Core for identification
             purposes.
 
             Parameters:
 
-            target_id: uuid #
             stream_id: uuid #
 
             RESPONDS with a state.xml '''
+
+    def delete(self):
+        ''' PRIVATE - Delete a stream. '''
 
 class HeartbeatHandler(tornado.web.RequestHandler):
     def initialize(self, redis_client=ws_redis, increment=30*60):
@@ -136,6 +153,7 @@ class HeartbeatHandler(tornado.web.RequestHandler):
     def post(self):
         ''' Cores POST to this handler to notify the WS that it is still 
             alive. '''
+
         try:
             content = json.loads(self.request.body)
             token_id = content['shared_token']
