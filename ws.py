@@ -72,10 +72,9 @@ class StreamHandler(tornado.web.RequestHandler):
             multi-part/form-data. This is inspired by Amazon AWS S3's method
             of POSTing objects. 
 
-            Note: Base64 incurs a 33 percent size overhead.
-
-             Instead we encode using 
-            multipart/form-data encoding to directly transfer the binaries
+            Note: Base64 incurs a 33 percent size overhead. Instead we do not
+            encode and set Content-Type: multipart/form-data to directly 
+            transfer the binaries.
 
             The required files are: system, state, and integrator. The CC can
             query the redis db 'file_hashes' to see if some of files exist. CC
@@ -84,6 +83,20 @@ class StreamHandler(tornado.web.RequestHandler):
 
             The WS checks to see if this request is valid, and generates a 
             unique stream_id if so, and returns the id back to the CC.
+
+            Ex.
+            message = {
+                'frame_format' : 'xtc'
+            }
+            files = {
+                'json' : json.dumps(message),
+                'state_bin' : state_bin,
+                'system_bin' : system_bin,
+                'integrator_bin' : integrator_bin
+            }
+            prep = requests.Request('POST','http://url',files=files).prepare()
+            resp = self.fetch('/stream', method='POST', headers=prep.headers,
+                          body=prep.body)
             '''
         if not self.request.remote_ip in CCs:
             print self.request.remote_ip
@@ -142,9 +155,6 @@ class StreamHandler(tornado.web.RequestHandler):
             traceback.print_tb(tb)
             self.set_status(400)
             return self.write('Bad Request')
-
-
-        #return
 
     def get(self):
         ''' PRIVATE - Download a stream. 

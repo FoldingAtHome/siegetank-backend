@@ -76,11 +76,10 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         system_bin     = 'system.xml.tar.gz'
         state_bin      = 'state.xml.tar.gz'
         integrator_bin = 'integrator.xml.tar.gz'
-
         system_hash = hashlib.md5(system_bin).hexdigest()
         integrator_hash = hashlib.md5(integrator_bin).hexdigest()
 
-        # Test 1. Send binaries of system.xml and integrator
+        # Test send binaries of system.xml and integrator
         message = {
             'frame_format' : 'xtc'
         }
@@ -103,7 +102,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             os.path.exists(os.path.join('streams',
                                          stream_id1,'state.xml.tar.gz')))
 
-        # Test 2. Send hashes of existing files
+        # Test send hashes of existing files
         message = {
             'frame_format' : 'xtc',
             'system_hash' : system_hash,
@@ -113,7 +112,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             'json' : json.dumps(message),
             'state_bin' : state_bin
         }
-        prep = requests.Request('POST','http://myurl',files=files).prepare()
+        prep = requests.Request('POST','http://url',files=files).prepare()
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
         stream_id2 = resp.body
@@ -122,7 +121,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertTrue(stream_id1 in server_streams)
         self.assertTrue(stream_id2 in server_streams)
 
-        # Test 3. Send one hash one bin
+        # Test send one hash one bin
         message = {
             'frame_format' : 'xtc',
             'system_hash' : system_hash,
@@ -142,8 +141,34 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertTrue(stream_id2 in server_streams)
         self.assertTrue(stream_id3 in server_streams)
 
+        # Verify integrity of file
+        self.assertTrue(
+            self.redis_client.sismember('file_hashes',system_hash) and 
+            self.redis_client.sismember('file_hashes',integrator_hash))
 
-        # Test 4. Missing integrator
+        system_bin_read = open(os.path.join('files',system_hash)).read()
+        integ_bin_read = open(os.path.join('files',integrator_hash)).read()
+        self.assertEqual(system_bin_read, system_bin)
+        self.assertEqual(integ_bin_read, integrator_bin)
+
+        stream_ids = [stream_id1, stream_id2, stream_id3]
+        for stream in stream_ids:
+            state_bin_read = open(os.path.join('streams',stream,
+                                  'state.xml.tar.gz')).read()
+            self.assertEqual(state_bin_read, state_bin)
+        
+        for stream in stream_ids:
+            shutil.rmtree(os.path.join('streams',stream))
+        os.remove(os.path.join('files',system_hash))
+        os.remove(os.path.join('files',integrator_hash))
+
+    def test_bad_post_stream(self):
+        system_bin     = 'system.xml.tar.gz'
+        state_bin      = 'state.xml.tar.gz'
+        integrator_bin = 'integrator.xml.tar.gz'
+        system_hash = hashlib.md5(system_bin).hexdigest()
+        integrator_hash = hashlib.md5(integrator_bin).hexdigest()
+        # Missing integrator
         message = {
             'frame_format' : 'xtc',
             'system_hash' : system_hash,
@@ -158,7 +183,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
         self.assertEqual(resp.code, 400)
 
-        # Test 5. Missing state
+        # Missing state
         message = {
             'frame_format' : 'xtc',
             'system_hash' : system_hash,
@@ -171,10 +196,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
         self.assertEqual(resp.code, 400)
-        os.remove(os.path.join('files',system_hash))
-        os.remove(os.path.join('files',integrator_hash))
-        shutil.rmtree(os.path.join('streams',stream_id1))
-        shutil.rmtree(os.path.join('streams',stream_id2))
 
 if __name__ == '__main__':
     unittest.main()
