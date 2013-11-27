@@ -15,6 +15,7 @@ import sys
 import subprocess
 import hashlib
 import time
+import traceback
 
 CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
@@ -108,7 +109,7 @@ class StreamHandler(tornado.web.RequestHandler):
                         ws_redis.sadd('file_hashes', bin_hash)
                         file_buffer[bin_hash] = binary
                     else:
-                        print 'found duplicate hash'
+                        pass
                 elif s+'_hash' in content: 
                     bin_hash = content[s+'_hash']
                     if not ws_redis.sismember('file_hashes', bin_hash):
@@ -120,33 +121,30 @@ class StreamHandler(tornado.web.RequestHandler):
                 
             # Step 2. Valid Request. Generate uuid and write to disk
             stream_id = str(uuid.uuid4())
-
             stream_folder = os.path.join('streams',stream_id)
             if not os.path.exists(stream_folder):
                 os.makedirs(stream_folder)
             path = os.path.join(stream_folder,'state.xml.tar.gz')
             open(path,'w').write(state_bin)
-
             for f_hash,f_bin in file_buffer.iteritems():
                 open(os.path.join('files',f_hash),'w').write(f_bin)
-
             redis_pipe.sadd('streams',stream_id)
             redis_pipe.hset('stream:'+stream_id, 'frames', 0)
             redis_pipe.hset('stream:'+stream_id, 'state', 0)
             for k,v in file_hashes.iteritems():
                 redis_pipe.hset('stream:'+stream_id, k, v)
-
             redis_pipe.execute()
-
             self.set_status(200)
             return self.write(stream_id)
+        except KeyError as e:
+            print repr(e)
+            ex_type, ex, tb = sys.exc_info()
+            traceback.print_tb(tb)
+            self.set_status(400)
+            return self.write('Bad Request')
 
 
-        except Exception as e:
-            print e
-            return self.write('bad request')
-
-        return
+        #return
 
     def get(self):
         ''' PRIVATE - Download a stream. 

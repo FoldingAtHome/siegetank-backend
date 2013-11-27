@@ -84,22 +84,17 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         message = {
             'frame_format' : 'xtc'
         }
-
         files = {
             'json' : json.dumps(message),
             'state_bin' : state_bin,
             'system_bin' : system_bin,
             'integrator_bin' : integrator_bin
         }
-
         prep = requests.Request('POST','http://myurl',files=files).prepare()
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
-
         self.assertEqual(resp.code, 200)
-
         stream_id1 = resp.body
-
         self.assertTrue(
             self.redis_client.sismember('file_hashes',system_hash) and 
             self.redis_client.sismember('file_hashes',integrator_hash) and
@@ -114,25 +109,68 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             'system_hash' : system_hash,
             'integrator_hash' : integrator_hash
         }
-
         files = { 
             'json' : json.dumps(message),
             'state_bin' : state_bin
         }
+        prep = requests.Request('POST','http://myurl',files=files).prepare()
+        resp = self.fetch('/stream', method='POST', headers=prep.headers,
+                          body=prep.body)
+        stream_id2 = resp.body
+        self.assertEqual(resp.code, 200)
+        server_streams = self.redis_client.smembers('streams')
+        self.assertTrue(stream_id1 in server_streams)
+        self.assertTrue(stream_id2 in server_streams)
 
+        # Test 3. Send one hash one bin
+        message = {
+            'frame_format' : 'xtc',
+            'system_hash' : system_hash,
+        }
+        files = { 
+            'json' : json.dumps(message),
+            'state_bin' : state_bin,
+            'integrator_bin' : integrator_bin
+        }
+        prep = requests.Request('POST','http://myurl',files=files).prepare()
+        resp = self.fetch('/stream', method='POST', headers=prep.headers,
+                          body=prep.body)
+        stream_id3 = resp.body
+        self.assertEqual(resp.code, 200)
+        server_streams = self.redis_client.smembers('streams')
+        self.assertTrue(stream_id1 in server_streams)
+        self.assertTrue(stream_id2 in server_streams)
+        self.assertTrue(stream_id3 in server_streams)
+
+
+        # Test 4. Missing integrator
+        message = {
+            'frame_format' : 'xtc',
+            'system_hash' : system_hash,
+        }
+        files = { 
+            'json' : json.dumps(message),
+            'state_bin' : state_bin,
+        }
         prep = requests.Request('POST','http://myurl',files=files).prepare()
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
 
-        print resp.code
+        self.assertEqual(resp.code, 400)
 
-        stream_id2 = resp.body
-
-        server_streams = self.redis_client.smembers('streams')
-        print server_streams
-        self.assertTrue(stream_id1 in server_streams)
-        self.assertTrue(stream_id2 in server_streams)
-
+        # Test 5. Missing state
+        message = {
+            'frame_format' : 'xtc',
+            'system_hash' : system_hash,
+        }
+        files = { 
+            'json' : json.dumps(message),
+            'integrator_bin' : integrator_bin
+        }
+        prep = requests.Request('POST','http://myurl',files=files).prepare()
+        resp = self.fetch('/stream', method='POST', headers=prep.headers,
+                          body=prep.body)
+        self.assertEqual(resp.code, 400)
         os.remove(os.path.join('files',system_hash))
         os.remove(os.path.join('files',integrator_hash))
         shutil.rmtree(os.path.join('streams',stream_id1))
