@@ -3,7 +3,8 @@ import tornado.ioloop
 import tornado.web
 import tornado.httputil
 import redis
-
+import cStringIO
+import tarfile
 import signal
 import uuid
 import random
@@ -26,8 +27,8 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 #       FIELD   'frames'                | frame count of the stream          
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
 #       FIELD   'download_token'        | (optional) used for file transfers
-#       FIELD   'system_hash'           | hash for system.xml.tar.gz
-#       FIELD   'integrator_hash'       | hash for integrator.xml.tar.gz
+#       FIELD   'system_hash'           | hash for system.xml.gz
+#       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | expirable 
@@ -39,6 +40,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # [ MISC ]
 
 # ZSET  KEY     'heartbeats'                | { stream_id : expire_time }
+# SET   KET     'shared_tokens'             | size == active_streams
 # STRNG KEY     'shared_token:'+id+':stream'| reverse mapping
 # SET   KEY     'file_hashes'               | files that exist in /files
 
@@ -52,14 +54,74 @@ ws_redis = None
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
-        ''' PUBLIC - Used by Core to add a frame
-            POST parameters:
-
+        ''' CORE - Add a frame
+            REQUEST:
             target_id: uuid #
             stream_id: uuid #
             frame_bin: frame.pb # protocol buffered frame
+            
+            REPLY:
+            200 - OK
+            400 - Bad Request
         '''
         print 'foo'
+
+    def get(self):
+        print 'Successfully Entered Test'
+        ''' CORE - Fetch first frame. Shared_token is set by the CC. Firstly,
+            a request is made to the CC, which keeps a priority queue of all 
+            the streams. The stream is deemed active, and a heartbeat starts, 
+            the CC sets the hash for 'active_stream'+stream_id via redis.
+
+            REQUEST:
+            shared_token: token #
+
+            REPLY:
+            200 - send binaries state/system/integrator
+
+
+            def get(self):
+                file_name = 'file.ext'
+                buf_size = 4096
+                self.set_header('Content-Type', 'application/octet-stream')
+                self.set_header('Content-Disposition', 
+                    'attachment; filename=' + file_name)
+                with open(file_name, 'r') as f:
+                    while True:
+                        data = f.read(buf_size)
+                        if not data:
+                            break
+                        self.write(data)
+                self.finish()
+        '''
+        try:
+            shared_token = self.request.headers['shared_token']
+            if not ws_redis.sismember('shared_tokens',shared_token):
+                self.set_status(401)
+                return self.write('Unknown token')
+            stream_id  = ws_redis.get('shared_token:'+shared_token+':stream')
+            sys_hash   = ws_redis.hget('stream:'+stream_id,'system_hash')
+            intg_hash  = ws_redis.hget('stream:'+stream_id,'integrator_hash')
+            sys_file   = os.path.join('files',sys_hash)
+            intg_file  = os.path.join('files',intg_hash)
+            state_file = os.path.join('streams',stream_id,'state.xml.gz')
+            # Make a tarball in memory and send directly
+            c = cStringIO.StringIO()
+            tarball = tarfile.open(mode='w', fileobj=c)
+            tarball.add(sys_file, arcname='system.xml.gz')
+            tarball.add(intg_file, arcname='integrator.xml.gz')
+            tarball.add(state_file, arcname='state.xml.gz')
+            tarball.close()
+            self.set_header('Content-Type', 'application/octet-stream')
+            self.set_status(200)
+            return self.write(c.getvalue())
+        except Exception as e:
+            print repr(e)
+            ex_type, ex, tb = sys.exc_info()
+            traceback.print_tb(tb)
+            self.set_status(400)
+            return self.write('Bad Request')
+
 
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):       
@@ -85,11 +147,7 @@ class StreamHandler(tornado.web.RequestHandler):
             unique stream_id if so, and returns the id back to the CC.
 
             Ex.
-            message = {
-                'frame_format' : 'xtc'
-            }
             files = {
-                'json' : json.dumps(message),
                 'state_bin' : state_bin,
                 'system_bin' : system_bin,
                 'integrator_bin' : integrator_bin
@@ -102,13 +160,10 @@ class StreamHandler(tornado.web.RequestHandler):
             print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
-
         # Assume request is bad by default
         self.set_status(400)
-
         try:
             # Step 1. Check if request is valid.
-            content = json.loads(self.request.files['json'][0]['body'])
             state_bin = self.request.files['state_bin'][0]['body']
             required_strings = ['system','integrator']
             redis_pipe = ws_redis.pipeline()
@@ -123,8 +178,8 @@ class StreamHandler(tornado.web.RequestHandler):
                         file_buffer[bin_hash] = binary
                     else:
                         pass
-                elif s+'_hash' in content: 
-                    bin_hash = content[s+'_hash']
+                elif s+'_hash' in self.request.files: 
+                    bin_hash = self.request.files[s+'_hash'][0]['body']
                     if not ws_redis.sismember('file_hashes', bin_hash):
                         return self.write('Gave me a hash for a file not \
                                            in files directory')
@@ -137,7 +192,7 @@ class StreamHandler(tornado.web.RequestHandler):
             stream_folder = os.path.join('streams',stream_id)
             if not os.path.exists(stream_folder):
                 os.makedirs(stream_folder)
-            path = os.path.join(stream_folder,'state.xml.tar.gz')
+            path = os.path.join(stream_folder,'state.xml.gz')
             open(path,'w').write(state_bin)
             for f_hash,f_bin in file_buffer.iteritems():
                 open(os.path.join('files',f_hash),'w').write(f_bin)
@@ -165,7 +220,24 @@ class StreamHandler(tornado.web.RequestHandler):
 
             stream_id: uuid #
 
-            RESPONDS with a state.xml '''
+            RESPONDS with a state.xml 
+  
+            Useful snippet for streaming files:
+
+            def get(self):
+                file_name = 'file.ext'
+                buf_size = 4096
+                self.set_header('Content-Type', 'application/octet-stream')
+                self.set_header('Content-Disposition', 'attachment; filename=' + file_name)
+                with open(file_name, 'r') as f:
+                    while True:
+                        data = f.read(buf_size)
+                        if not data:
+                            break
+                        self.write(data)
+                self.finish()
+                
+        '''
 
     def delete(self):
         ''' PRIVATE - Delete a stream. '''
@@ -178,7 +250,7 @@ class HeartbeatHandler(tornado.web.RequestHandler):
 
     def post(self):
         ''' Cores POST to this handler to notify the WS that it is still 
-            alive. '''
+            alive. WS executes a zadd initially as well'''
 
         try:
             content = json.loads(self.request.body)
