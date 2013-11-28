@@ -72,7 +72,6 @@ class FrameHandler(tornado.web.RequestHandler):
         print 'foo'
 
     def get(self):
-        print 'Successfully Entered Test'
         ''' CORE - Fetch first frame. Shared_token is set by the CC. Firstly,
             a request is made to the CC, which keeps a priority queue of all 
             the streams. The stream is deemed active, and a heartbeat starts, 
@@ -247,13 +246,16 @@ class StreamHandler(tornado.web.RequestHandler):
             token = self.request.headers['download_token']
             stream_id = ws_redis.get('download_token:'+token+':stream')
             if stream_id:
+                filename = os.path.join('streams',stream_id,'positions.xtc')
 
             else:
                 self.set_status(400)
-
+        except Exception as e:
+            print e
 
     def delete(self):
         ''' PRIVATE - Delete a stream. '''
+        print 'foo'
 
 class HeartbeatHandler(tornado.web.RequestHandler):
     def initialize(self, redis_client=ws_redis, increment=30*60):

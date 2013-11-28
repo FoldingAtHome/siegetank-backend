@@ -222,13 +222,9 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         system_hash = hashlib.md5(system_bin).hexdigest()
         integrator_hash = hashlib.md5(integrator_bin).hexdigest()
         # Missing integrator
-        message = {
-            'frame_format' : 'xtc',
-            'system_hash' : system_hash,
-        }
         files = { 
-            'json' : json.dumps(message),
             'state_bin' : state_bin,
+            'system_hash' : system_hash,
         }
         prep = requests.Request('POST','http://myurl',files=files).prepare()
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
@@ -237,12 +233,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertEqual(resp.code, 400)
 
         # Missing state
-        message = {
-            'frame_format' : 'xtc',
-            'system_hash' : system_hash,
-        }
         files = { 
-            'json' : json.dumps(message),
+            'system_hash' : system_hash,
             'integrator_bin' : integrator_bin
         }
         prep = requests.Request('POST','http://myurl',files=files).prepare()
@@ -251,7 +243,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertEqual(resp.code, 400)
 
     def test_get_stream(self):
-        
+        return
 
 if __name__ == '__main__':
     unittest.main()
