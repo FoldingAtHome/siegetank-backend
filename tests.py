@@ -46,7 +46,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                         ])
 
     def test_get_frame(self):
-    
         # Add a stream
         system_bin      = str(uuid.uuid4())
         state_bin       = str(uuid.uuid4())
@@ -250,6 +249,9 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
         self.assertEqual(resp.code, 400)
+
+    def test_get_stream(self):
+        
 
 if __name__ == '__main__':
     unittest.main()

@@ -26,7 +26,6 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # HASH  KEY     'stream:'+id    
 #       FIELD   'frames'                | frame count of the stream          
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
-#       FIELD   'download_token'        | (optional) used for file transfers
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 
@@ -40,7 +39,8 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # [ MISC ]
 
 # ZSET  KEY     'heartbeats'                | { stream_id : expire_time }
-# SET   KET     'shared_tokens'             | size == active_streams
+# SET   KEY     'download_token:'+id+':stream' | stream the token maps to   
+# SET   KEY     'shared_tokens'             | size == active_streams
 # STRNG KEY     'shared_token:'+id+':stream'| reverse mapping
 # SET   KEY     'file_hashes'               | files that exist in /files
 
@@ -49,6 +49,11 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # heartbeats. A checker callback is passed into ioloop.PeriodicCallback(), 
 # which checks for expired streams against the current time. Streams that 
 # expire can be obtained by: redis.zrangebyscore('heartbeat',0,current_time)
+
+# PG Downloading streams: siegetank will first send a query to CC. CC assigns
+# a download token (that expire in 30 days), and responds with an IP and a
+# download_token. PG simply sends the token to the WS to get the downloaded
+# file
 
 ws_redis = None
 
@@ -236,8 +241,16 @@ class StreamHandler(tornado.web.RequestHandler):
                             break
                         self.write(data)
                 self.finish()
-                
         '''
+        self.set_status(401)
+        try:
+            token = self.request.headers['download_token']
+            stream_id = ws_redis.get('download_token:'+token+':stream')
+            if stream_id:
+
+            else:
+                self.set_status(400)
+
 
     def delete(self):
         ''' PRIVATE - Delete a stream. '''
