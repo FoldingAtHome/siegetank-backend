@@ -78,11 +78,6 @@ static int32_t xdr_htonl(int32_t x) {
 
 static int xdr_putbytes(ostream &stream, char *addr, unsigned int len) {
 	stream.write(addr,int(len));
-	/*
-	if ((len != 0) && 
-	    (fwrite (addr, (int) len, 1, (FILE *) xdrs->x_private) != 1)) 
-		return 0;
-	*/
 	return 1;
 }
 
@@ -90,10 +85,6 @@ static int xdr_putlong(ostream &stream, int32_t *lp) {
 	int32_t mycopy = xdr_htonl (*lp);
 	lp = &mycopy;
 	stream.write(reinterpret_cast<char *>(lp),4);
-	/*
-	if (fwrite ((char *) lp, 4, 1, (FILE *) xdrs->x_private) != 1)
-		return 0;
-	*/
 	return 1;
 }
 

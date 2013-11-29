@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <stdlib.h>
 #include "XTCWriter.h"
 
@@ -7,7 +8,10 @@ using namespace std;
 
 int main() {
 
-	ofstream output("test.txt", std::ofstream::binary);
+	//ofstream output("test.txt", std::ofstream::binary);
+
+
+	stringstream output;
 
 	XTCWriter writer(output);
 
@@ -29,5 +33,9 @@ int main() {
 		}
 		writer.append(i, (float)i/10.0, box, positions);	
 	}
+
+	ofstream foutput("test.txt", std::ofstream::binary);
+	foutput << output.str();
+
 
 }

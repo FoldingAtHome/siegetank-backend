@@ -21,13 +21,17 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
     @classmethod
     def setUpClass(self):
-        ''' Start a single server for all test cases '''
         redis_port = str(6827)
         self.redis_client = ws.init_redis(redis_port)
         # Use a single DB session
         self.redis_client.flushdb()
         self.increment = 3
         super(AsyncHTTPTestCase, self).setUpClass()
+        # Create necessary folders
+        if not os.path.exists('files'):
+            os.makedirs('files')
+        if not os.path.exists('streams'):
+            os.makedirs('streams')
 
     @classmethod
     def tearDownClass(self):
@@ -46,6 +50,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                         ])
 
     def test_get_frame(self):
+
         # Add a stream
         system_bin      = str(uuid.uuid4())
         state_bin       = str(uuid.uuid4())
@@ -120,11 +125,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.redis_client.hvals('active_stream:'+stream_id))
 
     def test_post_stream(self):
-        if not os.path.exists('files'):
-            os.makedirs('files')
-        if not os.path.exists('streams'):
-            os.makedirs('streams')
-        
         system_bin     = 'system.xml.gz'
         state_bin      = 'state.xml.gz'
         integrator_bin = 'integrator.xml.gz'
