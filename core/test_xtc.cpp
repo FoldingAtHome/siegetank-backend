@@ -23,12 +23,11 @@ int main() {
 		for(int j=0; j < natoms; j++) {
 			vector<float> coord(3);
 			for(int k=0; k < 3; k++) {
-				coord[k] = rand()/RAND_MAX;
+				coord[k] = (float) rand()/ (float) RAND_MAX;
 			}
 			positions.push_back(coord);
 		}
 		writer.append(i, (float)i/10.0, box, positions);	
 	}
-
 
 }

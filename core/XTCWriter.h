@@ -7,7 +7,7 @@
  *
  * Copyright (c) Erik Lindahl, David van der Spoel 2003,2004.
  * Coordinate compression (c) by Frans van Hoesel. 
- * C++ Writer (c) by Yutong Zhao <proteneer@gmail.com>
+ * C++ API (c) by Yutong Zhao <proteneer@gmail.com>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
