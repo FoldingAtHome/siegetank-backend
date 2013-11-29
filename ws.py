@@ -79,6 +79,8 @@ class FrameHandler(tornado.web.RequestHandler):
             buffer_path = os.path.join('streams',stream_id,'buffer.xtc')
             open(buffer_path,'ab').write(frame_xtc)
 
+            # TODO: Check to make sure the frame is valid
+
             # See if checkpoint is present
             try:
                 chkpt_member = tarball.getmember('checkpoint.xml.gz')
@@ -102,7 +104,7 @@ class FrameHandler(tornado.web.RequestHandler):
 
             except KeyError:
                 pass
-                
+
         except KeyError as e:
             print repr(e)
             ex_type, ex, tb = sys.exc_info()
