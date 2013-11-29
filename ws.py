@@ -7,8 +7,6 @@ import cStringIO
 import tarfile
 import signal
 import uuid
-import random
-import threading
 import os
 import json
 import requests
@@ -17,6 +15,7 @@ import subprocess
 import hashlib
 import time
 import traceback
+import shutil
 
 CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
@@ -61,15 +60,55 @@ class FrameHandler(tornado.web.RequestHandler):
     def post(self):
         ''' CORE - Add a frame
             REQUEST:
-            target_id: uuid #
-            stream_id: uuid #
-            frame_bin: frame.pb # protocol buffered frame
+            HEADER token_id
+            BODY   frame_bin: frame.pb # protocol buffered frame
             
             REPLY:
             200 - OK
             400 - Bad Request
         '''
-        print 'foo'
+
+        try:
+            token = self.request.headers['shared_token']
+            stream_id = ws_redis.get('shared_token:'+token+':stream')
+
+            tarball = self.request.body
+            # Extract the frame
+            frame_member = tarball.getmember('frame.xtc')
+            frame_xtc = tarball.extractfile(frame_member).read()
+            buffer_path = os.path.join('streams',stream_id,'buffer.xtc')
+            open(buffer_path,'ab').write(frame_xtc)
+
+            # See if checkpoint is present
+            try:
+                chkpt_member = tarball.getmember('checkpoint.xml.gz')
+                checkpoint   = tarball.extractfile(chkpt_member).read()  
+                chkpt_path   = os.path.join('streams',
+                                            stream_id,'checkpoint.xml.gz')
+                open(chkpt_path,'ab').write(checkpoint)
+
+                # Buffered frames are deemed safe, so concatenate
+                # data from 'buffer.xtc' to 'frames.xtc'
+                frames_path = os.path.join('streams', stream_id, 
+                                           'frames.xtc')
+
+                with open(buffer_path,'rb') as src:
+                    with open(frames_path,'ab') as dest:
+                        while True:
+                            chars = src.read(4096)
+                            if not chars:
+                                break
+                            dest.write(chars)
+
+            except KeyError:
+                pass
+                
+        except KeyError as e:
+            print repr(e)
+            ex_type, ex, tb = sys.exc_info()
+            traceback.print_tb(tb)
+            self.set_status(400)
+            return self.write('Bad Request')
 
     def get(self):
         ''' CORE - Fetch first frame. Shared_token is set by the CC. Firstly,

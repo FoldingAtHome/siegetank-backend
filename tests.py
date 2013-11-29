@@ -49,8 +49,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                                         dict(increment=self.increment))
                         ])
 
-    def test_get_frame(self):
-
+    def test_frame(self):
         # Add a stream
         system_bin      = str(uuid.uuid4())
         state_bin       = str(uuid.uuid4())
@@ -97,6 +96,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             if member.name == 'integrator.xml.gz':
                 self.assertEqual(tarball.extractfile(member).read(),
                                  integrator_bin)
+
+        # POST to a frame
 
     def test_heartbeat(self):
         token_id = str(uuid.uuid4())
