@@ -1,4 +1,4 @@
-#include "XTC.h"
+#include "XTCWriter.h"
 #include <cmath>
 
 /* -*- mode: c; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- 
@@ -585,8 +585,8 @@ XTCWriter::XTCWriter(ostream &output, float precision) :
 #define MAGIC 1995
 
 void XTCWriter::append(int step, float time, 
-		        	   vector<vector<float> > &box,
-				       vector<vector<float> > &positions) {
+		        	   const vector<vector<float> > &box,
+				       const vector<vector<float> > &positions) {
 	// write headers
 	int result,magic,n=1;
 	

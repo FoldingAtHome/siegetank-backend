@@ -19,11 +19,12 @@ class XTCWriter {
 
 public:
 
-	XTCWriter(std::ostream &output, float precision);
+	// For sanity, you must ensure that output is opened with std::ofstream::binary!
+	XTCWriter(std::ostream &output, float precision=1000);
 
 	void append(int step, float time, 
-		        std::vector<std::vector<float> > &box,
-				std::vector<std::vector<float> > &positions);
+		        const std::vector<std::vector<float> > &box,
+				const std::vector<std::vector<float> > &positions);
 
 private:
 
