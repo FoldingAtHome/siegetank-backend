@@ -45,12 +45,11 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         # Use a single DB session
         self.redis_client.flushdb()
         self.increment = 3
+        self._folders = ['files','streams']
+        for folder in self._folders:
+            if not os.path.exists(folder):
+                os.makedirs(folder)
         super(AsyncHTTPTestCase, self).setUpClass()
-
-        folders = ['files','streams']
-        for folder in folders:
-            shutil.rmtree(folder)
-            os.makedirs(folder)
 
     @classmethod
     def tearDownClass(self):
@@ -58,6 +57,9 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.flushdb()
         self.redis_client.shutdown()
         tornado.ioloop.IOLoop.instance().stop()
+        for folder in self._folders:
+            if os.path.exists(folder):
+                shutil.rmtree(folder)
         super(AsyncHTTPTestCase, self).tearDownClass()
 
     def get_app(self):
@@ -305,4 +307,5 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         return
 
 if __name__ == '__main__':
-    unittest.main()
+    suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
+    unittest.TextTestRunner(verbosity=3).run(suite)
