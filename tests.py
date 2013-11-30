@@ -17,6 +17,27 @@ import shutil
 import cStringIO
 import tarfile
 
+
+def _tar_strings(strings, names):
+    ''' Returns a cStringIO'd tar file of strings with names in names '''
+    assert len(strings) == len(names)
+
+    tar_outfile = cStringIO.StringIO()
+    with tarfile.open(mode='w', fileobj=tar_outfile) as tarball:
+        for string, name in zip(strings,names):
+            frame_binary = string
+            # binary string
+            frame_string = cStringIO.StringIO()
+            frame_string.write(frame_binary)
+            frame_string.seek(0)
+            info = tarfile.TarInfo(name=name)
+            info.size=len(frame_binary)
+            # tarfile as a string
+            tarball.addfile(tarinfo=info, fileobj=frame_string)
+
+    return tar_outfile
+
+
 class WSHandlerTestCase(AsyncHTTPTestCase):
 
     @classmethod
@@ -27,11 +48,11 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.flushdb()
         self.increment = 3
         super(AsyncHTTPTestCase, self).setUpClass()
-        # Create necessary folders
-        if not os.path.exists('files'):
-            os.makedirs('files')
-        if not os.path.exists('streams'):
-            os.makedirs('streams')
+
+        folders = ['files','streams']
+        for folder in folders:
+            shutil.rmtree(folder)
+            os.makedirs(folder)
 
     @classmethod
     def tearDownClass(self):
@@ -48,6 +69,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                         (r'/heartbeat', ws.HeartbeatHandler, 
                                         dict(increment=self.increment))
                         ])
+
+
 
     def test_frame(self):
         # Add a stream
@@ -69,6 +92,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         stream_id = resp.body
         token_id = str(uuid.uuid4())
 
+        # TODO: md5 headers
+
         # Mimic what the CC would do to prepare a stream as a job
         self.redis_client.sadd('active_streams',stream_id)
         self.redis_client.hset('active_stream:'+stream_id, 
@@ -84,20 +109,55 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
         headers  = {'shared_token' : token_id}
         response = self.fetch('/frame', headers=headers, method='GET')  
-        tarball  = tarfile.open(mode='r',
-                                fileobj=cStringIO.StringIO(response.body))
-        for member in tarball.getmembers():
-            if member.name == 'system.xml.gz':
-                self.assertEqual(tarball.extractfile(member).read(),
-                                 system_bin)
-            if member.name == 'state.xml.gz':
-                self.assertEqual(tarball.extractfile(member).read(),
-                                 state_bin)
-            if member.name == 'integrator.xml.gz':
-                self.assertEqual(tarball.extractfile(member).read(),
-                                 integrator_bin)
+        with tarfile.open(mode='r', fileobj=
+                          cStringIO.StringIO(response.body)) as tarball:
+            for member in tarball.getmembers():
+                if member.name == 'system.xml.gz':
+                    self.assertEqual(tarball.extractfile(member).read(),
+                                     system_bin)
+                if member.name == 'state.xml.gz':
+                    self.assertEqual(tarball.extractfile(member).read(),
+                                     state_bin)
+                if member.name == 'integrator.xml.gz':
+                    self.assertEqual(tarball.extractfile(member).read(),
+                                     integrator_bin)
 
-        # POST to a frame
+        frame_binary1 = os.urandom(1024)
+        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
+
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+
+        self.assertEqual(resp.code, 200)
+
+        # See if extra buffer file is present
+        with open(os.path.join('streams',stream_id,'buffer.xtc'), 'rb') as f:
+            self.assertEqual(f.read(),frame_binary1)
+
+        frame_binary2 = os.urandom(1024)
+        checkpoint_binary = os.urandom(2048)
+        tar_out = _tar_strings([frame_binary2, checkpoint_binary],
+                               ['frame.xtc','checkpoint.xml.gz'])
+
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+
+        self.assertEqual(resp.code, 200)
+
+
+        stream_dir = os.path.join('streams',stream_id)
+
+        if os.path.exists(os.path.join(stream_dir,'buffer.xtc')):
+            with open(os.path.join('streams',stream_id,'buffer.xtc'), 
+                                   'rb') as f:
+                if len(f.read()):
+                    raise Exception('Bad buffer, not empty')
+
+        with open(os.path.join(stream_dir,'frames.xtc'), 'rb') as f:
+            self.assertEqual(f.read(),frame_binary1+frame_binary2)
+
+        if not os.path.exists(os.path.join(stream_dir,'checkpoint.xml.gz')):
+            raise Exception('Checkpoint file missing!')
 
     def test_heartbeat(self):
         token_id = str(uuid.uuid4())

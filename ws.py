@@ -29,7 +29,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
-# HASH  KEY     'active_stream:'+id     | expirable 
+# HASH  KEY     'active_stream:'+id     | 
 #       FIELD   'shared_token'          | each update must include this token 
 #       FIELD   'donor'                 | which donor the stream belongs to 
 #       FIELD   'start_time'            | elapsed time in seconds  
@@ -71,39 +71,44 @@ class FrameHandler(tornado.web.RequestHandler):
         try:
             token = self.request.headers['shared_token']
             stream_id = ws_redis.get('shared_token:'+token+':stream')
+            tar_string = cStringIO.StringIO(self.request.body)
 
-            tarball = self.request.body
-            # Extract the frame
-            frame_member = tarball.getmember('frame.xtc')
-            frame_xtc = tarball.extractfile(frame_member).read()
-            buffer_path = os.path.join('streams',stream_id,'buffer.xtc')
-            open(buffer_path,'ab').write(frame_xtc)
+            with tarfile.open(mode='r', fileobj=tar_string) as tarball:
+                # Extract the frame
+                frame_member = tarball.getmember('frame.xtc')
+                frame_binary = tarball.extractfile(frame_member).read()
 
-            # TODO: Check to make sure the frame is valid
+                buffer_path = os.path.join('streams',stream_id,'buffer.xtc')
+                with open(buffer_path,'ab') as buffer_file:
+                    buffer_file.write(frame_binary)
 
-            # See if checkpoint is present
-            try:
-                chkpt_member = tarball.getmember('checkpoint.xml.gz')
-                checkpoint   = tarball.extractfile(chkpt_member).read()  
-                chkpt_path   = os.path.join('streams',
-                                            stream_id,'checkpoint.xml.gz')
-                open(chkpt_path,'ab').write(checkpoint)
+                # TODO: Check to make sure the frame is valid 
+                # valid in both md5 hash integrity and xtc header integrity
 
-                # Buffered frames are deemed safe, so concatenate
-                # data from 'buffer.xtc' to 'frames.xtc'
-                frames_path = os.path.join('streams', stream_id, 
-                                           'frames.xtc')
+                # See if checkpoint is present, if so, the buffer.xtc is
+                # appended to the frames.xtc
+                try:
+                    chkpt_member = tarball.getmember('checkpoint.xml.gz')
+                    checkpoint   = tarball.extractfile(chkpt_member).read()  
+                    chkpt_path   = os.path.join('streams',
+                                                stream_id,'checkpoint.xml.gz')
 
-                with open(buffer_path,'rb') as src:
-                    with open(frames_path,'ab') as dest:
-                        while True:
-                            chars = src.read(4096)
-                            if not chars:
-                                break
-                            dest.write(chars)
-
-            except KeyError:
-                pass
+                    with open(chkpt_path,'ab') as chkpt_file:
+                        chkpt_file.write(checkpoint)
+                    frames_path = os.path.join('streams', stream_id, 
+                                               'frames.xtc')
+                    with open(buffer_path,'rb') as src:
+                        with open(frames_path,'ab') as dest:
+                            while True:
+                                chars = src.read(4096)
+                                if not chars:
+                                    break
+                                dest.write(chars)
+                    # clear the buffer
+                    with open(buffer_path,'w') as buffer_file:
+                        pass
+                except KeyError as e:
+                    pass
 
         except KeyError as e:
             print repr(e)
