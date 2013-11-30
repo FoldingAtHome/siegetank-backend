@@ -34,9 +34,7 @@ def _tar_strings(strings, names):
             info.size=len(frame_binary)
             # tarfile as a string
             tarball.addfile(tarinfo=info, fileobj=frame_string)
-
     return tar_outfile
-
 
 class WSHandlerTestCase(AsyncHTTPTestCase):
 
