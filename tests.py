@@ -70,8 +70,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                                         dict(increment=self.increment))
                         ])
 
-
-
     def test_frame(self):
         # Add a stream
         system_bin      = str(uuid.uuid4())
@@ -295,6 +293,95 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertEqual(resp.code, 400)
 
     def test_get_stream(self):
+        # POST a stream
+        system_bin     = os.urandom(1024)
+        state_bin      = os.urandom(1024)
+        integrator_bin = os.urandom(1024)
+        system_hash = hashlib.md5(system_bin).hexdigest()
+        integrator_hash = hashlib.md5(integrator_bin).hexdigest()
+        # Test send binaries of system.xml and integrator
+        files = {
+            'state_bin' : state_bin,
+            'system_bin' : system_bin,
+            'integrator_bin' : integrator_bin
+        }
+        prep = requests.Request('POST','http://myurl',files=files).prepare()
+        resp = self.fetch('/stream', method='POST', headers=prep.headers,
+                          body=prep.body)
+        self.assertEqual(resp.code, 200)
+        stream_id = resp.body
+        # Assign Stream
+        token_id = str(uuid.uuid4())
+        self.redis_client.sadd('active_streams',stream_id)
+        self.redis_client.hset('active_stream:'+stream_id, 
+                               'shared_token', token_id)
+        self.redis_client.hset('active_stream:'+stream_id, 
+                               'donor', 'proteneer')  
+        self.redis_client.hset('active_stream:'+stream_id, 
+                               'start_time', time.time())
+        self.redis_client.hset('active_stream:'+stream_id, 
+                               'steps', 0)
+        self.redis_client.sadd('shared_tokens',token_id)
+        self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
+        self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
+        headers  = {'shared_token' : token_id}
+        # GET a checkpoint.xml
+        resp = self.fetch('/frame', headers=headers, method='GET')
+        self.assertEqual(resp.code, 200)
+        # POST 124 frames and 2 checkpoints, 
+        # NOTE: ONE-INDEXED, frame[0] not used for anything
+        frame_binaries = [os.urandom(1024) for i in range(125)]
+        chkpt_binary   = [os.urandom(2048) for i in range(2)]
+
+        # send frames 1-49
+        # 0th frame is not used
+        for frame_binary in frame_binaries[1:50]:
+            tar_out = _tar_strings([frame_binary], ['frame.xtc'])
+            resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+            self.assertEqual(resp.code, 200)
+        # send a frame with a checkpoint
+        tar_out = _tar_strings([frame_binaries[50],chkpt_binary[0]], 
+                               ['frame.xtc', 'state.xml.gz'])
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+        self.assertEqual(resp.code, 200)
+        # send frames 51-99
+        for frame_binary in frame_binaries[51:100]:
+            tar_out = _tar_strings([frame_binary], ['frame.xtc'])
+            resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+            self.assertEqual(resp.code, 200)
+        # send a frame with a checkpoint
+        tar_out = _tar_strings([frame_binaries[100],chkpt_binary[1]], 
+                               ['frame.xtc', 'state.xml.gz'])
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+        self.assertEqual(resp.code, 200)
+        # send the remaining frames
+        for frame_binary in frame_binaries[101:]:
+            tar_out = _tar_strings([frame_binary], ['frame.xtc'])
+            resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+            self.assertEqual(resp.code, 200)
+        
+        true_frames = ''.join(frame_binaries[1:101])
+        buffer_frames = ''.join(frame_binaries[101:])
+
+
+        self.assertEqual(self.redis_client.hget('stream:'+stream_id, 
+                        'frames'), str(100))
+        self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
+                        'buffer_frames'), str(24))
+
+        # make sure the good frames are equal
+        with open(os.path.join('streams',stream_id,'frames.xtc')) as frames:
+            self.assertEqual(true_frames, frames.read())
+
+        # check buffer xtc as well
+        with open(os.path.join('streams',stream_id,'buffer.xtc')) as buffers:
+            self.assertEqual(buffer_frames, buffers.read())
+
         return
 
 if __name__ == '__main__':

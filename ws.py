@@ -27,7 +27,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
-
+#       FIELD   'steps_per_frame'       | (optional)
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | 
@@ -62,6 +62,7 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # TODO:
 # [ ] Stats
 # [ ] md5 checksum of headers
+# [ ] delete mechanisms
 
 ws_redis = None
 
@@ -101,6 +102,7 @@ class FrameHandler(tornado.web.RequestHandler):
 
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
+                # make sure time step has increased?
 
                 # See if state is present, if so, the buffer.xtc is
                 # appended to the frames.xtc
@@ -196,7 +198,6 @@ class FrameHandler(tornado.web.RequestHandler):
             self.set_status(400)
             return self.write('Bad Request')
 
-
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):       
         ''' PRIVATE - Add new stream(s) to WS. The POST method on this URI
@@ -279,8 +280,6 @@ class StreamHandler(tornado.web.RequestHandler):
             redis_pipe.execute()
             self.set_status(200)
 
-
-
             return self.write(stream_id)
         except KeyError as e:
             print repr(e)
@@ -315,12 +314,12 @@ class StreamHandler(tornado.web.RequestHandler):
                         self.write(data)
                 self.finish()
         '''
-        self.set_status(401)
+        self.set_status(400)
         try:
             token = self.request.headers['download_token']
             stream_id = ws_redis.get('download_token:'+token+':stream')
             if stream_id:
-                filename = os.path.join('streams',stream_id,'positions.xtc')
+                filename = os.path.join('streams',stream_id,'frames.xtc')
 
             else:
                 self.set_status(400)
