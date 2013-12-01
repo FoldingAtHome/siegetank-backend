@@ -292,6 +292,10 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                           body=prep.body)
         self.assertEqual(resp.code, 400)
 
+    def assertEqualHash(self, string1, string2):
+        self.assertEqual(hashlib.md5(string1).hexdigest(),
+                         hashlib.md5(string2).hexdigest())
+
     def test_get_stream(self):
         # POST a stream
         system_bin     = os.urandom(1024)
@@ -332,9 +336,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         # NOTE: ONE-INDEXED, frame[0] not used for anything
         frame_binaries = [os.urandom(1024) for i in range(125)]
         chkpt_binary   = [os.urandom(2048) for i in range(2)]
-
-        # send frames 1-49
-        # 0th frame is not used
+        # send frames 1-49, note 0th frame is not used
         for frame_binary in frame_binaries[1:50]:
             tar_out = _tar_strings([frame_binary], ['frame.xtc'])
             resp = self.fetch('/frame', headers=headers, 
@@ -364,25 +366,28 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             resp = self.fetch('/frame', headers=headers, 
                     method='POST', body=tar_out.getvalue())
             self.assertEqual(resp.code, 200)
-        
         true_frames = ''.join(frame_binaries[1:101])
         buffer_frames = ''.join(frame_binaries[101:])
-
-
         self.assertEqual(self.redis_client.hget('stream:'+stream_id, 
                         'frames'), str(100))
         self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
                         'buffer_frames'), str(24))
-
-        # make sure the good frames are equal
+        # make sure the frames.xtc and buffer.xtc
         with open(os.path.join('streams',stream_id,'frames.xtc')) as frames:
-            self.assertEqual(true_frames, frames.read())
-
-        # check buffer xtc as well
+            self.assertEqualHash(true_frames, frames.read())
         with open(os.path.join('streams',stream_id,'buffer.xtc')) as buffers:
-            self.assertEqual(buffer_frames, buffers.read())
+            self.assertEqualHash(buffer_frames, buffers.read())
 
-        return
+        # finally we download the stream
+        dtoken = str(uuid.uuid4())
+        self.redis_client.set('download_token:'+dtoken+':stream', stream_id)
+        headers = {
+            'download_token' : dtoken
+        }
+
+        resp = self.fetch('/stream', headers=headers, method='GET')
+
+        self.assertEqualHash(true_frames, resp.body)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)

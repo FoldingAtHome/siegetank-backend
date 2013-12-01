@@ -156,19 +156,21 @@ class FrameHandler(tornado.web.RequestHandler):
             REPLY:
             200 - send binaries state/system/integrator
 
-            def get(self):
-                file_name = 'file.ext'
-                buf_size = 4096
-                self.set_header('Content-Type', 'application/octet-stream')
-                self.set_header('Content-Disposition', 
-                    'attachment; filename=' + file_name)
-                with open(file_name, 'r') as f:
-                    while True:
-                        data = f.read(buf_size)
-                        if not data:
-                            break
-                        self.write(data)
-                self.finish()
+            We need to be extremely careful about checkpoints and frames, as 
+            it is important we avoid writing duplicate frames on the first step 
+            for the core. We use the follow scheme:
+
+                  ------------------------------------------------------------
+                  |c       core 1      |c|              core 2           |c|
+                  ---                  --|--                           -----
+            frame: x|1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
+                    ---------------------| ------------------------------- ---
+        
+            When a core fetches a checkpoint, it makes sure to NOT write the
+            first frame (equivalent to the frame of the fetched state.xml file).
+            On every subsequent checkpoint, both the frame and the checkpoint are
+            sent back to the workserver.
+
         '''
         try:
             shared_token = self.request.headers['shared_token']
@@ -320,7 +322,16 @@ class StreamHandler(tornado.web.RequestHandler):
             stream_id = ws_redis.get('download_token:'+token+':stream')
             if stream_id:
                 filename = os.path.join('streams',stream_id,'frames.xtc')
-
+                buf_size = 4096
+                self.set_header('Content-Type', 'application/octet-stream')
+                self.set_header('Content-Disposition', 'attachment; filename=' + filename)
+                with open(filename, 'r') as f:
+                    while True:
+                        data = f.read(buf_size)
+                        if not data:
+                            break
+                        self.write(data)
+                self.finish()
             else:
                 self.set_status(400)
         except Exception as e:
