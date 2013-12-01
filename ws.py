@@ -23,13 +23,14 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 # SET   KEY     'streams'               | set of streams owned by this ws     
 # HASH  KEY     'stream:'+id    
-#       FIELD   'frames'                | frame count of the stream          
+#       FIELD   'frames'                | number of frames in frames.xtc        
 #       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | 
+#       FIELD   'buffer_frames'         | number of frames in buffer.xtc
 #       FIELD   'shared_token'          | each update must include this token 
 #       FIELD   'donor'                 | which donor the stream belongs to 
 #       FIELD   'start_time'            | elapsed time in seconds  
@@ -61,7 +62,8 @@ class FrameHandler(tornado.web.RequestHandler):
         ''' CORE - Add a frame
             REQUEST:
             HEADER token_id
-            BODY   frame_bin: frame.pb # protocol buffered frame
+            BODY   binary_tar # must contain 'frame.xtc'
+                              # 'checkpoint.xml.gz' is optional
             
             REPLY:
             200 - OK
@@ -81,6 +83,10 @@ class FrameHandler(tornado.web.RequestHandler):
                 buffer_path = os.path.join('streams',stream_id,'buffer.xtc')
                 with open(buffer_path,'ab') as buffer_file:
                     buffer_file.write(frame_binary)
+
+                # Increment buffer frames by 1
+                ws_redis.hincrby('active_stream:'+stream_id, 
+                                 'buffer_frames',1)
 
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
@@ -104,6 +110,14 @@ class FrameHandler(tornado.web.RequestHandler):
                                 if not chars:
                                     break
                                 dest.write(chars)
+
+                    # this does need to be done atomically as no other client will
+                    # modify the active_streams key except this ws
+                    ws_redis.hincrby('stream:'+stream_id,'frames',
+                        ws_redis.hget('active_stream:'+stream_id,'buffer_frames'))
+
+                    ws_redis.hset('active_stream:'+stream_id,'buffer_frames',0)
+
                     # clear the buffer
                     with open(buffer_path,'w') as buffer_file:
                         pass
@@ -128,7 +142,6 @@ class FrameHandler(tornado.web.RequestHandler):
 
             REPLY:
             200 - send binaries state/system/integrator
-
 
             def get(self):
                 file_name = 'file.ext'
@@ -242,6 +255,7 @@ class StreamHandler(tornado.web.RequestHandler):
             stream_folder = os.path.join('streams',stream_id)
             if not os.path.exists(stream_folder):
                 os.makedirs(stream_folder)
+            # Write the initial state
             path = os.path.join(stream_folder,'state.xml.gz')
             open(path,'w').write(state_bin)
             for f_hash,f_bin in file_buffer.iteritems():
@@ -253,6 +267,9 @@ class StreamHandler(tornado.web.RequestHandler):
                 redis_pipe.hset('stream:'+stream_id, k, v)
             redis_pipe.execute()
             self.set_status(200)
+
+
+
             return self.write(stream_id)
         except KeyError as e:
             print repr(e)
@@ -349,8 +366,15 @@ def check_heartbeats():
         into the appropriate queue '''
     dead_streams = ws_redis.zrangebyscore('heartbeats', 0, time.time())
     if dead_streams:
+        # 1. Remove relevant keys
         ws_redis.srem('active_streams', *dead_streams)
         ws_redis.delete(*('active_stream:'+s for s in dead_streams))
+        for dead_stream in dead_streams:
+            # 2. Remove buffer file
+            buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
+            if os.path.exists(buffer_path):
+                with open(buffer_path,'w') as buffer_file:
+                    pass
 
 def clean_exit(signal, frame):
     print 'shutting down redis...'

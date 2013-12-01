@@ -122,18 +122,23 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                     self.assertEqual(tarball.extractfile(member).read(),
                                      integrator_bin)
 
+        # Test sending a single frame
         frame_binary1 = os.urandom(1024)
         tar_out = _tar_strings([frame_binary1],['frame.xtc'])
-
         resp = self.fetch('/frame', headers=headers, 
                     method='POST', body=tar_out.getvalue())
-
         self.assertEqual(resp.code, 200)
+        # See if redis stream: stream_id, frames is correct
+        self.assertEqual(self.redis_client.hget('stream:'+stream_id,
+                                                'frames'),str(0))
+        self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
+                                                'buffer_frames'),str(1))
 
         # See if extra buffer file is present
         with open(os.path.join('streams',stream_id,'buffer.xtc'), 'rb') as f:
             self.assertEqual(f.read(),frame_binary1)
 
+        # Test sending a single frame with a checkpoint file
         frame_binary2 = os.urandom(1024)
         checkpoint_binary = os.urandom(2048)
         tar_out = _tar_strings([frame_binary2, checkpoint_binary],
@@ -143,7 +148,10 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                     method='POST', body=tar_out.getvalue())
 
         self.assertEqual(resp.code, 200)
-
+        self.assertEqual(self.redis_client.hget('stream:'+stream_id,
+                                                'frames'),str(2))
+        self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
+                                                'buffer_frames'),str(0))
 
         stream_dir = os.path.join('streams',stream_id)
 
