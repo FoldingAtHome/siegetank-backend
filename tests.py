@@ -77,8 +77,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         system_bin      = str(uuid.uuid4())
         state_bin       = str(uuid.uuid4())
         integrator_bin  = str(uuid.uuid4())
-       
-        # Test send binaries of system.xml and integrator
         files = {
             'state_bin' : state_bin,
             'system_bin' : system_bin,
@@ -88,13 +86,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
         self.assertEqual(resp.code, 200)
-
         stream_id = resp.body
         token_id = str(uuid.uuid4())
-
-        # TODO: md5 headers
-
-        # Mimic what the CC would do to prepare a stream as a job
         self.redis_client.sadd('active_streams',stream_id)
         self.redis_client.hset('active_stream:'+stream_id, 
                                'shared_token', token_id)
@@ -108,6 +101,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
         self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
         headers  = {'shared_token' : token_id}
+        # Test GET a job
         response = self.fetch('/frame', headers=headers, method='GET')  
         with tarfile.open(mode='r', fileobj=
                           cStringIO.StringIO(response.body)) as tarball:
@@ -121,51 +115,40 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                 if member.name == 'integrator.xml.gz':
                     self.assertEqual(tarball.extractfile(member).read(),
                                      integrator_bin)
-
-        # Test sending a single frame
+        # Test POST a single frame
         frame_binary1 = os.urandom(1024)
         tar_out = _tar_strings([frame_binary1],['frame.xtc'])
         resp = self.fetch('/frame', headers=headers, 
                     method='POST', body=tar_out.getvalue())
         self.assertEqual(resp.code, 200)
-        # See if redis stream: stream_id, frames is correct
         self.assertEqual(self.redis_client.hget('stream:'+stream_id,
                                                 'frames'),str(0))
         self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
                                                 'buffer_frames'),str(1))
-
-        # See if extra buffer file is present
         with open(os.path.join('streams',stream_id,'buffer.xtc'), 'rb') as f:
             self.assertEqual(f.read(),frame_binary1)
-
-        # Test sending a single frame with a checkpoint file
+        # Test sending a single frame with a state file
         frame_binary2 = os.urandom(1024)
-        checkpoint_binary = os.urandom(2048)
-        tar_out = _tar_strings([frame_binary2, checkpoint_binary],
-                               ['frame.xtc','checkpoint.xml.gz'])
-
+        state_binary = os.urandom(2048)
+        tar_out = _tar_strings([frame_binary2, state_binary],
+                               ['frame.xtc','state.xml.gz'])
         resp = self.fetch('/frame', headers=headers, 
                     method='POST', body=tar_out.getvalue())
-
         self.assertEqual(resp.code, 200)
         self.assertEqual(self.redis_client.hget('stream:'+stream_id,
                                                 'frames'),str(2))
         self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
                                                 'buffer_frames'),str(0))
-
         stream_dir = os.path.join('streams',stream_id)
-
         if os.path.exists(os.path.join(stream_dir,'buffer.xtc')):
             with open(os.path.join('streams',stream_id,'buffer.xtc'), 
                                    'rb') as f:
                 if len(f.read()):
                     raise Exception('Bad buffer, not empty')
-
         with open(os.path.join(stream_dir,'frames.xtc'), 'rb') as f:
             self.assertEqual(f.read(),frame_binary1+frame_binary2)
-
-        if not os.path.exists(os.path.join(stream_dir,'checkpoint.xml.gz')):
-            raise Exception('Checkpoint file missing!')
+        if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
+            raise Exception('Checkpoint State file missing!')
 
     def test_heartbeat(self):
         token_id = str(uuid.uuid4())

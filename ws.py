@@ -28,13 +28,17 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 
+
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | 
 #       FIELD   'buffer_frames'         | number of frames in buffer.xtc
 #       FIELD   'shared_token'          | each update must include this token 
-#       FIELD   'donor'                 | which donor the stream belongs to 
-#       FIELD   'start_time'            | elapsed time in seconds  
+#       FIELD   'donor'                 | which donor the stream belongs to  
 #       FIELD   'steps'                 | steps completed thus far
+
+# Not implemented yet
+# LIST  KEY     'stat:'+id+':donor'     | donor statistics
+# LIST  KEY     'stat:'+id+':frames'    | cardinality equal to above
 
 # [ MISC ]
 
@@ -54,19 +58,26 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # a download token (that expire in 30 days), and responds with an IP and a
 # download_token. PG simply sends the token to the WS to get the downloaded
 # file
+#
+# TODO:
+# [ ] Stats
+# [ ] md5 checksum of headers
 
 ws_redis = None
 
 class FrameHandler(tornado.web.RequestHandler):
     def post(self):
-        ''' CORE - Add a frame
-            REQUEST:
-            HEADER token_id
-            BODY   binary_tar # must contain 'frame.xtc'
-                              # 'checkpoint.xml.gz' is optional
+        ''' CORE - Used by the core to add a frame
+
+            REQ Parameters:
+        
+            HEADER { 'token_id' : unique_id } 
+            BODY   binary_tar # a binary tar file containing filenames:
+                              # 'frame.xtc', a single xtc frame
+                              # state.xml.gz', checkpoint file
             
             REPLY:
-            200 - OK
+            200 - OK 
             400 - Bad Request
         '''
 
@@ -91,16 +102,16 @@ class FrameHandler(tornado.web.RequestHandler):
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
 
-                # See if checkpoint is present, if so, the buffer.xtc is
+                # See if state is present, if so, the buffer.xtc is
                 # appended to the frames.xtc
                 try:
-                    chkpt_member = tarball.getmember('checkpoint.xml.gz')
-                    checkpoint   = tarball.extractfile(chkpt_member).read()  
-                    chkpt_path   = os.path.join('streams',
-                                                stream_id,'checkpoint.xml.gz')
+                    chkpt_member = tarball.getmember('state.xml.gz')
+                    state        = tarball.extractfile(chkpt_member).read()  
+                    state_path   = os.path.join('streams',
+                                                stream_id,'state.xml.gz')
 
-                    with open(chkpt_path,'ab') as chkpt_file:
-                        chkpt_file.write(checkpoint)
+                    with open(state_path,'wb') as chkpt_file:
+                        chkpt_file.write(state)
                     frames_path = os.path.join('streams', stream_id, 
                                                'frames.xtc')
                     with open(buffer_path,'rb') as src:
@@ -132,13 +143,13 @@ class FrameHandler(tornado.web.RequestHandler):
             return self.write('Bad Request')
 
     def get(self):
-        ''' CORE - Fetch first frame. Shared_token is set by the CC. Firstly,
-            a request is made to the CC, which keeps a priority queue of all 
-            the streams. The stream is deemed active, and a heartbeat starts, 
-            the CC sets the hash for 'active_stream'+stream_id via redis.
+        ''' CORE - The core calls this method to retrieve a frame only after
+            first going to CC to get a shared_token. The CC initializes the
+            necessary redis internals, starts a heartbeat, and sets the hash.
+            'active_stream'+stream_id.
 
             REQUEST:
-            shared_token: token #
+            shared_token: token # used for Core identification
 
             REPLY:
             200 - send binaries state/system/integrator
