@@ -17,8 +17,6 @@ import time
 import traceback
 import shutil
 
-CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
-
 # [ STREAMS ]
 
 # SET   KEY     'streams'               | set of streams owned by this ws     
@@ -63,6 +61,9 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 # [ ] Stats
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
+
+
+CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 ws_redis = None
 
@@ -391,11 +392,13 @@ def check_heartbeats():
         ws_redis.srem('active_streams', *dead_streams)
         ws_redis.delete(*('active_stream:'+s for s in dead_streams))
         for dead_stream in dead_streams:
-            # 2. Remove buffer file
+            # 2. Clear buffer file
             buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
             if os.path.exists(buffer_path):
                 with open(buffer_path,'w') as buffer_file:
                     pass
+
+        # TODO: inform CC that this stream died
 
 def clean_exit(signal, frame):
     print 'shutting down redis...'

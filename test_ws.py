@@ -384,9 +384,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         headers = {
             'download_token' : dtoken
         }
-
         resp = self.fetch('/stream', headers=headers, method='GET')
-
         self.assertEqualHash(true_frames, resp.body)
 
 if __name__ == '__main__':
