@@ -148,16 +148,36 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.assertEqual(f.read(),frame_binary1+frame_binary2)
         if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
             raise Exception('Checkpoint state file missing!')
-        # Test that disabling the stream works as intended
+        # Make sure we can't POST if stream is disabled
         self.redis_client.hset('stream:'+stream_id,'status','DISABLED')
+        frame_binary1 = os.urandom(1024)
+        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+        self.assertEqual(resp.code, 400)
+        self.redis_client.hset('stream:'+stream_id,'status','OK')
+        frame_binary1 = os.urandom(1024)
+        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+        self.assertEqual(resp.code, 200)
+        # Test POSTing an error 
+        headers['error_code'] = 'BadState'
+        resp = self.fetch('/frame', headers=headers, method='POST', body='')
+        self.assertEqual(resp.code, 400)
+        # Make sure we can no longer POST to this stream
+        headers = {'shared_token' : token_id}
+        frame_binary1 = os.urandom(1024)
+        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
+        resp = self.fetch('/frame', headers=headers, 
+                          method='POST', body=tar_out.getvalue())
+        rc = self.redis_client
+        self.assertFalse(rc.sismember('shared_tokens',token_id))
+        self.assertFalse(rc.exists('shared_token:'+token_id+':stream'))
+        self.assertFalse(rc.sismember('active_streams',stream_id))
+        self.assertFalse(rc.exists('active_stream:'+stream_id))
+        self.assertEqual(rc.hget('stream:'+stream_id,'error_count'),str(1))
         
-        
-
-        # re-enable logic needs to check error_count
-
-        # Test throwing an error 5 times, then 10 times
-
-
     def test_heartbeat(self):
         token_id = str(uuid.uuid4())
         stream_id = str(uuid.uuid4())

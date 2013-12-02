@@ -69,6 +69,9 @@ ws_redis = None
 
 def deactivate_stream(dead_stream):
     # 2. Clear buffer file
+    shared_token = ws_redis.hget('active_stream:'+dead_stream,'shared_token')
+    ws_redis.srem('shared_tokens',shared_token)
+    ws_redis.delete('shared_token:'+shared_token+':stream')
     ws_redis.delete('active_stream:'+dead_stream)
     ws_redis.srem('active_streams', dead_stream)
     buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
@@ -110,14 +113,17 @@ class FrameHandler(tornado.web.RequestHandler):
         try:
             token = self.request.headers['shared_token']
             stream_id = ws_redis.get('shared_token:'+token+':stream')
+            if not stream_id:
+                self.set_status(400)
+                return
             if ws_redis.hget('stream:'+stream_id,'status') != 'OK':
                 self.set_status(400)
-                return self.write('Stream Disabled')
-            if 'error_state' in self.request.headers:
+                return self.write('Stream status not OK')
+            if 'error_code' in self.request.headers:
                 self.set_status(400)
                 errors = ws_redis.hincrby('stream:'+stream_id,'error_count',1)
-                if errors > self._max_error_count:
-                    deactivate_stream(stream_id)
+                #if errors > self._max_error_count:
+                deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
             ws_redis.hset('stream:'+stream_id,'error_count',0)
             tar_string = cStringIO.StringIO(self.request.body)

@@ -240,9 +240,12 @@ class StreamHandler(tornado.web.RequestHandler):
         response = requests.post('')
 
     def put(self):
-        ''' PGI: Stop a particular stream
-            A stream is stopped by sending a WS redis request directly '''
-        
+        ''' PGI: Enable/Disable a particular stream
+            A stream is Enable/Disabled by sending a WS redis request directly 
+            However, if stream's error_count is > 10 then it cannot be ENABLED
+
+            '''
+
         print self.request.body
 
     def delete(self):
