@@ -22,7 +22,8 @@ import shutil
 # SET   KEY     'streams'               | set of streams owned by this ws     
 # HASH  KEY     'stream:'+id    
 #       FIELD   'frames'                | number of frames in frames.xtc        
-#       FIELD   'status'                | 'OK', 'DISABLED', 'ERROR'    
+#       FIELD   'status'                | 'OK', 'DISABLED'
+#       FIELD   'error_count'           | number of consecutive errors
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 #       FIELD   'steps_per_frame'       | (optional)
@@ -40,11 +41,11 @@ import shutil
 
 # [ MISC ]
 
-# ZSET  KEY     'heartbeats'                | { stream_id : expire_time }
+# ZSET  KEY     'heartbeats'                   | { stream_id : expire_time }
 # SET   KEY     'download_token:'+id+':stream' | stream the token maps to   
-# SET   KEY     'shared_tokens'             | size == active_streams
-# STRNG KEY     'shared_token:'+id+':stream'| reverse mapping
-# SET   KEY     'file_hashes'               | files that exist in /files
+# SET   KEY     'shared_tokens'                | size == active_streams
+# STRNG KEY     'shared_token:'+id+':stream'   | reverse mapping
+# SET   KEY     'file_hashes'                  | files that exist in /files
 
 # Expiration mechanism:
 # hearbeats is a sorted set. A POST to ws/update extends expire_time in 
@@ -62,18 +63,42 @@ import shutil
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
-
 CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 ws_redis = None
 
+def deactivate_stream(dead_stream):
+    # 2. Clear buffer file
+    ws_redis.delete('active_stream:'+dead_stream)
+    ws_redis.srem('active_streams', dead_stream)
+    buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
+    if os.path.exists(buffer_path):
+        with open(buffer_path,'w') as buffer_file:
+            pass
+
+    # TODO: inform CC that this stream died
+    # Send if and only if stream is in status 'OK'
+
 class FrameHandler(tornado.web.RequestHandler):
+    def initialize(self, max_error_count=10):
+        ''' Each heartbeat received by the core increments the timer by
+            increment amount. Defaults to once every 30 minutes '''
+        self._max_error_count = max_error_count
+
     def post(self):
         ''' CORE - Used by the core to add a frame
 
             REQ Parameters:
         
-            HEADER { 'token_id' : unique_id } 
+            HEADER { 'token_id'      : unique_id } 
+            HEADER { 'error_state'   : status_code }    # optional
+            HEADER { 'error_message' : error_message }  # optional
+            
+            Valid values for error:
+                - 'InitError'      | failed to initialize
+                - 'FailedRefCheck' | failed check against reference
+                - 'BadState'       | bad state (Bad Forces, NaNs, Etc)
+
             BODY   binary_tar # a binary tar file containing filenames:
                               # 'frame.xtc', a single xtc frame
                               # state.xml.gz', checkpoint file
@@ -82,10 +107,19 @@ class FrameHandler(tornado.web.RequestHandler):
             200 - OK 
             400 - Bad Request
         '''
-
         try:
             token = self.request.headers['shared_token']
             stream_id = ws_redis.get('shared_token:'+token+':stream')
+            if ws_redis.hget('stream:'+stream_id,'status') != 'OK':
+                self.set_status(400)
+                return self.write('Stream Disabled')
+            if 'error_state' in self.request.headers:
+                self.set_status(400)
+                errors = ws_redis.hincrby('stream:'+stream_id,'error_count',1)
+                if errors > self._max_error_count:
+                    deactivate_stream(stream_id)
+                return self.write('Bad state.. terminating')
+            ws_redis.hset('stream:'+stream_id,'error_count',0)
             tar_string = cStringIO.StringIO(self.request.body)
             with tarfile.open(mode='r', fileobj=tar_string) as tarball:
                 # Extract the frame
@@ -100,6 +134,7 @@ class FrameHandler(tornado.web.RequestHandler):
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
                 # make sure time step has increased?
+                # If the stream NaNs 
 
                 # See if state is present, if so, the buffer.xtc is
                 # appended to the frames.xtc
@@ -215,15 +250,25 @@ class StreamHandler(tornado.web.RequestHandler):
             The WS checks to see if this request is valid, and generates a 
             unique stream_id if so, and returns the id back to the CC.
 
-            Ex.
+            Ex1. Three binaries
             files = {
                 'state_bin' : state_bin,
                 'system_bin' : system_bin,
                 'integrator_bin' : integrator_bin
             }
+            Ex2. System hash and integrator hash, (note State must be bin)
+            files = {
+                'state_bin' : state_bin,
+                'system_hash' : system_hash,
+                'integrator_bin' : integrator_bin
+            }
             prep = requests.Request('POST','http://url',files=files).prepare()
             resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
+
+            Response code: 200 - OK
+                           400 - BAD REQUEST
+                           401 - UNAUTHORIZED
             '''
         if not self.request.remote_ip in CCs:
             print self.request.remote_ip
@@ -273,7 +318,6 @@ class StreamHandler(tornado.web.RequestHandler):
                 redis_pipe.hset('stream:'+stream_id, k, v)
             redis_pipe.execute()
             self.set_status(200)
-
             return self.write(stream_id)
         except KeyError as e:
             print repr(e)
@@ -286,11 +330,9 @@ class StreamHandler(tornado.web.RequestHandler):
         ''' PRIVATE - Download a stream. 
             The CC first creates a token given to the Core for identification.
             The token and WS's IP is then sent back to the ST interface
-
             Parameters:
-
-            stream_id: uuid #
-
+            download_token: download_token automatically maps to the right
+                            stream_id
             RESPONDS with the appropriate frames.
         '''
         self.set_status(400)
@@ -320,7 +362,7 @@ class StreamHandler(tornado.web.RequestHandler):
         print 'foo'
 
 class HeartbeatHandler(tornado.web.RequestHandler):
-    def initialize(self, redis_client=ws_redis, increment=30*60):
+    def initialize(self, increment=30*60):
         ''' Each heartbeat received by the core increments the timer by
             increment amount. Defaults to once every 30 minutes '''
         self._increment = increment
@@ -365,17 +407,8 @@ def check_heartbeats():
         into the appropriate queue '''
     dead_streams = ws_redis.zrangebyscore('heartbeats', 0, time.time())
     if dead_streams:
-        # 1. Remove relevant keys
-        ws_redis.srem('active_streams', *dead_streams)
-        ws_redis.delete(*('active_stream:'+s for s in dead_streams))
         for dead_stream in dead_streams:
-            # 2. Clear buffer file
-            buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
-            if os.path.exists(buffer_path):
-                with open(buffer_path,'w') as buffer_file:
-                    pass
-
-        # TODO: inform CC that this stream died
+            deactivate_stream(dead_stream)
 
 def clean_exit(signal, frame):
     print 'shutting down redis...'

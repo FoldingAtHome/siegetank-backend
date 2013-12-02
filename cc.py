@@ -236,10 +236,14 @@ class StreamHandler(tornado.web.RequestHandler):
         random_ws_id = cc_redis.srandmember('wss')
         # record the WSs used by this target
         cc_redis.sadd('target:'+target_id+':wss', random_ws_id)
-
         random_ws_ip = cc.redis.get('ws:'+target_id+':ip')
-
         response = requests.post('')
+
+    def put(self):
+        ''' PGI: Stop a particular stream
+            A stream is stopped by sending a WS redis request directly '''
+        
+        print self.request.body
 
     def delete(self):
         ''' PGI: Delete a particular stream - (Request Forwarded to WS) '''

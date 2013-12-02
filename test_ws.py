@@ -85,6 +85,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                           body=prep.body)
         self.assertEqual(resp.code, 200)
         stream_id = resp.body
+        # mimic what CC does to prep a stream for a GET
         token_id = str(uuid.uuid4())
         self.redis_client.sadd('active_streams',stream_id)
         self.redis_client.hset('active_stream:'+stream_id, 
@@ -146,7 +147,16 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         with open(os.path.join(stream_dir,'frames.xtc'), 'rb') as f:
             self.assertEqual(f.read(),frame_binary1+frame_binary2)
         if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
-            raise Exception('Checkpoint State file missing!')
+            raise Exception('Checkpoint state file missing!')
+        # Test that disabling the stream works as intended
+        self.redis_client.hset('stream:'+stream_id,'status','DISABLED')
+        
+        
+
+        # re-enable logic needs to check error_count
+
+        # Test throwing an error 5 times, then 10 times
+
 
     def test_heartbeat(self):
         token_id = str(uuid.uuid4())
