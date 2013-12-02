@@ -100,7 +100,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                                'start_time', time.time())
         self.redis_client.hset('active_stream:'+stream_id, 
                                'steps', 0)
-        self.redis_client.sadd('shared_tokens',token_id)
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
         self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
         headers  = {'shared_token' : token_id}
@@ -187,7 +186,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/frame', headers=headers, 
                           method='POST', body=tar_out.getvalue())
         rc = self.redis_client
-        self.assertFalse(rc.sismember('shared_tokens',token_id))
         self.assertFalse(rc.exists('shared_token:'+token_id+':stream'))
         self.assertFalse(rc.sismember('active_streams',stream_id))
         self.assertFalse(rc.exists('active_stream:'+stream_id))
@@ -390,7 +388,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                                'start_time', time.time())
         self.redis_client.hset('active_stream:'+stream_id, 
                                'steps', 0)
-        self.redis_client.sadd('shared_tokens',token_id)
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
         self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
         headers  = {'shared_token' : token_id}

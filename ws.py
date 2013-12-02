@@ -26,6 +26,7 @@ import shutil
 #       FIELD   'error_count'           | number of consecutive errors
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
+#       FIELD   'download_token'        | used if download desired
 #       FIELD   'steps_per_frame'       | (optional)
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
@@ -43,7 +44,6 @@ import shutil
 
 # ZSET  KEY     'heartbeats'                   | { stream_id : expire_time }
 # SET   KEY     'download_token:'+id+':stream' | stream the token maps to   
-# SET   KEY     'shared_tokens'                | size == active_streams
 # STRNG KEY     'shared_token:'+id+':stream'   | reverse mapping
 # SET   KEY     'file_hashes'                  | files that exist in /files
 
@@ -63,14 +63,16 @@ import shutil
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
+# General WS config
+# Block ALL ports except port 80
+# Redis port is only available to CC's IP on the intranet
+
 CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 ws_redis = None
 
 def deactivate_stream(dead_stream):
-    # 2. Clear buffer file
     shared_token = ws_redis.hget('active_stream:'+dead_stream,'shared_token')
-    ws_redis.srem('shared_tokens',shared_token)
     ws_redis.delete('shared_token:'+shared_token+':stream')
     ws_redis.delete('active_stream:'+dead_stream)
     ws_redis.srem('active_streams', dead_stream)
@@ -79,8 +81,8 @@ def deactivate_stream(dead_stream):
         with open(buffer_path,'w') as buffer_file:
             pass
 
-    # TODO: inform CC that this stream died
-    # Send if and only if stream is in status 'OK'
+def push_stream_to_cc(stream_id):
+    pass
 
 class FrameHandler(tornado.web.RequestHandler):
     def initialize(self, max_error_count=10):
@@ -208,7 +210,7 @@ class FrameHandler(tornado.web.RequestHandler):
         '''
         try:
             shared_token = self.request.headers['shared_token']
-            if not ws_redis.sismember('shared_tokens',shared_token):
+            if not ws_redis.exists('shared_token:'+shared_token+':stream'):
                 self.set_status(401)
                 return self.write('Unknown token')
             stream_id  = ws_redis.get('shared_token:'+shared_token+':stream')
@@ -365,6 +367,32 @@ class StreamHandler(tornado.web.RequestHandler):
 
     def delete(self):
         ''' PRIVATE - Delete a stream. '''
+        if not self.request.remote_ip in CCs:
+            print self.request.remote_ip
+            self.set_status(401)
+            return self.write('not authorized')
+
+        try:
+            if 'stream_id' in self.request.headers['stream_id']:
+                stream_id = self.request.headers['stream_id']
+                if ws_redis.sismember('streams', stream_id):
+
+                    # remove temporary
+                    deactivate_stream(stream_id)
+
+                    ws_redis.delete('stream:'+stream_id)
+                    ws_redis.srem('streams',stream_id)
+                    
+                else:
+                    self.set_status(400)
+                    print 'FATAL: Tried deleting a non existing stream on WS'
+                    return self.write('stream not found')
+
+
+        except Exception as e:
+            self.set_status(400)
+            return
+
         print 'foo'
 
 class HeartbeatHandler(tornado.web.RequestHandler):
