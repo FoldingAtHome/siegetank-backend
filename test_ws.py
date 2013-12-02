@@ -171,27 +171,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
             raise Exception('Checkpoint state file missing!')
         
-    def test_disable_stream(self):
-        res = self.test_assign_stream()
-        stream_id = res[0]
-        token_id  = res[1]
-        headers   = {'shared_token' : token_id}
-
-        # Test we can't POST if stream is disabled
-        self.redis_client.hset('stream:'+stream_id,'status','DISABLED')
-        frame_binary1 = os.urandom(1024)
-        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 400)
-        self.redis_client.hset('stream:'+stream_id,'status','OK')
-        frame_binary1 = os.urandom(1024)
-        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 200)
-
-    def test_post_bad_stream(self):
+    def test_post_bad_frame(self):
         # Test POSTing an error 
         res = self.test_assign_stream()
         stream_id = res[0]
@@ -212,7 +192,27 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertFalse(rc.sismember('active_streams',stream_id))
         self.assertFalse(rc.exists('active_stream:'+stream_id))
         self.assertEqual(rc.hget('stream:'+stream_id,'error_count'),str(1))
-        
+
+    def test_disable_stream(self):
+        res = self.test_assign_stream()
+        stream_id = res[0]
+        token_id  = res[1]
+        headers   = {'shared_token' : token_id}
+
+        # Test we can't POST if stream is disabled
+        self.redis_client.hset('stream:'+stream_id,'status','DISABLED')
+        frame_binary1 = os.urandom(1024)
+        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+        self.assertEqual(resp.code, 400)
+        self.redis_client.hset('stream:'+stream_id,'status','OK')
+        frame_binary1 = os.urandom(1024)
+        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
+        resp = self.fetch('/frame', headers=headers, 
+                    method='POST', body=tar_out.getvalue())
+        self.assertEqual(resp.code, 200)
+
     def test_heartbeat(self):
         token_id = str(uuid.uuid4())
         stream_id = str(uuid.uuid4())
@@ -330,7 +330,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         os.remove(os.path.join('files',system_hash))
         os.remove(os.path.join('files',integrator_hash))
 
-    def test_bad_post_stream(self):
+    def test_post_bad_stream(self):
         system_bin     = 'system.xml.gz'
         state_bin      = 'state.xml.gz'
         integrator_bin = 'integrator.xml.gz'
@@ -401,7 +401,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         # NOTE: ONE-INDEXED, frame[0] not used for anything
         frame_binaries = [os.urandom(1024) for i in range(125)]
         chkpt_binary   = [os.urandom(2048) for i in range(2)]
-        # send frames 1-49, note 0th frame is not used
+        # send frames 1-49, note that 0th frame is not used
         for frame_binary in frame_binaries[1:50]:
             tar_out = _tar_strings([frame_binary], ['frame.xtc'])
             resp = self.fetch('/frame', headers=headers, 
