@@ -70,7 +70,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                                         dict(increment=self.increment))
                         ])
 
-    def test_frame(self):
+    def test_add_stream(self):
         # Add a stream
         system_bin      = str(uuid.uuid4())
         state_bin       = str(uuid.uuid4())
@@ -85,7 +85,11 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                           body=prep.body)
         self.assertEqual(resp.code, 200)
         stream_id = resp.body
-        # mimic what CC does to prep a stream for a GET
+        return stream_id, system_bin, state_bin, integrator_bin
+
+    def test_assign_stream(self):
+        stream_id, system_bin, state_bin, integrator_bin = \
+            self.test_add_stream()
         token_id = str(uuid.uuid4())
         self.redis_client.sadd('active_streams',stream_id)
         self.redis_client.hset('active_stream:'+stream_id, 
@@ -99,6 +103,17 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.sadd('shared_tokens',token_id)
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
         self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
+        headers  = {'shared_token' : token_id}
+        return stream_id, token_id, system_bin, state_bin, integrator_bin
+
+    def test_get_frame(self):
+        res = self.test_assign_stream()
+        stream_id      = res[0]
+        token_id       = res[1]
+        system_bin     = res[2]
+        state_bin      = res[3]
+        integrator_bin = res[4]
+
         headers  = {'shared_token' : token_id}
         # Test GET a job
         response = self.fetch('/frame', headers=headers, method='GET')  
@@ -114,6 +129,13 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                 if member.name == 'integrator.xml.gz':
                     self.assertEqual(tarball.extractfile(member).read(),
                                      integrator_bin)
+
+    def test_post_frame(self):
+        res            = self.test_assign_stream()
+        stream_id      = res[0]
+        token_id       = res[1]
+        headers        = {'shared_token' : token_id}
+
         # Test POST a single frame
         frame_binary1 = os.urandom(1024)
         tar_out = _tar_strings([frame_binary1],['frame.xtc'])
@@ -148,7 +170,14 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.assertEqual(f.read(),frame_binary1+frame_binary2)
         if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
             raise Exception('Checkpoint state file missing!')
-        # Make sure we can't POST if stream is disabled
+        
+    def test_disable_stream(self):
+        res = self.test_assign_stream()
+        stream_id = res[0]
+        token_id  = res[1]
+        headers   = {'shared_token' : token_id}
+
+        # Test we can't POST if stream is disabled
         self.redis_client.hset('stream:'+stream_id,'status','DISABLED')
         frame_binary1 = os.urandom(1024)
         tar_out = _tar_strings([frame_binary1],['frame.xtc'])
@@ -161,8 +190,14 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/frame', headers=headers, 
                     method='POST', body=tar_out.getvalue())
         self.assertEqual(resp.code, 200)
+
+    def test_post_bad_stream(self):
         # Test POSTing an error 
-        headers['error_code'] = 'BadState'
+        res = self.test_assign_stream()
+        stream_id = res[0]
+        token_id  = res[1]
+        headers   = {'shared_token' : token_id,
+                     'error_code'   : 'BadState'}
         resp = self.fetch('/frame', headers=headers, method='POST', body='')
         self.assertEqual(resp.code, 400)
         # Make sure we can no longer POST to this stream
