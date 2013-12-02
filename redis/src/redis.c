@@ -1918,11 +1918,14 @@ int processCommand(redisClient *c) {
         }
     }
 
-    /* Don't accept write commands if there are problems persisting on disk. */
+    /* Don't accept write commands if there are problems persisting on disk
+     * and if this is a master instance. */
     if (server.stop_writes_on_bgsave_err &&
         server.saveparamslen > 0
         && server.lastbgsave_status == REDIS_ERR &&
-        c->cmd->flags & REDIS_CMD_WRITE)
+        server.masterhost != NULL &&
+        (c->cmd->flags & REDIS_CMD_WRITE ||
+         c->cmd->proc == pingCommand))
     {
         flagTransaction(c);
         addReply(c, shared.bgsaveerr);
@@ -1930,7 +1933,7 @@ int processCommand(redisClient *c) {
     }
 
     /* Don't accept write commands if there are not enough good slaves and
-     * used configured the min-slaves-to-write option. */
+     * user configured the min-slaves-to-write option. */
     if (server.repl_min_slaves_to_write &&
         server.repl_min_slaves_max_lag &&
         c->cmd->flags & REDIS_CMD_WRITE &&

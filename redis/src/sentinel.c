@@ -1474,15 +1474,19 @@ void rewriteConfigSentinelOption(struct rewriteConfigState *state) {
  * On failure the function logs a warning on the Redis log. */
 void sentinelFlushConfig(void) {
     int fd;
+    int saved_hz = server.hz;
 
-    if (rewriteConfig(server.configfile) == -1) {
+    server.hz = REDIS_DEFAULT_HZ;
+    if (rewriteConfig(server.configfile) != -1) {
+        /* Rewrite succeded, fsync it. */
+        if ((fd = open(server.configfile,O_RDONLY)) != -1) {
+            fsync(fd);
+            close(fd);
+        }
+    } else {
         redisLog(REDIS_WARNING,"WARNING: Senitnel was not able to save the new configuration on disk!!!: %s", strerror(errno));
-        return;
     }
-    if ((fd = open(server.configfile,O_RDONLY)) != -1) {
-        fsync(fd);
-        close(fd);
-    }
+    server.hz = saved_hz;
     return;
 }
 
@@ -1609,9 +1613,8 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
         }
     }
     /* Clear the DISCONNECTED flags only if we have both the connections
-     * (or just the commands connection if this is a slave or a
-     * sentinel instance). */
-    if (ri->cc && (ri->flags & (SRI_SLAVE|SRI_SENTINEL) || ri->pc))
+     * (or just the commands connection if this is a sentinel instance). */
+    if (ri->cc && (ri->flags & SRI_SENTINEL || ri->pc))
         ri->flags &= ~SRI_DISCONNECTED;
 }
 
@@ -2654,6 +2657,11 @@ void sentinelReceiveIsMasterDownReply(redisAsyncContext *c, void *reply, void *p
             /* If the runid in the reply is not "*" the Sentinel actually
              * replied with a vote. */
             sdsfree(ri->leader);
+            if (ri->leader_epoch != r->element[2]->integer)
+                redisLog(REDIS_WARNING,
+                    "%s voted for %s %llu", ri->name,
+                    r->element[1]->str,
+                    (unsigned long long) r->element[2]->integer);
             ri->leader = sdsnew(r->element[1]->str);
             ri->leader_epoch = r->element[2]->integer;
         }
@@ -2731,12 +2739,9 @@ char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char
             master->leader, (unsigned long long) master->leader_epoch);
         /* If we did not voted for ourselves, set the master failover start
          * time to now, in order to force a delay before we can start a
-         * failover for the same master.
-         *
-         * The random addition is useful to desynchronize a bit the slaves
-         * and reduce the chance that no slave gets majority. */
+         * failover for the same master. */
         if (strcasecmp(master->leader,server.runid))
-            master->failover_start_time = mstime() + rand() % 2000;
+            master->failover_start_time = mstime();
     }
 
     *leader_epoch = master->leader_epoch;
@@ -3387,5 +3392,13 @@ void sentinelTimer(void) {
     sentinelRunPendingScripts();
     sentinelCollectTerminatedScripts();
     sentinelKillTimedoutScripts();
+
+    /* We continuously change the frequency of the Redis "timer interrupt"
+     * in order to desynchronize every Sentinel from every other.
+     * This non-determinism avoids that Sentinels started at the same time
+     * exactly continue to stay synchronized asking to be voted at the
+     * same time again and again (resulting in nobody likely winning the
+     * election because of split brain voting). */
+    server.hz = REDIS_DEFAULT_HZ + rand() % REDIS_DEFAULT_HZ;
 }
 
