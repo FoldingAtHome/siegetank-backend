@@ -449,6 +449,31 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', headers=headers, method='GET')
         self.assertEqualHash(true_frames, resp.body)
 
+    def test_deactive_stream(self):
+        pass
+
+    def test_delete_stream(self):
+        # create and assign a stream
+        res = self.test_assign_stream()
+        stream_id = res[0]
+        token_id  = res[1]
+        headers = { 'stream_id' : stream_id }
+        resp = self.fetch('/stream', headers=headers, method='DELETE')
+        self.assertEqual(resp.code, 200)
+        rc = self.redis_client
+        # check memory
+        self.assertFalse(rc.sismember('active_streams', stream_id))
+        self.assertFalse(rc.exists('active_stream:'+stream_id))
+        self.assertFalse(rc.sismember('streams',stream_id))
+        self.assertFalse(rc.exists('stream:'+stream_id))
+        self.assertFalse(rc.exists('download_token:'+stream_id+':stream'))
+        self.assertFalse(rc.exists('shared_token:'+stream_id+':stream'))
+        # check disk
+        stream_path = os.path.join('streams',stream_id)
+
+        self.assertFalse(os.path.exists(stream_path))
+
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
     unittest.TextTestRunner(verbosity=3).run(suite)

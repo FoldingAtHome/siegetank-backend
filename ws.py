@@ -366,34 +366,32 @@ class StreamHandler(tornado.web.RequestHandler):
             print e
 
     def delete(self):
+        self.set_status(400)
         ''' PRIVATE - Delete a stream. '''
         if not self.request.remote_ip in CCs:
             print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
-
         try:
-            if 'stream_id' in self.request.headers['stream_id']:
+            if 'stream_id' in self.request.headers:
                 stream_id = self.request.headers['stream_id']
                 if ws_redis.sismember('streams', stream_id):
-
-                    # remove temporary
+                    # remove stream from memory
                     deactivate_stream(stream_id)
-
+                    ws_redis.delete('download_token:'+stream_id+':stream')
                     ws_redis.delete('stream:'+stream_id)
                     ws_redis.srem('streams',stream_id)
-                    
+                    # remove stream from disk
+                    shutil.rmtree(os.path.join('streams',stream_id))
+                    self.set_status(200)
+                    return
                 else:
-                    self.set_status(400)
-                    print 'FATAL: Tried deleting a non existing stream on WS'
+                    print 'FATAL: tried to delete a non existing stream on WS'
                     return self.write('stream not found')
-
-
+            else:
+                return self.write('Missing data')
         except Exception as e:
-            self.set_status(400)
             return
-
-        print 'foo'
 
 class HeartbeatHandler(tornado.web.RequestHandler):
     def initialize(self, increment=30*60):
