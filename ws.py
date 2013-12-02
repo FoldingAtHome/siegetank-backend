@@ -204,22 +204,17 @@ class FrameHandler(tornado.web.RequestHandler):
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):       
         ''' PRIVATE - Add new stream(s) to WS. The POST method on this URI
-            can only be accessed by known CCs (ip restricted) 
-            Parameters:
+            can only be accessed by known CCs (ip restricted)
 
             While JSON would be nice, file transfers are handled differently
             in order to avoid the base64 overhead. The encoding should use a
             multi-part/form-data. This is inspired by Amazon AWS S3's method
             of POSTing objects. 
 
-            Note: Base64 incurs a 33 percent size overhead. Instead we do not
-            encode and set Content-Type: multipart/form-data to directly 
-            transfer the binaries.
-
             The required files are: system, state, and integrator. The CC can
             query the redis db 'file_hashes' to see if some of files exist. CC
             can choose send in either 'system_hash', or 'system_bin'. The CC
-            queries the WS's own list of hashes to make sure.
+            queries the WS's own list of hashes to make sure. 
 
             The WS checks to see if this request is valid, and generates a 
             unique stream_id if so, and returns the id back to the CC.
