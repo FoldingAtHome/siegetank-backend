@@ -245,12 +245,12 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         # verify redis entries
         for stream in stream_ids:
             frame_count = self.redis_client.hget('stream:'+stream, 'frames')
-            state = self.redis_client.hget('stream:'+stream, 'state')
+            status = self.redis_client.hget('stream:'+stream, 'status')
             test_system_hash = self.redis_client.hget('stream:'+stream,
                                                  'system_hash')
             test_integrator_hash = self.redis_client.hget('stream:'+stream,
                                                  'integrator_hash')
-            self.assertEqual(state,'0')
+            self.assertEqual(status,'OK')
             self.assertEqual(frame_count,'0')
             self.assertEqual(system_hash, test_system_hash)
             self.assertEqual(integrator_hash, test_integrator_hash)

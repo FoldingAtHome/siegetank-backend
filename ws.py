@@ -22,7 +22,7 @@ import shutil
 # SET   KEY     'streams'               | set of streams owned by this ws     
 # HASH  KEY     'stream:'+id    
 #       FIELD   'frames'                | number of frames in frames.xtc        
-#       FIELD   'state'                 | 0 - OK, 1 - disabled, 2 - error    
+#       FIELD   'status'                | 'OK', 'DISABLED', 'ERROR'    
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 #       FIELD   'steps_per_frame'       | (optional)
@@ -87,20 +87,16 @@ class FrameHandler(tornado.web.RequestHandler):
             token = self.request.headers['shared_token']
             stream_id = ws_redis.get('shared_token:'+token+':stream')
             tar_string = cStringIO.StringIO(self.request.body)
-
             with tarfile.open(mode='r', fileobj=tar_string) as tarball:
                 # Extract the frame
                 frame_member = tarball.getmember('frame.xtc')
                 frame_binary = tarball.extractfile(frame_member).read()
-
                 buffer_path = os.path.join('streams',stream_id,'buffer.xtc')
                 with open(buffer_path,'ab') as buffer_file:
                     buffer_file.write(frame_binary)
-
                 # Increment buffer frames by 1
                 ws_redis.hincrby('active_stream:'+stream_id, 
                                  'buffer_frames',1)
-
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
                 # make sure time step has increased?
@@ -112,7 +108,6 @@ class FrameHandler(tornado.web.RequestHandler):
                     state        = tarball.extractfile(chkpt_member).read()  
                     state_path   = os.path.join('streams',
                                                 stream_id,'state.xml.gz')
-
                     with open(state_path,'wb') as chkpt_file:
                         chkpt_file.write(state)
                     frames_path = os.path.join('streams', stream_id, 
@@ -124,20 +119,18 @@ class FrameHandler(tornado.web.RequestHandler):
                                 if not chars:
                                     break
                                 dest.write(chars)
-
-                    # this does need to be done atomically as no other client will
-                    # modify the active_streams key except this ws
-                    ws_redis.hincrby('stream:'+stream_id,'frames',
-                        ws_redis.hget('active_stream:'+stream_id,'buffer_frames'))
-
-                    ws_redis.hset('active_stream:'+stream_id,'buffer_frames',0)
-
+                    # this need not be done atomically since no other client 
+                    # will modify the active_streams key except this ws
+                    buf_frames = ws_redis.hget('active_stream:'+stream_id,
+                                               'buffer_frames')    
+                    ws_redis.hincrby('stream:'+stream_id,'frames',buf_frames)
+                    ws_redis.hset('active_stream:'+stream_id,
+                                  'buffer_frames',0)
                     # clear the buffer
                     with open(buffer_path,'w') as buffer_file:
                         pass
                 except KeyError as e:
                     pass
-
         except KeyError as e:
             print repr(e)
             ex_type, ex, tb = sys.exc_info()
@@ -158,20 +151,19 @@ class FrameHandler(tornado.web.RequestHandler):
             200 - send binaries state/system/integrator
 
             We need to be extremely careful about checkpoints and frames, as 
-            it is important we avoid writing duplicate frames on the first step 
-            for the core. We use the follow scheme:
+            it is important we avoid writing duplicate frames on the first 
+            step for the core. We use the follow scheme:
 
                   ------------------------------------------------------------
                   |c       core 1      |c|              core 2           |c|
-                  ---                  --|--                           -----
+                  ---                  --|--                             -----
             frame: x|1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
                     ---------------------| ------------------------------- ---
         
             When a core fetches a checkpoint, it makes sure to NOT write the
-            first frame (equivalent to the frame of the fetched state.xml file).
-            On every subsequent checkpoint, both the frame and the checkpoint are
-            sent back to the workserver.
-
+            first frame (equivalent to the frame of fetched state.xml file).
+            On every subsequent checkpoint, both the frame and the checkpoint 
+            are sent back to the workserver.
         '''
         try:
             shared_token = self.request.headers['shared_token']
@@ -179,6 +171,10 @@ class FrameHandler(tornado.web.RequestHandler):
                 self.set_status(401)
                 return self.write('Unknown token')
             stream_id  = ws_redis.get('shared_token:'+shared_token+':stream')
+            # return if stream is stopped by PG user or NaN'd
+            if ws_redis.hget('stream:'+stream_id,'status') != 'OK':
+                self.set_status(400)
+                return self.write('Stream Disabled')
             sys_hash   = ws_redis.hget('stream:'+stream_id,'system_hash')
             intg_hash  = ws_redis.hget('stream:'+stream_id,'integrator_hash')
             sys_file   = os.path.join('files',sys_hash)
@@ -272,7 +268,7 @@ class StreamHandler(tornado.web.RequestHandler):
                 open(os.path.join('files',f_hash),'w').write(f_bin)
             redis_pipe.sadd('streams',stream_id)
             redis_pipe.hset('stream:'+stream_id, 'frames', 0)
-            redis_pipe.hset('stream:'+stream_id, 'state', 0)
+            redis_pipe.hset('stream:'+stream_id, 'status', 'OK')
             for k,v in file_hashes.iteritems():
                 redis_pipe.hset('stream:'+stream_id, k, v)
             redis_pipe.execute()
@@ -288,29 +284,14 @@ class StreamHandler(tornado.web.RequestHandler):
 
     def get(self):
         ''' PRIVATE - Download a stream. 
-            The CC creates a token given to the Core for identification
-            purposes.
+            The CC first creates a token given to the Core for identification.
+            The token and WS's IP is then sent back to the ST interface
 
             Parameters:
 
             stream_id: uuid #
 
-            RESPONDS with a state.xml 
-  
-            Useful snippet for streaming files:
-
-            def get(self):
-                file_name = 'file.ext'
-                buf_size = 4096
-                self.set_header('Content-Type', 'application/octet-stream')
-                self.set_header('Content-Disposition', 'attachment; filename=' + file_name)
-                with open(file_name, 'r') as f:
-                    while True:
-                        data = f.read(buf_size)
-                        if not data:
-                            break
-                        self.write(data)
-                self.finish()
+            RESPONDS with the appropriate frames.
         '''
         self.set_status(400)
         try:
@@ -320,7 +301,8 @@ class StreamHandler(tornado.web.RequestHandler):
                 filename = os.path.join('streams',stream_id,'frames.xtc')
                 buf_size = 4096
                 self.set_header('Content-Type', 'application/octet-stream')
-                self.set_header('Content-Disposition', 'attachment; filename=' + filename)
+                self.set_header('Content-Disposition', 
+                                'attachment; filename=' + filename)
                 with open(filename, 'r') as f:
                     while True:
                         data = f.read(buf_size)
