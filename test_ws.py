@@ -235,7 +235,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
         self.assertFalse(
             self.redis_client.sismember('active_streams',stream_id) and
-            self.redis_client.hvals('active_stream:'+stream_id))
+            self.redis_client.exists('active_stream:'+stream_id) and 
+            self.redis_client.exists('shared_token:'+token_id))
 
     def test_post_stream(self):
         system_bin     = 'system.xml.gz'
@@ -448,9 +449,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         }
         resp = self.fetch('/stream', headers=headers, method='GET')
         self.assertEqualHash(true_frames, resp.body)
-
-    def test_deactive_stream(self):
-        pass
 
     def test_delete_stream(self):
         # create and assign a stream
