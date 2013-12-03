@@ -109,7 +109,7 @@ def get_idle_ws():
     return ws_id, ws_ip, redis_client
         # test and see if this WS is still alive
 
-def activate_stream(stream_id, token_id, ws_rc):
+def activate_stream(stream_id, token_id, increment, ws_rc):
     ''' Activates the stream on the WS via ws_rc '''
     pass
 

@@ -103,7 +103,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.hset('active_stream:'+stream_id, 
                                'steps', 0)
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
-        self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
+        # set a really long timer to make sure this doesn't die half way
+        self.redis_client.zadd('heartbeats',stream_id,ws_time+600)
         return stream_id, token_id, system_bin, state_bin, integrator_bin
 
     def test_get_frame(self):
@@ -219,27 +220,23 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
         # test sending request to uri: /heartbeat extends the expiration time
         for iteration in range(10):
-            start_time = time.time()
+            ws_start_time = self.redis_client.time()[0]
             response = self.fetch('/heartbeat', method='POST',
                                 body=json.dumps({'shared_token' : token_id}))
             hb = self.redis_client.zscore('heartbeats',stream_id)
-            self.assertAlmostEqual(start_time+self.increment, hb, places=1)
-
+            self.assertAlmostEqual(ws_start_time+self.increment, hb, places=1)
         # test expirations
         response = self.fetch('/heartbeat', method='POST',
                     body=json.dumps({'shared_token' : token_id}))
         self.redis_client.sadd('active_streams',stream_id)
         self.redis_client.hset('active_stream:'+stream_id, 
                                'shared_token', token_id)
-
         self.assertTrue(
             self.redis_client.sismember('active_streams',stream_id) and
             self.redis_client.exists('active_stream:'+stream_id) and 
             self.redis_client.exists('shared_token:'+token_id+':stream'))
-
         time.sleep(self.increment+1)
         ws.check_heartbeats() 
-
         self.assertFalse(
             self.redis_client.sismember('active_streams',stream_id) and
             self.redis_client.exists('active_stream:'+stream_id) and 
@@ -368,37 +365,10 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                          hashlib.md5(string2).hexdigest())
 
     def test_get_stream(self):
-        # POST a stream
-        system_bin     = os.urandom(1024)
-        state_bin      = os.urandom(1024)
-        integrator_bin = os.urandom(1024)
-        system_hash = hashlib.md5(system_bin).hexdigest()
-        integrator_hash = hashlib.md5(integrator_bin).hexdigest()
-        # Test send binaries of system.xml and integrator
-        files = {
-            'state_bin' : state_bin,
-            'system_bin' : system_bin,
-            'integrator_bin' : integrator_bin
-        }
-        prep = requests.Request('POST','http://myurl',files=files).prepare()
-        resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
-        self.assertEqual(resp.code, 200)
-        stream_id = resp.body
-        # Assign Stream
-        token_id = str(uuid.uuid4())
-        self.redis_client.sadd('active_streams',stream_id)
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'shared_token', token_id)
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'donor', 'proteneer')  
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'start_time', time.time())
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'steps', 0)
-        self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
-        self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
-        headers  = {'shared_token' : token_id}
+        res            = self.test_assign_stream()
+        stream_id      = res[0]
+        token_id       = res[1]
+        headers        = {'shared_token' : token_id}
         # GET a checkpoint.xml
         resp = self.fetch('/frame', headers=headers, method='GET')
         self.assertEqual(resp.code, 200)
