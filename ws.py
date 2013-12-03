@@ -17,18 +17,22 @@ import hashlib
 import time
 import traceback
 import shutil
+import ConfigParser
 
-# [ STREAMS ]
+# [ STREAMS ]                           | persist on restart
 
 # SET   KEY     'streams'               | set of streams owned by this ws     
-# HASH  KEY     'stream:'+id    
+# HASH  KEY     'stream:'+id            |
 #       FIELD   'frames'                | number of frames in frames.xtc        
 #       FIELD   'status'                | 'OK', 'DISABLED'
 #       FIELD   'error_count'           | number of consecutive errors
 #       FIELD   'system_hash'           | hash for system.xml.gz
 #       FIELD   'integrator_hash'       | hash for integrator.xml.gz
 #       FIELD   'download_token'        | used if download desired
+#       FIELD   'cc_id'                 | which cc the stream came from
 #       FIELD   'steps_per_frame'       | (optional)
+
+# [ ACTIVE STREAMS ]                    | deleted on restart
 
 # SET   KEY     'active_streams'        | active streams owned by the ws 
 # HASH  KEY     'active_stream:'+id     | 
@@ -37,7 +41,15 @@ import shutil
 #       FIELD   'donor'                 | which donor the stream belongs to  
 #       FIELD   'steps'                 | steps completed thus far
 
-# Not implemented yet
+# [ COMMAND CENTER ]                    | reconfigured on restart
+
+# SET   KEY     'ccs'                   | set of command center ids
+# HASH  KEY     'cc:'+id                | 
+#       FIELD   'ip'                    | ip of the CC
+#       FIELD   'http_port'             | http_port of the CC
+# STRNG KEY     'cc_ip:'+ip+':id'       | id given CC's ip
+# 
+# Not implemented yet (shove to stats server later on)
 # LIST  KEY     'stat:'+id+':donor'     | donor statistics
 # LIST  KEY     'stat:'+id+':frames'    | cardinality equal to above
 
@@ -47,6 +59,10 @@ import shutil
 # SET   KEY     'download_token:'+id+':stream' | stream the token maps to   
 # STRNG KEY     'shared_token:'+id+':stream'   | reverse mapping
 # SET   KEY     'file_hashes'                  | files that exist in /files
+
+# download_token: issued by CC, set to expire after 10 days
+# shared_token: issued by CC, deleted by heartbeat
+# heartbeats: each key deleted on restart, and by check_heartbeats
 
 # Expiration mechanism:
 # hearbeats is a sorted set. A POST to ws/update extends expire_time in 
@@ -67,15 +83,6 @@ import shutil
 # General WS config
 # Block ALL ports except port 80
 # Redis port is only available to CC's IP on the intranet
-
-CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
-
-ws_redis = None
-
-def push_stream_to_cc(stream_id):
-    pass
-
-
 class BaseHandler(tornado.web.RequestHandler):
     @property
     def db(self):
@@ -279,7 +286,7 @@ class StreamHandler(BaseHandler):
                            400 - BAD REQUEST
                            401 - UNAUTHORIZED
             '''
-        if not self.request.remote_ip in CCs:
+        if not self.db.exists('cc_ip:'+self.request.remote_ip+':id'):
             print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
@@ -369,7 +376,7 @@ class StreamHandler(BaseHandler):
     def delete(self):
         self.set_status(400)
         ''' PRIVATE - Delete a stream. '''
-        if not self.request.remote_ip in CCs:
+        if not self.db.exists('cc_ip:'+self.request.remote_ip+':id'):
             print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
@@ -431,16 +438,63 @@ class WorkServer(tornado.web.Application):
                 pass
         return ws_redis
 
-    def __init__(self, redis_port, increment=10000):
+    def _cleanup(self):
+        # clear active streams
+        if self.db.smembers('active_streams'):
+            for stream in self.db.smembers('active_streams'):
+                buffer_path = os.path.join('streams',stream,'buffer.xtc')
+                if os.path.exists(buffer_path):
+                    # blank out the buffer
+                    with open(buffer_path,'w') as buffer_file:
+                        pass
+                shared_token = self.db.hget('active_stream:'+stream,
+                                            'shared_token')
+                self.db.delete('shared_tokens')
+                self.db.delete('active_stream:'+stream)
+            self.db.delete('active_streams')
+        # clear command centers 
+        if self.db.smembers('ccs'):
+            for cc_id in self.db.smembers('ccs'):
+                self.db.delete('cc:'+cc_id)
+        self.db.delete('ccs')
+        cc_ips = self.db.keys('cc_ip:*')
+        if cc_ips:
+            for cc_ip in cc_ips:
+                self.db.delete('cc_ip:'+cc_ip+':id')
+        # remove heartbeats
+        self.db.delete('heartbeats')
+        # remove tokens
+        for expression in ['download_token:*','shared_token:*']:
+            keys = self.db.keys(expression)
+            if keys:
+                self.db.delete(*keys)
+
+    def __init__(self,ws_name,redis_port,ccs,increment=600):
         print 'Initialization redis server on port: ', redis_port
         self.db = self._init_redis(redis_port)    
         if not os.path.exists('files'):
             os.makedirs('files')
         if not os.path.exists('streams'):
             os.makedirs('streams')
-        # 10000 is number of milliseconds
-        pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats, 10000, 
-            tornado.ioloop.IOLoop.instance())
+        self._cleanup()
+
+        # ccs is a list of tuples, where
+        # 0th-index is name
+        # 1st-index is ip
+        # 2nd-index is port
+        # 3rd-index is passphrase
+        for cc in ccs:
+            cc_name = cc[0]
+            cc_ip   = cc[1]
+            cc_port = cc[2]
+            cc_pass = cc[3]
+            self.db.sadd('ccs',cc_name)
+            self.db.hset('cc:'+cc_name,'ip',cc_ip)
+            self.db.hset('cc:'+cc_name,'http_port',cc_port)
+            self.db.set('cc_ip:'+cc_ip+':id',cc_name)
+        check_stream_freq_in_ms = 60000
+        pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats, 
+                check_stream_freq_in_ms,tornado.ioloop.IOLoop.instance())
         pcb.start()
         signal.signal(signal.SIGINT, self.shutdown)
         super(WorkServer, self).__init__([
@@ -483,25 +537,44 @@ class WorkServer(tornado.web.Application):
             with open(buffer_path,'w') as buffer_file:
                 pass
 
-# Config options
-# HTTP_PORT
-# REDIS_PORT
-# HEARTBEAT_CHECK_TIME
-# STREAM_EXPIRE_TIME
-def start(redis_port, http_port):
-    ws_instance = WorkServer(redis_port)
+    def push_stream_to_cc(stream_id):
+        pass
+
+def start():
+    config_file='ws_config'
+    Config = ConfigParser.ConfigParser(
+        {
+        'ws_http_port' : '80'
+        })
+    Config.read(config_file)
+    ws_name           = Config.get('WS','name')
+    redis_port        = Config.getint('WS','redis_port')
+    cc_str            = Config.get('WS','cc_names').split(',')
+    ccs = []
+    for cc in cc_str:
+        cc_ip   = Config.get(cc,'ip')
+        cc_port = Config.getint(cc,'cc_http_port')
+        cc_pass = Config.get(cc,'pass')
+        ccs.append((cc,cc_ip,cc_port,cc_pass))
+
+    ws_http_port         = Config.getint('WS','ws_http_port')
+
+    ws_instance = WorkServer(ws_name,redis_port,ccs)
     http_server = tornado.httpserver.HTTPServer(ws_instance)
     signal.signal(signal.SIGINT, ws_instance.shutdown)
     #http_server.listen(options.port)
-    http_server.listen(http_port)
+    http_server.listen(ws_http_port)
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
+    start()
+
+
+    '''
     redis_port = sys.argv[1]
     http_port = sys.argv[2]
-
     start(redis_port, http_port)
-
+    '''
 
 
     '''

@@ -42,7 +42,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
     def setUpClass(self):
         redis_port = str(3827)
         self.increment = 3
-        self.ws = ws.WorkServer(redis_port, self.increment)
+        cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
+        self.ws = ws.WorkServer('test_erver',redis_port,[cc],self.increment)
         self.redis_client = self.ws.get_db()
         self._folders = ['streams','files']
         super(AsyncHTTPTestCase, self).setUpClass()
@@ -58,15 +59,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
     def get_app(self):
         return self.ws
-
-
-        '''
-            tornado.web.Application([
-                        (r'/frame', ws.FrameHandler),
-                        (r'/stream', ws.StreamHandler),
-                        (r'/heartbeat', ws.HeartbeatHandler, 
-                                        dict(increment=self.increment))
-                        ])'''
 
     def test_add_stream(self):
         # Add a stream

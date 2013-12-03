@@ -32,6 +32,7 @@ import redis
 #       FIELD   'ip'                    | ip address
 #       FIELD   'http_port'             | port of ws's webserver
 #       FIELD   'redis_port'            | port of ws's redis server
+# SET   KEY     'ws_ips'                | set of active ws ips
 
 # PYTH  DICT    'ws_redis_clients'      | {ws_id : redis_client}
 
