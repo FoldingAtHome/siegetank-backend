@@ -48,6 +48,7 @@ import ConfigParser
 #       FIELD   'ip'                    | ip of the CC
 #       FIELD   'http_port'             | http_port of the CC
 # STRNG KEY     'cc_ip:'+ip+':id'       | id given CC's ip
+# Note: passphrase is explicitly not stored in db
 # 
 # Not implemented yet (shove to stats server later on)
 # LIST  KEY     'stat:'+id+':donor'     | donor statistics
@@ -458,7 +459,8 @@ class WorkServer(tornado.web.Application):
         # remove heartbeats
         self.db.delete('heartbeats')
         # remove tokens
-        for expression in ['download_token:*','shared_token:*']:
+        #for expression in ['download_token:*','shared_token:*']:
+        for expression in ['shared_token:*']:
             keys = self.db.keys(expression)
             if keys:
                 self.db.delete(*keys)

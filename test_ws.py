@@ -18,6 +18,7 @@ import shutil
 import cStringIO
 import tarfile
 import signal
+import sys
 
 def _tar_strings(strings, names):
     ''' Returns a cStringIO'd tar file of strings with names in names '''
@@ -36,6 +37,44 @@ def _tar_strings(strings, names):
             # tarfile as a string
             tarball.addfile(tarinfo=info, fileobj=frame_string)
     return tar_outfile
+
+class WSInitTestCase(AsyncHTTPTestCase):
+    @classmethod
+    def setUpClass(self):
+        redis_port = str(3828)
+        self.increment = 3
+        cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
+        self.ws = ws.WorkServer('test_server',redis_port,[cc],self.increment)
+        self.redis_client = self.ws.get_db()
+        self._folders = ['streams','files']
+        super(AsyncHTTPTestCase, self).setUpClass()
+
+    @classmethod
+    def tearDownClass(self):
+        ''' Destroy the server '''
+        self.ws.shutdown_redis()
+        for folder in self._folders:
+            if os.path.exists(folder):
+                shutil.rmtree(folder)
+        super(AsyncHTTPTestCase, self).tearDownClass()
+
+    def get_app(self):
+        return self.ws
+
+    def test_init_stream(self):
+        active_streams = self.redis_client.exists('active_streams')
+        active_stream_ids = self.redis_client.keys('active_stream:*')
+        shared_tokens = self.redis_client.keys('shared_token:*')
+
+        self.assertFalse(active_streams)
+        self.assertFalse(active_stream_ids)
+        self.assertFalse(shared_tokens)
+
+        self.assertTrue(self.redis_client.sismember('ccs','test_cc'))
+        self.assertEqual(self.redis_client.hget('cc:test_cc','ip'),
+                         '127.0.0.1')
+        self.assertEqual(self.redis_client.hget('cc:test_cc','http_port'),
+                         '999')
 
 class WSHandlerTestCase(AsyncHTTPTestCase):
     @classmethod
@@ -416,10 +455,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', headers=headers, method='GET')
         self.assertEqualHash(true_frames, resp.body)
 
-    def test_init(self):
-        # makes sure initialization routines are correct
-        pass
-        
     def test_delete_stream(self):
         # create and assign a stream
         res = self.test_assign_stream()
@@ -442,5 +477,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertFalse(os.path.exists(stream_path))
 
 if __name__ == '__main__':
-    suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
+    suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
+    #suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
+    #suite.addTest(WSInitTestCase())
     unittest.TextTestRunner(verbosity=3).run(suite)
