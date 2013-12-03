@@ -442,15 +442,9 @@ class WorkServer(tornado.web.Application):
         # clear active streams
         if self.db.smembers('active_streams'):
             for stream in self.db.smembers('active_streams'):
-                buffer_path = os.path.join('streams',stream,'buffer.xtc')
-                if os.path.exists(buffer_path):
-                    # blank out the buffer
-                    with open(buffer_path,'w') as buffer_file:
-                        pass
-                shared_token = self.db.hget('active_stream:'+stream,
-                                            'shared_token')
-                self.db.delete('shared_tokens')
-                self.db.delete('active_stream:'+stream)
+                # deactivate this stream
+                self.deactivate_stream(stream)
+            # delete all keys in this
             self.db.delete('active_streams')
         # clear command centers 
         if self.db.smembers('ccs'):
@@ -468,6 +462,8 @@ class WorkServer(tornado.web.Application):
             keys = self.db.keys(expression)
             if keys:
                 self.db.delete(*keys)
+
+        # inform the CC gracefully that the WS is dying (ie.expire everything)
 
     def __init__(self,ws_name,redis_port,ccs,increment=600):
         print 'Initialization redis server on port: ', redis_port
@@ -556,27 +552,15 @@ def start():
         cc_port = Config.getint(cc,'cc_http_port')
         cc_pass = Config.get(cc,'pass')
         ccs.append((cc,cc_ip,cc_port,cc_pass))
-
-    ws_http_port         = Config.getint('WS','ws_http_port')
-
+    ws_http_port = Config.getint('WS','ws_http_port')
     ws_instance = WorkServer(ws_name,redis_port,ccs)
     http_server = tornado.httpserver.HTTPServer(ws_instance)
     signal.signal(signal.SIGINT, ws_instance.shutdown)
-    #http_server.listen(options.port)
     http_server.listen(ws_http_port)
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
     start()
-
-
-    '''
-    redis_port = sys.argv[1]
-    http_port = sys.argv[2]
-    start(redis_port, http_port)
-    '''
-
-
     '''
     application = tornado.web.Application()
 

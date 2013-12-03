@@ -43,7 +43,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         redis_port = str(3827)
         self.increment = 3
         cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
-        self.ws = ws.WorkServer('test_erver',redis_port,[cc],self.increment)
+        self.ws = ws.WorkServer('test_server',redis_port,[cc],self.increment)
         self.redis_client = self.ws.get_db()
         self._folders = ['streams','files']
         super(AsyncHTTPTestCase, self).setUpClass()
@@ -416,6 +416,10 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', headers=headers, method='GET')
         self.assertEqualHash(true_frames, resp.body)
 
+    def test_init(self):
+        # makes sure initialization routines are correct
+        pass
+        
     def test_delete_stream(self):
         # create and assign a stream
         res = self.test_assign_stream()
