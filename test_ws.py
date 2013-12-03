@@ -1,4 +1,5 @@
 import ws
+import cc
 import hashlib
 import redis
 import tornado.ioloop
@@ -95,14 +96,14 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.hset('active_stream:'+stream_id, 
                                'shared_token', token_id)
         self.redis_client.hset('active_stream:'+stream_id, 
-                               'donor', 'proteneer')  
+                               'donor', 'proteneer')
+        ws_time = self.redis_client.time()[0]
         self.redis_client.hset('active_stream:'+stream_id, 
-                               'start_time', time.time())
+                               'start_time', ws_time)
         self.redis_client.hset('active_stream:'+stream_id, 
                                'steps', 0)
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
         self.redis_client.zadd('heartbeats',stream_id,time.time()+20)
-        headers  = {'shared_token' : token_id}
         return stream_id, token_id, system_bin, state_bin, integrator_bin
 
     def test_get_frame(self):
@@ -230,13 +231,19 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.redis_client.sadd('active_streams',stream_id)
         self.redis_client.hset('active_stream:'+stream_id, 
                                'shared_token', token_id)
+
+        self.assertTrue(
+            self.redis_client.sismember('active_streams',stream_id) and
+            self.redis_client.exists('active_stream:'+stream_id) and 
+            self.redis_client.exists('shared_token:'+token_id+':stream'))
+
         time.sleep(self.increment+1)
         ws.check_heartbeats() 
 
         self.assertFalse(
             self.redis_client.sismember('active_streams',stream_id) and
             self.redis_client.exists('active_stream:'+stream_id) and 
-            self.redis_client.exists('shared_token:'+token_id))
+            self.redis_client.exists('shared_token:'+token_id+':stream'))
 
     def test_post_stream(self):
         system_bin     = 'system.xml.gz'

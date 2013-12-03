@@ -109,6 +109,10 @@ def get_idle_ws():
     return ws_id, ws_ip, redis_client
         # test and see if this WS is still alive
 
+def activate_stream(stream_id, token_id, ws_rc):
+    ''' Activates the stream on the WS via ws_rc '''
+    pass
+
 class WSHandler(tornado.web.RequestHandler):
     def post(self):
         ''' PGI: Called by WS for registration '''
@@ -143,7 +147,7 @@ class WSHandler(tornado.web.RequestHandler):
                     if cc_redis.hget('stream:'+stream,'state') == 0:
                         target_id = cc_redis.hget('stream:'+stream_id+':target')
                         # ws needs to send a list of 
-                        cc_redis.zadd('target_id',target_id,frame_count??)
+                        cc_redis.zadd('target_id',target_id,frame_count)
 
         except Exception as e:
             print str(e)
