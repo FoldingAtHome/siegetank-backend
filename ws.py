@@ -2,6 +2,7 @@ import tornado.escape
 import tornado.ioloop
 import tornado.web
 import tornado.httputil
+import tornado.httpserver
 import redis
 import cStringIO
 import tarfile
@@ -71,20 +72,20 @@ CCs = {'127.0.0.1' : 'PROTOSS_IS_FOR_NOOBS'}
 
 ws_redis = None
 
-def deactivate_stream(dead_stream):
-    shared_token = ws_redis.hget('active_stream:'+dead_stream,'shared_token')
-    ws_redis.delete('shared_token:'+shared_token+':stream')
-    ws_redis.delete('active_stream:'+dead_stream)
-    ws_redis.srem('active_streams', dead_stream)
-    buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
-    if os.path.exists(buffer_path):
-        with open(buffer_path,'w') as buffer_file:
-            pass
-
 def push_stream_to_cc(stream_id):
     pass
 
-class FrameHandler(tornado.web.RequestHandler):
+
+class BaseHandler(tornado.web.RequestHandler):
+    @property
+    def db(self):
+        return self.application.db
+
+    @property
+    def deactivate_stream(self):
+        return self.application.deactivate_stream
+
+class FrameHandler(BaseHandler):
     def initialize(self, max_error_count=10):
         ''' Each heartbeat received by the core increments the timer by
             increment amount. Defaults to once every 30 minutes '''
@@ -114,20 +115,20 @@ class FrameHandler(tornado.web.RequestHandler):
         '''
         try:
             token = self.request.headers['shared_token']
-            stream_id = ws_redis.get('shared_token:'+token+':stream')
+            stream_id = self.db.get('shared_token:'+token+':stream')
             if not stream_id:
                 self.set_status(400)
                 return
-            if ws_redis.hget('stream:'+stream_id,'status') != 'OK':
+            if self.db.hget('stream:'+stream_id,'status') != 'OK':
                 self.set_status(400)
                 return self.write('Stream status not OK')
             if 'error_code' in self.request.headers:
                 self.set_status(400)
-                errors = ws_redis.hincrby('stream:'+stream_id,'error_count',1)
+                errors = self.db.hincrby('stream:'+stream_id,'error_count',1)
                 #if errors > self._max_error_count:
-                deactivate_stream(stream_id)
+                self.deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
-            ws_redis.hset('stream:'+stream_id,'error_count',0)
+            self.db.hset('stream:'+stream_id,'error_count',0)
             tar_string = cStringIO.StringIO(self.request.body)
             with tarfile.open(mode='r', fileobj=tar_string) as tarball:
                 # Extract the frame
@@ -137,7 +138,7 @@ class FrameHandler(tornado.web.RequestHandler):
                 with open(buffer_path,'ab') as buffer_file:
                     buffer_file.write(frame_binary)
                 # Increment buffer frames by 1
-                ws_redis.hincrby('active_stream:'+stream_id, 
+                self.db.hincrby('active_stream:'+stream_id, 
                                  'buffer_frames',1)
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
@@ -164,10 +165,10 @@ class FrameHandler(tornado.web.RequestHandler):
                                 dest.write(chars)
                     # this need not be done atomically since no other client 
                     # will modify the active_streams key except this ws
-                    buf_frames = ws_redis.hget('active_stream:'+stream_id,
+                    buf_frames = self.db.hget('active_stream:'+stream_id,
                                                'buffer_frames')    
-                    ws_redis.hincrby('stream:'+stream_id,'frames',buf_frames)
-                    ws_redis.hset('active_stream:'+stream_id,
+                    self.db.hincrby('stream:'+stream_id,'frames',buf_frames)
+                    self.db.hset('active_stream:'+stream_id,
                                   'buffer_frames',0)
                     # clear the buffer
                     with open(buffer_path,'w') as buffer_file:
@@ -210,16 +211,16 @@ class FrameHandler(tornado.web.RequestHandler):
         '''
         try:
             shared_token = self.request.headers['shared_token']
-            if not ws_redis.exists('shared_token:'+shared_token+':stream'):
+            if not self.db.exists('shared_token:'+shared_token+':stream'):
                 self.set_status(401)
                 return self.write('Unknown token')
-            stream_id  = ws_redis.get('shared_token:'+shared_token+':stream')
+            stream_id  = self.db.get('shared_token:'+shared_token+':stream')
             # return if stream is stopped by PG user or NaN'd
-            if ws_redis.hget('stream:'+stream_id,'status') != 'OK':
+            if self.db.hget('stream:'+stream_id,'status') != 'OK':
                 self.set_status(400)
                 return self.write('Stream Disabled')
-            sys_hash   = ws_redis.hget('stream:'+stream_id,'system_hash')
-            intg_hash  = ws_redis.hget('stream:'+stream_id,'integrator_hash')
+            sys_hash   = self.db.hget('stream:'+stream_id,'system_hash')
+            intg_hash  = self.db.hget('stream:'+stream_id,'integrator_hash')
             sys_file   = os.path.join('files',sys_hash)
             intg_file  = os.path.join('files',intg_hash)
             state_file = os.path.join('streams',stream_id,'state.xml.gz')
@@ -240,7 +241,7 @@ class FrameHandler(tornado.web.RequestHandler):
             self.set_status(400)
             return self.write('Bad Request')
 
-class StreamHandler(tornado.web.RequestHandler):
+class StreamHandler(BaseHandler):
     def post(self):       
         ''' PRIVATE - Add new stream(s) to WS. The POST method on this URI
             can only be accessed by known CCs (ip restricted)
@@ -288,21 +289,21 @@ class StreamHandler(tornado.web.RequestHandler):
             # Step 1. Check if request is valid.
             state_bin = self.request.files['state_bin'][0]['body']
             required_strings = ['system','integrator']
-            redis_pipe = ws_redis.pipeline()
+            redis_pipe = self.db.pipeline()
             file_hashes = {}
             file_buffer = {}
             for s in required_strings:
                 if s+'_bin' in self.request.files:
                     binary = self.request.files[s+'_bin'][0]['body']
                     bin_hash = hashlib.md5(binary).hexdigest()
-                    if not ws_redis.sismember('file_hashes', bin_hash):
-                        ws_redis.sadd('file_hashes', bin_hash)
+                    if not self.db.sismember('file_hashes', bin_hash):
+                        self.db.sadd('file_hashes', bin_hash)
                         file_buffer[bin_hash] = binary
                     else:
                         pass
                 elif s+'_hash' in self.request.files: 
                     bin_hash = self.request.files[s+'_hash'][0]['body']
-                    if not ws_redis.sismember('file_hashes', bin_hash):
+                    if not self.db.sismember('file_hashes', bin_hash):
                         return self.write('Gave me a hash for a file not \
                                            in files directory')
                 else:
@@ -346,7 +347,7 @@ class StreamHandler(tornado.web.RequestHandler):
         self.set_status(400)
         try:
             token = self.request.headers['download_token']
-            stream_id = ws_redis.get('download_token:'+token+':stream')
+            stream_id = self.db.get('download_token:'+token+':stream')
             if stream_id:
                 filename = os.path.join('streams',stream_id,'frames.xtc')
                 buf_size = 4096
@@ -375,12 +376,12 @@ class StreamHandler(tornado.web.RequestHandler):
         try:
             if 'stream_id' in self.request.headers:
                 stream_id = self.request.headers['stream_id']
-                if ws_redis.sismember('streams', stream_id):
+                if self.db.sismember('streams', stream_id):
                     # remove stream from memory
-                    deactivate_stream(stream_id)
-                    ws_redis.delete('download_token:'+stream_id+':stream')
-                    ws_redis.delete('stream:'+stream_id)
-                    ws_redis.srem('streams',stream_id)
+                    self.deactivate_stream(stream_id)
+                    self.db.delete('download_token:'+stream_id+':stream')
+                    self.db.delete('stream:'+stream_id)
+                    self.db.srem('streams',stream_id)
                     # remove stream from disk
                     shutil.rmtree(os.path.join('streams',stream_id))
                     self.set_status(200)
@@ -393,7 +394,7 @@ class StreamHandler(tornado.web.RequestHandler):
         except Exception as e:
             return
 
-class HeartbeatHandler(tornado.web.RequestHandler):
+class HeartbeatHandler(BaseHandler):
     def initialize(self, increment=30*60):
         ''' Each heartbeat received by the core increments the timer by
             increment amount. Defaults to once every 30 minutes '''
@@ -405,68 +406,106 @@ class HeartbeatHandler(tornado.web.RequestHandler):
         try:
             content = json.loads(self.request.body)
             token_id = content['shared_token']
-            stream_id = ws_redis.get('shared_token:'+token_id+':stream')
-            ws_redis.zadd('heartbeats',stream_id,
+            stream_id = self.db.get('shared_token:'+token_id+':stream')
+            self.db.zadd('heartbeats',stream_id,
                           time.time()+self._increment)
             self.set_status(200)
         except KeyError:
             self.set_status(400)
 
-def init_redis(redis_port):
-    ''' Initializes the global redis client used by the ws and returns a ref
-        to the client (eg. used by test cases) '''
-    global ws_redis
-    args = ("redis/src/redis-server", "--port", redis_port)
-    redis_process = subprocess.Popen(args)
-    if redis_process.poll() is not None:
-        print 'COULD NOT START REDIS-SERVER, aborting'
-        sys.exit(0)
-    ws_redis = redis.Redis(host='localhost', port=int(redis_port))
-    # wait until redis is alive
-    alive = False
-    while not alive:
-        try:
-            alive = ws_redis.ping() 
-        except:
-            pass
-    return ws_redis
+class WorkServer(tornado.web.Application):
+    def _init_redis(self, redis_port):
+        redis_port = str(redis_port)
+        args = ("redis/src/redis-server", "--port", redis_port)
+        redis_process = subprocess.Popen(args)
+        if redis_process.poll() is not None:
+            print 'COULD NOT START REDIS-SERVER, aborting'
+            sys.exit(0)
+        ws_redis = redis.Redis(host='localhost', port=int(redis_port))
+        # wait until redis is alive
+        alive = False
+        while not alive:
+            try:
+                alive = ws_redis.ping() 
+            except:
+                pass
+        return ws_redis
 
-def check_heartbeats():
-    ''' Queries heartbeats to find dead streams. Streams that have died are
+    def __init__(self, redis_port, increment=10000):
+        print 'Initialization redis server on port: ', redis_port
+        self.db = self._init_redis(redis_port)    
+        if not os.path.exists('files'):
+            os.makedirs('files')
+        if not os.path.exists('streams'):
+            os.makedirs('streams')
+        # 10000 is number of milliseconds
+        pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats, 10000, 
+            tornado.ioloop.IOLoop.instance())
+        pcb.start()
+        signal.signal(signal.SIGINT, self.shutdown)
+        super(WorkServer, self).__init__([
+            (r'/frame', FrameHandler),
+            (r'/stream', StreamHandler),
+            (r'/heartbeat', HeartbeatHandler, dict(increment=increment))
+        ])
+
+    def get_db(self):
+        return self.db
+
+    def shutdown_redis(self):
+        print 'shutting down redis...'
+        self.db.shutdown()
+
+    def shutdown(self, signal_number, stack_frame):
+        self.shutdown_redis()       
+        print 'shutting down tornado...'
+        tornado.ioloop.IOLoop.instance().stop()
+        sys.exit(0)
+
+    def check_heartbeats(self):
+        ''' Queries heartbeats to find dead streams. Streams that have died are
         removed from the active_streams key and the hash is removed. 
         CC is then notified of the dead_streams and pushes them back
-        into the appropriate queue '''
-    dead_streams = ws_redis.zrangebyscore('heartbeats', 0, time.time())
-    if dead_streams:
-        for dead_stream in dead_streams:
-            deactivate_stream(dead_stream)
+        into the appropriate queue 
+        '''
+        dead_streams = self.db.zrangebyscore('heartbeats', 0, time.time())
+        if dead_streams:
+            for dead_stream in dead_streams:
+                self.deactivate_stream(dead_stream)
 
-def clean_exit(signal, frame):
-    print 'shutting down redis...'
-    ws_redis.shutdown()
-    print 'shutting down tornado...'
-    tornado.ioloop.IOLoop.instance().stop()
-    sys.exit(0)
+    def deactivate_stream(self, dead_stream):
+        shared_token = self.db.hget('active_stream:'+dead_stream,'shared_token')
+        self.db.delete('shared_token:'+shared_token+':stream')
+        self.db.delete('active_stream:'+dead_stream)
+        self.db.srem('active_streams', dead_stream)
+        buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
+        if os.path.exists(buffer_path):
+            with open(buffer_path,'w') as buffer_file:
+                pass
+
+# Config options
+# HTTP_PORT
+# REDIS_PORT
+# HEARTBEAT_CHECK_TIME
+# STREAM_EXPIRE_TIME
+def start(redis_port, http_port):
+    ws_instance = WorkServer(redis_port)
+    http_server = tornado.httpserver.HTTPServer(ws_instance)
+    signal.signal(signal.SIGINT, ws_instance.shutdown)
+    #http_server.listen(options.port)
+    http_server.listen(http_port)
+    tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
-    
-    application = tornado.web.Application([
-        (r'/frame', FrameHandler),
-        (r'/stream', StreamHandler),
-        (r'/heartbeat', HeartbeatHandler)
-    ])
-
     redis_port = sys.argv[1]
     http_port = sys.argv[2]
 
-    init_redis(redis_port)
+    start(redis_port, http_port)
 
-    signal.signal(signal.SIGINT, clean_exit)
 
-    if not os.path.exists('files'):
-        os.makedirs('files')
-    if not os.path.exists('streams'):
-        os.makedirs('streams')
+
+    '''
+    application = tornado.web.Application()
 
     # inform the CCs that the WS is now online and ready for work
     ws_uuid = 'firebat'
@@ -479,12 +518,4 @@ if __name__ == "__main__":
             print 'r.text', r.text
     except:
         print 'cc is down'
-
-    # clear db
-    ws_redis.flushdb()
-
-    application.listen(http_port, '0.0.0.0')
-    pcb = tornado.ioloop.PeriodicCallback(check_heartbeats, 10000, 
-          tornado.ioloop.IOLoop.instance())
-    pcb.start()
-    tornado.ioloop.IOLoop.instance().start()
+'''

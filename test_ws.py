@@ -17,6 +17,7 @@ import requests
 import shutil
 import cStringIO
 import tarfile
+import signal
 
 def _tar_strings(strings, names):
     ''' Returns a cStringIO'd tar file of strings with names in names '''
@@ -39,35 +40,33 @@ def _tar_strings(strings, names):
 class WSHandlerTestCase(AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
-        redis_port = str(6827)
-        self.redis_client = ws.init_redis(redis_port)
-        # Use a single DB session
-        self.redis_client.flushdb()
+        redis_port = str(3827)
         self.increment = 3
-        self._folders = ['files','streams']
-        for folder in self._folders:
-            if not os.path.exists(folder):
-                os.makedirs(folder)
+        self.ws = ws.WorkServer(redis_port, self.increment)
+        self.redis_client = self.ws.get_db()
+        self._folders = ['streams','files']
         super(AsyncHTTPTestCase, self).setUpClass()
 
     @classmethod
     def tearDownClass(self):
         ''' Destroy the server '''
-        self.redis_client.flushdb()
-        self.redis_client.shutdown()
-        tornado.ioloop.IOLoop.instance().stop()
+        self.ws.shutdown_redis()
         for folder in self._folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
         super(AsyncHTTPTestCase, self).tearDownClass()
 
     def get_app(self):
-        return tornado.web.Application([
+        return self.ws
+
+
+        '''
+            tornado.web.Application([
                         (r'/frame', ws.FrameHandler),
                         (r'/stream', ws.StreamHandler),
                         (r'/heartbeat', ws.HeartbeatHandler, 
                                         dict(increment=self.increment))
-                        ])
+                        ])'''
 
     def test_add_stream(self):
         # Add a stream
@@ -222,7 +221,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                                 body=json.dumps({'shared_token' : token_id}))
             hb = self.redis_client.zscore('heartbeats',stream_id)
             ws_start_time = cc.sum_time(self.redis_client.time())
-            self.assertAlmostEqual(ws_start_time+self.increment, hb, places=2)
+            self.assertAlmostEqual(ws_start_time+self.increment, hb, places=1)
         # test expirations
         response = self.fetch('/heartbeat', method='POST',
                     body=json.dumps({'shared_token' : token_id}))
@@ -234,7 +233,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.redis_client.exists('active_stream:'+stream_id) and 
             self.redis_client.exists('shared_token:'+token_id+':stream'))
         time.sleep(self.increment+1)
-        ws.check_heartbeats() 
+        self.ws.check_heartbeats() 
         self.assertFalse(
             self.redis_client.sismember('active_streams',stream_id) and
             self.redis_client.exists('active_stream:'+stream_id) and 
