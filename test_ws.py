@@ -18,7 +18,6 @@ import shutil
 import cStringIO
 import tarfile
 
-
 def _tar_strings(strings, names):
     ''' Returns a cStringIO'd tar file of strings with names in names '''
     assert len(strings) == len(names)
@@ -38,7 +37,6 @@ def _tar_strings(strings, names):
     return tar_outfile
 
 class WSHandlerTestCase(AsyncHTTPTestCase):
-
     @classmethod
     def setUpClass(self):
         redis_port = str(6827)
