@@ -406,9 +406,8 @@ class HeartbeatHandler(tornado.web.RequestHandler):
             content = json.loads(self.request.body)
             token_id = content['shared_token']
             stream_id = ws_redis.get('shared_token:'+token_id+':stream')
-            ws_time = ws_redis.time()[0]
             ws_redis.zadd('heartbeats',stream_id,
-                          ws_time+self._increment)
+                          time.time()+self._increment)
             self.set_status(200)
         except KeyError:
             self.set_status(400)

@@ -97,13 +97,13 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                                'shared_token', token_id)
         self.redis_client.hset('active_stream:'+stream_id, 
                                'donor', 'proteneer')
-        ws_time = self.redis_client.time()[0]
         self.redis_client.hset('active_stream:'+stream_id, 
-                               'start_time', ws_time)
+                               'start_time', self.redis_client.time()[0])
         self.redis_client.hset('active_stream:'+stream_id, 
                                'steps', 0)
         self.redis_client.set('shared_token:'+token_id+':stream', stream_id)
         # set a really long timer to make sure this doesn't die half way
+        ws_time = cc.sum_time(self.redis_client.time())
         self.redis_client.zadd('heartbeats',stream_id,ws_time+600)
         return stream_id, token_id, system_bin, state_bin, integrator_bin
 
@@ -220,11 +220,11 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
         # test sending request to uri: /heartbeat extends the expiration time
         for iteration in range(10):
-            ws_start_time = self.redis_client.time()[0]
             response = self.fetch('/heartbeat', method='POST',
                                 body=json.dumps({'shared_token' : token_id}))
             hb = self.redis_client.zscore('heartbeats',stream_id)
-            self.assertAlmostEqual(ws_start_time+self.increment, hb, places=1)
+            ws_start_time = cc.sum_time(self.redis_client.time())
+            self.assertAlmostEqual(ws_start_time+self.increment, hb, places=2)
         # test expirations
         response = self.fetch('/heartbeat', method='POST',
                     body=json.dumps({'shared_token' : token_id}))
@@ -364,7 +364,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertEqual(hashlib.md5(string1).hexdigest(),
                          hashlib.md5(string2).hexdigest())
 
-    def test_get_stream(self):
+    def test_post_frames_get_stream(self):
         res            = self.test_assign_stream()
         stream_id      = res[0]
         token_id       = res[1]
@@ -437,7 +437,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertEqual(resp.code, 200)
         rc = self.redis_client
         # check memory
-        self.assertFalse(rc.sismember('active_streams', stream_id))
+        self.assertFalse(rc.sismember('active_streams',stream_id))
         self.assertFalse(rc.exists('active_stream:'+stream_id))
         self.assertFalse(rc.sismember('streams',stream_id))
         self.assertFalse(rc.exists('stream:'+stream_id))
@@ -447,7 +447,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         stream_path = os.path.join('streams',stream_id)
 
         self.assertFalse(os.path.exists(stream_path))
-
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
