@@ -45,7 +45,7 @@ import common
 # [ STREAMS ]
 #
 # SET   HASH     'stream:'+id                
-#       FIELD    'ws'                   | ws the stream is on
+#       FIELD    'ws'                   | ws the stream resides on
 #       FIELD    'target'               | target the stream belongs to
 
 # [ TARGETS ]
@@ -325,7 +325,6 @@ def start():
         })
     Config.read(config_file)
     cc_name           = Config.get('CC','name')
-    cc_passphrase     = Config.get('CC','passphrase')
     redis_port        = Config.getint('CC','redis_port')
     cc_http_port = Config.getint('CC','cc_http_port')
     cc_instance = CommandCenter(cc_name,cc_passphrase,redis_port)

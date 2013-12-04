@@ -465,12 +465,10 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         # 0th-index is name
         # 1st-index is ip
         # 2nd-index is port
-        # 3rd-index is passphrase
         for cc in ccs:
             cc_name = cc[0]
             cc_ip   = cc[1]
             cc_port = cc[2]
-            cc_pass = cc[3]
             self.db.sadd('ccs',cc_name)
             self.db.hset('cc:'+cc_name,'ip',cc_ip)
             self.db.hset('cc:'+cc_name,'http_port',cc_port)
@@ -518,11 +516,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
 def start():
     config_file = 'ws_config'
-    Config = ConfigParser.ConfigParser(
-        {
-        'ws_http_port' : '80',
-        'cc_http_port' : '80',
-        })
+    Config = ConfigParser.ConfigParser()
     Config.read(config_file)
     ws_name           = Config.get('WS','name')
     redis_port        = Config.getint('WS','redis_port')
@@ -530,10 +524,9 @@ def start():
     ccs = []
     for cc in cc_str:
         cc_ip   = Config.get(cc,'ip')
-        cc_port = Config.getint(cc,'cc_http_port')
-        cc_pass = Config.get(cc,'pass')
-        ccs.append((cc,cc_ip,cc_port,cc_pass))
-    ws_http_port = Config.getint('WS','ws_http_port')
+        cc_port = Config.getint(cc,'http_port')
+        ccs.append((cc,cc_ip,cc_port))
+    ws_http_port = Config.getint('WS','http_port')
     ws_instance = WorkServer(ws_name,redis_port,ccs)
     http_server = tornado.httpserver.HTTPServer(ws_instance)
     http_server.listen(ws_http_port)

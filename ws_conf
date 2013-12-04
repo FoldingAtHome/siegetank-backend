@@ -1,0 +1,10 @@
+[WS]
+name : firebat
+redis_port : 2394
+ws_http_port : 8959
+ccs : pglab
+
+[pglab]
+ip : 127.0.0.1
+cc_http_port : 4372
+pass : PROTOSS_IS_FOR_NOOBS
