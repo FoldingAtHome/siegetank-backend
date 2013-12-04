@@ -1,6 +1,7 @@
 import tornado.escape
 import tornado.ioloop
 import tornado.web
+import tornado.httpserver
 
 import datetime
 import hashlib
@@ -10,6 +11,11 @@ import uuid
 import random
 import requests
 import redis
+import ConfigParser
+import signal
+import sys
+
+import common
 
 # CC uses Antirez's redis extensively as NoSQL store mainly because of 
 # its blazing fast speed. Binary blobs such as states, systems, and 
@@ -71,13 +77,6 @@ import redis
 # CC Initialization (assumes RDB or AOF file is present)
 # -figure out which ws are still active by looking through saved active_ws, and 'ws:'+id
 # -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
-
-
-
-CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
-
-cc_redis = redis.Redis(host='localhost', port=6379)
-ws_redis_clients = {}
 
 def remove_ws(ws_id):
     streams = cc_redis.smembers('ws:'+ws_id+':streams')
@@ -291,41 +290,56 @@ class JobHandler(tornado.web.RequestHandler):
         else:
             return self.write('No jobs available!')
 
-class CommandCenter(tornado.web.Application):
-    def _init_redis(self, redis_port):
-        redis_port = str(redis_port)
-        args = ("redis/src/redis-server", "--port", redis_port)
-        redis_process = subprocess.Popen(args)
-        if redis_process.poll() is not None:
-            print 'COULD NOT START REDIS-SERVER, aborting'
-            sys.exit(0)
-        ws_redis = redis.Redis(host='localhost', port=int(redis_port))
-        # wait until redis is alive
-        alive = False
-        while not alive:
-            try:
-                alive = ws_redis.ping() 
-            except:
-                pass
-        return ws_redis
 
-    
+CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
 
+cc_redis = redis.Redis(host='localhost', port=6379)
+ws_redis_clients = {}
 
-application = tornado.web.Application([
-    (r'/target', TargetHandler),
-    (r'/stream', StreamHandler),
-    (r'/job', JobHandler),
-    (r'/add_ws', WSHandler)
-])
- 
+class CommandCenter(tornado.web.Application, common.RedisMixin):
+    def __init__(self,cc_name,redis_port):
+        self.cc_name = cc_name
+        self.db = self.init_redis(redis_port)
+        if not os.path.exists('files'):
+            os.makedirs('files') 
+        signal.signal(signal.SIGINT, self.shutdown)   
+        super(CommandCenter, self).__init__([
+            (r'/target', TargetHandler),
+            (r'/stream', StreamHandler),
+            (r'/job', JobHandler),
+            (r'/add_ws', WSHandler)
+        ]) 
+
+    def shutdown(self, signal_number, stack_frame):
+        self.shutdown_redis()       
+        print 'shutting down tornado...'
+        tornado.ioloop.IOLoop.instance().stop()
+        sys.exit(0)
+
+def start():
+    config_file = 'cc_config'
+    Config = ConfigParser.ConfigParser(
+        {
+        'cc_http_port' : '80',
+        })
+    Config.read(config_file)
+    cc_name           = Config.get('CC','name')
+    redis_port        = Config.getint('CC','redis_port')
+    cc_http_port = Config.getint('CC','cc_http_port')
+    cc_instance = CommandCenter(cc_name,redis_port)
+    http_server = tornado.httpserver.HTTPServer(cc_instance)
+    http_server.listen(cc_http_port)
+    tornado.ioloop.IOLoop.instance().start()
+
 if __name__ == "__main__":
-    cc_redis.flushdb()
+    start()
+
+    #cc_redis.flushdb()
 
     # when CC starts, we need to:
     # rebuild all priority queues. 
 
-    application.listen(8888, '0.0.0.0')
-    if not os.path.exists('files'):
-        os.makedirs('files')
-    tornado.ioloop.IOLoop.instance().start()
+    #application.listen(8888, '0.0.0.0')
+    #if not os.path.exists('files'):
+    #    os.makedirs('files')
+    #tornado.ioloop.IOLoop.instance().start()

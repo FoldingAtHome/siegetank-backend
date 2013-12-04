@@ -517,7 +517,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         pass
 
 def start():
-    config_file='ws_config'
+    config_file = 'ws_config'
     Config = ConfigParser.ConfigParser(
         {
         'ws_http_port' : '80',
@@ -536,7 +536,6 @@ def start():
     ws_http_port = Config.getint('WS','ws_http_port')
     ws_instance = WorkServer(ws_name,redis_port,ccs)
     http_server = tornado.httpserver.HTTPServer(ws_instance)
-    signal.signal(signal.SIGINT, ws_instance.shutdown)
     http_server.listen(ws_http_port)
     tornado.ioloop.IOLoop.instance().start()
 
