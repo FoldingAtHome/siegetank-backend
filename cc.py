@@ -66,7 +66,7 @@ import common
 # -(re)configure hash ws:ws_id, as ip and ports may have changed
 # -ws_redis_clients[ws_id] = redis.Redis('ip','redis_port')
 # -for stream in 'ws:'+ws_id+':streams' 
-#       frame_count = ws_redis_clients[ws_id].hget(streams)
+#       frame_count = ws_redis_clients[ws_id].hget('stream:'+stream)
 #       cc_redis.zadd('queue:'+cc.hget('stream:'+id,target), 'frame_count')
 
 # WS Clean Disconnect:
@@ -297,8 +297,9 @@ cc_redis = redis.Redis(host='localhost', port=6379)
 ws_redis_clients = {}
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
-    def __init__(self,cc_name,redis_port):
-        self.cc_name = cc_name
+    def __init__(self,cc_name,passphrase,redis_port):
+        self.name = cc_name
+        self.passphrase = passphrase
         self.db = self.init_redis(redis_port)
         if not os.path.exists('files'):
             os.makedirs('files') 
@@ -324,9 +325,10 @@ def start():
         })
     Config.read(config_file)
     cc_name           = Config.get('CC','name')
+    cc_passphrase     = Config.get('CC','passphrase')
     redis_port        = Config.getint('CC','redis_port')
     cc_http_port = Config.getint('CC','cc_http_port')
-    cc_instance = CommandCenter(cc_name,redis_port)
+    cc_instance = CommandCenter(cc_name,cc_passphrase,redis_port)
     http_server = tornado.httpserver.HTTPServer(cc_instance)
     http_server.listen(cc_http_port)
     tornado.ioloop.IOLoop.instance().start()
