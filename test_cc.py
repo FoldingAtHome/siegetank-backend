@@ -17,3 +17,7 @@ import requests
 import shutil
 import cStringIO
 import tarfile
+
+class CCTestCase(AsyncHTTPTestCase):
+	@classmethod
+	def setUpClass(self):

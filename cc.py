@@ -21,7 +21,7 @@ import redis
 # On average, we expect the load of the CC to be significantly lower 
 # than that of the WS. If each stream takes about 4 hours until 
 # termination, then each stream makes about 6 requests per day. 
-# A single CC handles is expected to handle 500,000 streams. This is 
+# A single CC is expected to handle 500,000 streams. This is 
 # about 3 million requests per day - translating to about 35 requests 
 # per second. Each request needs to be handled by the CC in 30 ms. 
 
@@ -32,7 +32,7 @@ import redis
 #       FIELD   'ip'                    | ip address
 #       FIELD   'http_port'             | port of ws's webserver
 #       FIELD   'redis_port'            | port of ws's redis server
-# SET   KEY     'ws_ips'                | set of active ws ips
+# SET   KEY     'ws_ips'                | set of active ws ips??
 
 # PYTH  DICT    'ws_redis_clients'      | {ws_id : redis_client}
 
@@ -71,6 +71,7 @@ import redis
 # CC Initialization (assumes RDB or AOF file is present)
 # -figure out which ws are still active by looking through saved active_ws, and 'ws:'+id
 # -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
+
 
 
 CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
@@ -289,6 +290,27 @@ class JobHandler(tornado.web.RequestHandler):
             return self.write('Popped stream_id:' + stream_id)
         else:
             return self.write('No jobs available!')
+
+class CommandCenter(tornado.web.Application):
+    def _init_redis(self, redis_port):
+        redis_port = str(redis_port)
+        args = ("redis/src/redis-server", "--port", redis_port)
+        redis_process = subprocess.Popen(args)
+        if redis_process.poll() is not None:
+            print 'COULD NOT START REDIS-SERVER, aborting'
+            sys.exit(0)
+        ws_redis = redis.Redis(host='localhost', port=int(redis_port))
+        # wait until redis is alive
+        alive = False
+        while not alive:
+            try:
+                alive = ws_redis.ping() 
+            except:
+                pass
+        return ws_redis
+
+    
+
 
 application = tornado.web.Application([
     (r'/target', TargetHandler),

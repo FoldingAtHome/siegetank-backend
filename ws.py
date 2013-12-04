@@ -19,6 +19,8 @@ import traceback
 import shutil
 import ConfigParser
 
+import common
+
 # [ STREAMS ]                           | persist on restart
 
 # SET   KEY     'streams'               | set of streams owned by this ws     
@@ -421,24 +423,7 @@ class HeartbeatHandler(BaseHandler):
         except KeyError:
             self.set_status(400)
 
-class WorkServer(tornado.web.Application):
-    def _init_redis(self, redis_port):
-        redis_port = str(redis_port)
-        args = ("redis/src/redis-server", "--port", redis_port)
-        redis_process = subprocess.Popen(args)
-        if redis_process.poll() is not None:
-            print 'COULD NOT START REDIS-SERVER, aborting'
-            sys.exit(0)
-        ws_redis = redis.Redis(host='localhost', port=int(redis_port))
-        # wait until redis is alive
-        alive = False
-        while not alive:
-            try:
-                alive = ws_redis.ping() 
-            except:
-                pass
-        return ws_redis
-
+class WorkServer(tornado.web.Application, common.RedisMixin):
     def _cleanup(self):
         # clear active streams
         if self.db.smembers('active_streams'):
@@ -469,7 +454,7 @@ class WorkServer(tornado.web.Application):
 
     def __init__(self,ws_name,redis_port,ccs,increment=600):
         print 'Initialization redis server on port: ', redis_port
-        self.db = self._init_redis(redis_port)    
+        self.db = self.init_redis(redis_port)    
         if not os.path.exists('files'):
             os.makedirs('files')
         if not os.path.exists('streams'):
@@ -500,13 +485,6 @@ class WorkServer(tornado.web.Application):
             (r'/stream', StreamHandler),
             (r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
-
-    def get_db(self):
-        return self.db
-
-    def shutdown_redis(self):
-        print 'shutting down redis...'
-        self.db.shutdown()
 
     def shutdown(self, signal_number, stack_frame):
         self.shutdown_redis()       
@@ -542,7 +520,8 @@ def start():
     config_file='ws_config'
     Config = ConfigParser.ConfigParser(
         {
-        'ws_http_port' : '80'
+        'ws_http_port' : '80',
+        'cc_http_port' : '80',
         })
     Config.read(config_file)
     ws_name           = Config.get('WS','name')
