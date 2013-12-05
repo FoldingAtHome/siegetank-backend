@@ -40,14 +40,10 @@ class TestWSRegistration(AsyncHTTPTestCase):
         return self.registrar
 
     def test_registration(self):
-
-        print 'tEST REGISTRATION'
-
         ws_name = 'firebat'
         ws_http_port = '80'
         ws_redis_port = '27390'
         ws_redis_pass = hashlib.md5(str(uuid.uuid4())).hexdigest()
-
         workserver = ws.WorkServer(ws_name,ws_redis_port,ws_redis_pass)
         test_body = json.dumps({
             'name'       : ws_name, 
@@ -57,16 +53,16 @@ class TestWSRegistration(AsyncHTTPTestCase):
             'auth_pass'  : self.auth_token
             })
         resp = self.fetch('/register_ws',method='POST',body=test_body)
-        
         self.assertEqual(resp.code,200)
         self.assertTrue(self.cc.db.sismember('active_ws','firebat'))
         self.assertTrue(
             self.cc.db.hget('ws:'+ws_name,':http_port') == ws_http_port and
             self.cc.db.hget('ws:'+ws_name,':redis_port') == ws_redis_port and
             self.cc.db.hget('ws:'+ws_name,':redis_pass') == ws_redis_pass)
-
+        test_r_message = 'A MESSAGE'
+        self.cc.ws_dbs[ws_name].set('Test',test_r_message   )
+        self.assertEqual(workserver.db.get('Test'),test_r_message)
         workserver.shutdown_redis()
-
         return ws_name
 
 #class TestStream(AsyncHTTPTestCase):
