@@ -55,13 +55,17 @@ class TestWSRegistration(AsyncHTTPTestCase):
             })
         resp = self.fetch('/register_ws',method='POST',body=test_body)
         self.assertEqual(resp.code,200)
-
-
         self.assertTrue(self.cc.db.sismember('active_ws','firebat'))
         self.assertTrue(
             self.cc.db.hget('ws:'+ws_name,':http_port') == http_port and
             self.cc.db.hget('ws:'+ws_name,':redis_port') == redis_port and
             self.cc.db.hget('ws:'+ws_name,':redis_pass') == redis_pass)
+
+        return ws_name
+
+        #self.assertTrue(self.cc.ws_dbs[ws_name] is self.cc)
+
+class TestCC
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

@@ -301,6 +301,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         print 'CC INITIALIZED'
         self.name = cc_name
         self.db = self.init_redis(redis_port)
+        self.ws_dbs = {}
         if not os.path.exists('files'):
             os.makedirs('files') 
         signal.signal(signal.SIGINT, self.shutdown)   
@@ -355,8 +356,9 @@ class RegisterWSHandler(tornado.web.RequestHandler):
             self.cc.db.hset('ws:'+ws_name,':redis_port',redis_port)
             self.cc.db.hset('ws:'+ws_name,':redis_pass',redis_pass)
 
-            #self.cc.ws_dbs[ws_name] = self.cc.db
+            ws_db = redis.Redis(host=ip,port=redis_port)
 
+            self.cc.ws_dbs[ws_name] = ws_db
 
         except Exception as e:
             print e
