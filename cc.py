@@ -298,6 +298,7 @@ ws_redis_clients = {}
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
     def __init__(self,cc_name,redis_port):
+        print 'CC INITIALIZED'
         self.name = cc_name
         self.db = self.init_redis(redis_port)
         if not os.path.exists('files'):
@@ -316,14 +317,14 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
 
-    def registerWS(self,name,ip,http_port,redis_port,redis_pass):
-        print 'called register WS'
-        print name
-        print ip
-        print http_port
-        print redis_port
-        print redis_pass
-        pass
+    #def registerWS(self,name,ip,http_port,redis_port,redis_pass):
+    #    print 'called register WS'
+    #    print name
+    #    print ip
+    #    print http_port
+    #    print redis_port
+    #    print redis_pass
+    #    pass
 
 class RegisterWSHandler(tornado.web.RequestHandler):
     def initialize(self, cc, cc_auth_pass):
@@ -341,12 +342,21 @@ class RegisterWSHandler(tornado.web.RequestHandler):
             http_port  = data['http_port']
             redis_port = data['redis_port']
             redis_pass = data['redis_pass']
-            self.cc.registerWS(
-                ws_name,
-                ip,
-                http_port,
-                redis_port,
-                redis_pass)
+            #self.cc.registerWS(
+            #    ws_name,
+            #    ip,
+            #    http_port,
+            #    redis_port,
+            #    redis_pass)
+
+            self.cc.db.sadd('active_ws',ws_name)
+            self.cc.db.hset('ws:'+ws_name,':ip',ip)
+            self.cc.db.hset('ws:'+ws_name,':http_port',http_port)
+            self.cc.db.hset('ws:'+ws_name,':redis_port',redis_port)
+            self.cc.db.hset('ws:'+ws_name,':redis_pass',redis_pass)
+
+            #self.cc.ws_dbs[ws_name] = self.cc.db
+
 
         except Exception as e:
             print e
