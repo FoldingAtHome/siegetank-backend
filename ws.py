@@ -488,7 +488,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
 
-    def shutdown(self, signal_number, stack_frame):
+    def shutdown(self, signal_number=None, stack_frame=None):
         self.shutdown_redis()       
         print 'shutting down tornado...'
         tornado.ioloop.IOLoop.instance().stop()
@@ -524,12 +524,12 @@ def verifyRegistration(resp):
 
 def start():
     config_file = 'ws_conf'
-    Config = ConfigParser.ConfigParser()
+    Config = ConfigParser.ConfigParser() 
     Config.read(config_file)
 
     ws_name       = Config.get('WS','name')
-    ws_redis_port    = Config.getint('WS','redis_port')
-    ws_redis_pass    = Config.get('WS','redis_pass')
+    ws_redis_port = Config.getint('WS','redis_port')
+    ws_redis_pass = Config.get('WS','redis_pass')
     int_http_port = Config.getint('WS','int_http_port')
     ext_http_port = Config.getint('WS','ext_http_port')
 
@@ -555,15 +555,16 @@ def start():
             'redis_pass' : ws_redis_pass,
             'auth_pass'  : auth_pass
         }
-
         uri = "http://"+ip+":"+auth_port+'/register_ws'
         print uri
-        resp = sync_client.fetch(uri,method='POST',body=json.dumps(msg))
-
-        print resp.code
-            
-
- 
+        print json.dumps(msg)
+        try:
+            resp = sync_client.fetch(uri,method='POST',body=json.dumps(msg))
+        except tornado.httpclient.HTTPError as e: 
+            print e
+            print 'Could not connect to CC'
+            ws_instance.shutdown()
+             
     #tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":

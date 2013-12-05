@@ -4,10 +4,10 @@ redis_port : 2394
 redis_pass : test_pass
 int_http_port : 8959
 ext_http_port : 8959 
-cc_names : pglab
+cc_names : ktflash
 
 
-[pglab]
+[ktflash]
 ip : 127.0.0.1
 http_port : 8319
 auth_port : 4573
