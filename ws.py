@@ -454,7 +454,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
         # inform the CC gracefully that the WS is dying (ie.expire everything)
 
-    def __init__(self,ws_name,redis_port,redis_pass,ccs,increment=600):
+    def __init__(self,ws_name,redis_port,redis_pass=None,ccs=None,increment=600):
         print 'Initialization redis server on port: ', redis_port
         self.db = self.init_redis(redis_port,redis_pass)
         if not os.path.exists('files'):
@@ -462,6 +462,9 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         if not os.path.exists('streams'):
             os.makedirs('streams')
         self._cleanup()
+
+        if not ccs:
+            raise ValueError('no ccs were given')
 
         # ccs is a list of tuples, where
         # 0th-index is name

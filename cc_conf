@@ -2,5 +2,5 @@
 name : ktflash
 redis_port : 2412
 http_port : 8319
-ws_auth_port : 4573
-cc_auth_pass : PROTOSS_IS_FOR_NOOBS
+auth_port : 4573
+auth_pass : PROTOSS_IS_FOR_NOOBS

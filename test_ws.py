@@ -44,7 +44,8 @@ class WSInitTestCase(AsyncHTTPTestCase):
         redis_port = str(3828)
         self.increment = 3
         cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
-        self.ws = ws.WorkServer('test_server',redis_port,[cc],self.increment)
+        self.ws = ws.WorkServer(
+            'test_server',redis_port,None,[cc],self.increment)
         self.redis_client = self.ws.get_db()
         self._folders = ['streams','files']
         super(AsyncHTTPTestCase, self).setUpClass()
@@ -82,7 +83,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         redis_port = str(3827)
         self.increment = 3
         cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
-        self.ws = ws.WorkServer('test_server',redis_port,[cc],self.increment)
+        self.ws = ws.WorkServer(
+            'test_server',redis_port,None,[cc],self.increment)
         self.redis_client = self.ws.get_db()
         self._folders = ['streams','files']
         super(AsyncHTTPTestCase, self).setUpClass()

@@ -371,17 +371,15 @@ def start():
     cc_name      = Config.get('CC','name')
     redis_port   = Config.getint('CC','redis_port')
     cc_http_port = Config.getint('CC','http_port')
-    ws_auth_port = Config.getint('CC','ws_auth_port')
-    cc_auth_pass = Config.get('CC','cc_auth_pass')
+    auth_port = Config.getint('CC','auth_port')
+    auth_pass = Config.get('CC','auth_pass')
     cc_instance  = CommandCenter(cc_name,redis_port)
     ws_registrar = tornado.web.Application([
         (r"/register_ws",RegisterWSHandler,
-         dict(cc=cc_instance, cc_auth_pass=cc_auth_pass))
+         dict(cc=cc_instance, cc_auth_pass=auth_pass))
                                           ])
     tornado.httpserver.HTTPServer(cc_instance).listen(cc_http_port)
-    tornado.httpserver.HTTPServer(ws_registrar).listen(ws_auth_port)
-
-    print ws_auth_port
+    tornado.httpserver.HTTPServer(ws_registrar).listen(auth_port)
 
     tornado.ioloop.IOLoop.instance().start()
 
