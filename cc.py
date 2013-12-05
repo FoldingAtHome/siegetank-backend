@@ -297,9 +297,8 @@ cc_redis = redis.Redis(host='localhost', port=6379)
 ws_redis_clients = {}
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
-    def __init__(self,cc_name,passphrase,redis_port):
+    def __init__(self,cc_name,redis_port):
         self.name = cc_name
-        self.passphrase = passphrase
         self.db = self.init_redis(redis_port)
         if not os.path.exists('files'):
             os.makedirs('files') 
@@ -317,19 +316,60 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
 
+    def registerWS(self,name,ip,http_port,redis_port,redis_pass):
+        print 'called register WS'
+        print name
+        print ip
+        print http_port
+        print redis_port
+        print redis_pass
+        pass
+
+class RegisterWSHandler(tornado.web.RequestHandler):
+    def initialize(self, cc, cc_auth_pass):
+        self.cc = cc
+        self.auth_pass = cc_auth_pass
+
+    def post(self):
+        try:
+            ip         = self.request.remote_ip
+            data       = json.loads(self.request.body)
+            auth_pass  = data['auth_pass']
+            if auth_pass != self.auth_pass:
+                raise ValueError('Bad token')
+            ws_name    = data['name']
+            http_port  = data['http_port']
+            redis_port = data['redis_port']
+            redis_pass = data['redis_pass']
+            self.cc.registerWS(
+                ws_name,
+                ip,
+                http_port,
+                redis_port,
+                redis_pass)
+
+        except Exception as e:
+            print e
+            self.set_status(401)
+            return
+
 def start():
-    config_file = 'cc_config'
-    Config = ConfigParser.ConfigParser(
-        {
-        'cc_http_port' : '80',
-        })
+    config_file = 'cc_conf'
+    Config = ConfigParser.ConfigParser()
     Config.read(config_file)
-    cc_name           = Config.get('CC','name')
-    redis_port        = Config.getint('CC','redis_port')
-    cc_http_port = Config.getint('CC','cc_http_port')
-    cc_instance = CommandCenter(cc_name,cc_passphrase,redis_port)
-    http_server = tornado.httpserver.HTTPServer(cc_instance)
-    http_server.listen(cc_http_port)
+    # read config file
+    cc_name      = Config.get('CC','name')
+    redis_port   = Config.getint('CC','redis_port')
+    cc_http_port = Config.getint('CC','http_port')
+    ws_auth_port = Config.getint('CC','ws_auth_port')
+    cc_auth_pass = Config.get('CC','cc_auth_pass')
+    cc_instance  = CommandCenter(cc_name,redis_port)
+    ws_registrar = tornado.web.Application([
+        (r"/register_ws",RegisterWSHandler,
+         dict(cc=cc_instance, cc_auth_pass=cc_auth_pass))
+                                          ])
+    tornado.httpserver.HTTPServer(cc_instance).listen(cc_http_port)
+    tornado.httpserver.HTTPServer(ws_registrar).listen(ws_auth_port)
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":

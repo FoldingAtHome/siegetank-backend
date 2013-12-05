@@ -2,5 +2,5 @@
 name : ktflash
 redis_port : 2412
 http_port : 8319
-# ws_ips is only used to allow WS's to identify themselves
-ws_ips : 127.0.0.1, 127.0.0.2, 127.0.0.3
+ws_auth_port : 4573
+cc_auth_pass : BurkPRxZuTWdfksxtgxHAPSY
