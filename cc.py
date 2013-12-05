@@ -343,23 +343,19 @@ class RegisterWSHandler(tornado.web.RequestHandler):
             http_port  = data['http_port']
             redis_port = data['redis_port']
             redis_pass = data['redis_pass']
-
             self.cc.db.sadd('active_ws',ws_name)
             self.cc.db.hset('ws:'+ws_name,':ip',ip)
             self.cc.db.hset('ws:'+ws_name,':http_port',http_port)
             self.cc.db.hset('ws:'+ws_name,':redis_port',redis_port)
             self.cc.db.hset('ws:'+ws_name,':redis_pass',redis_pass)
-
-            print ws_name, http_port, redis_port, redis_pass
-
-            ws_db = redis.Redis(host=ip,port=redis_port,password=redis_pass)
-
-            print ws_db.ping()
-
+            ws_db = redis.Redis(host=ip,port=int(redis_port),
+                password=redis_pass)
+            # see if the ws's db is alive
+            ws_db.ping()
             self.cc.ws_dbs[ws_name] = ws_db
 
         except Exception as e:
-            print e
+            raise e
             self.set_status(401)
             return
 

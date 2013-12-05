@@ -1,4 +1,5 @@
 import cc
+import ws
 import hashlib
 import redis
 import tornado.ioloop
@@ -39,42 +40,43 @@ class TestWSRegistration(AsyncHTTPTestCase):
         return self.registrar
 
     def test_registration(self):
-        self.io_loop 
+
+        print 'tEST REGISTRATION'
 
         ws_name = 'firebat'
-        http_port = '80'
-        redis_port = '423'
-        redis_pass = 'ramanujan'
+        ws_http_port = '80'
+        ws_redis_port = '27390'
+        ws_redis_pass = hashlib.md5(str(uuid.uuid4())).hexdigest()
 
+        workserver = ws.WorkServer(ws_name,ws_redis_port,ws_redis_pass)
         test_body = json.dumps({
             'name'       : ws_name, 
-            'http_port'  : http_port, 
-            'redis_port' : redis_port, 
-            'redis_pass' : redis_pass, 
+            'http_port'  : ws_http_port, 
+            'redis_port' : ws_redis_port, 
+            'redis_pass' : ws_redis_pass, 
             'auth_pass'  : self.auth_token
             })
         resp = self.fetch('/register_ws',method='POST',body=test_body)
+        
         self.assertEqual(resp.code,200)
         self.assertTrue(self.cc.db.sismember('active_ws','firebat'))
         self.assertTrue(
-            self.cc.db.hget('ws:'+ws_name,':http_port') == http_port and
-            self.cc.db.hget('ws:'+ws_name,':redis_port') == redis_port and
-            self.cc.db.hget('ws:'+ws_name,':redis_pass') == redis_pass)
+            self.cc.db.hget('ws:'+ws_name,':http_port') == ws_http_port and
+            self.cc.db.hget('ws:'+ws_name,':redis_port') == ws_redis_port and
+            self.cc.db.hget('ws:'+ws_name,':redis_pass') == ws_redis_pass)
+
+        workserver.shutdown_redis()
 
         return ws_name
 
-        #self.assertTrue(self.cc.ws_dbs[ws_name] is self.cc)
+#class TestStream(AsyncHTTPTestCase):
+#    ''' Test and see if we can send a stream to the CC, which then gets
+#        routed to the WS. '''
+#    @classmethod
+#    def setUpClass(self):
+#        self.cc     = cc.CommandCenter()
 
 
-
-class TestStream(AsyncHTTPTestCase)
-    ''' Test and see if we can send a stream to the CC, which then gets
-        routed to the WS. '''
-    @classmethod
-    def setUpClass(self):
-        self.cc     = cc.CommandCenter()
-
-    
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

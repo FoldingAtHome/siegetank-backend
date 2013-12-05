@@ -463,22 +463,22 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             os.makedirs('streams')
         self._cleanup()
 
-        if not ccs:
-            raise ValueError('no ccs were given')
-
         # ccs is a list of tuples, where
         # 0th-index is name
         # 1st-index is ip
         # 2nd-index is port
-        for cc in ccs:
-            cc_name = cc[0]
-            cc_ip   = cc[1]
-            cc_port = cc[2]
-            self.db.sadd('ccs',cc_name)
-            self.db.hset('cc:'+cc_name,'ip',cc_ip)
-            self.db.hset('cc:'+cc_name,'http_port',cc_port)
-            self.db.set('cc_ip:'+cc_ip+':id',cc_name)
-            # inform the CCs that we are alive. 
+        if ccs:
+            for cc in ccs:
+                cc_name = cc[0]
+                cc_ip   = cc[1]
+                cc_port = cc[2]
+                self.db.sadd('ccs',cc_name)
+                self.db.hset('cc:'+cc_name,'ip',cc_ip)
+                self.db.hset('cc:'+cc_name,'http_port',cc_port)
+                self.db.set('cc_ip:'+cc_ip+':id',cc_name)
+                # inform the CCs that we are alive. 
+        else:
+            print 'WARNING: No CCs were specified for this WS'
 
         check_stream_freq_in_ms = 60000
         pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats, 

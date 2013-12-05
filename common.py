@@ -25,11 +25,7 @@ class RedisMixin():
             sys.exit(0)
         redis_client = redis.Redis(host='localhost',password=redis_pass,
                                port=int(redis_port))
-        
-        print redis_port, redis_pass
-
         # poll until redis server is alive
-        
         alive = False
         start_time = time.time()
         while time.time()-start_time < 15.0:
@@ -38,7 +34,6 @@ class RedisMixin():
                 break 
             except Exception as e:
                 pass
-        
         if not alive:
             raise ValueError('Could not start redis')
 
