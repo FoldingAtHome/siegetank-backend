@@ -3,6 +3,7 @@ import tornado.ioloop
 import tornado.web
 import tornado.httputil
 import tornado.httpserver
+import tornado.httpclient
 import redis
 import cStringIO
 import tarfile
@@ -18,6 +19,7 @@ import time
 import traceback
 import shutil
 import ConfigParser
+
 
 import common
 
@@ -452,9 +454,9 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
         # inform the CC gracefully that the WS is dying (ie.expire everything)
 
-    def __init__(self,ws_name,redis_port,ccs,increment=600):
+    def __init__(self,ws_name,redis_port,redis_pass,ccs,increment=600):
         print 'Initialization redis server on port: ', redis_port
-        self.db = self.init_redis(redis_port)    
+        self.db = self.init_redis(redis_port,redis_pass)
         if not os.path.exists('files'):
             os.makedirs('files')
         if not os.path.exists('streams'):
@@ -473,6 +475,8 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             self.db.hset('cc:'+cc_name,'ip',cc_ip)
             self.db.hset('cc:'+cc_name,'http_port',cc_port)
             self.db.set('cc_ip:'+cc_ip+':id',cc_name)
+            # inform the CCs that we are alive. 
+
         check_stream_freq_in_ms = 60000
         pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats, 
                 check_stream_freq_in_ms,tornado.ioloop.IOLoop.instance())
@@ -514,23 +518,53 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
     def push_stream_to_cc(stream_id):
         pass
 
+def verifyRegistration(resp):
+    if resp.code != 200:
+        raise ValueError('Did not register successfully with all CCs')
+
 def start():
-    config_file = 'ws_config'
+    config_file = 'ws_conf'
     Config = ConfigParser.ConfigParser()
     Config.read(config_file)
-    ws_name           = Config.get('WS','name')
-    redis_port        = Config.getint('WS','redis_port')
-    cc_str            = Config.get('WS','cc_names').split(',')
+
+    ws_name       = Config.get('WS','name')
+    ws_redis_port    = Config.getint('WS','redis_port')
+    ws_redis_pass    = Config.get('WS','redis_pass')
+    int_http_port = Config.getint('WS','int_http_port')
+    ext_http_port = Config.getint('WS','ext_http_port')
+
+    cc_str        = Config.get('WS','cc_names').split(',')
     ccs = []
     for cc in cc_str:
         cc_ip   = Config.get(cc,'ip')
         cc_port = Config.getint(cc,'http_port')
         ccs.append((cc,cc_ip,cc_port))
-    ws_http_port = Config.getint('WS','http_port')
-    ws_instance = WorkServer(ws_name,redis_port,ccs)
-    http_server = tornado.httpserver.HTTPServer(ws_instance)
-    http_server.listen(ws_http_port)
-    tornado.ioloop.IOLoop.instance().start()
+
+    ws_instance = WorkServer(ws_name,ws_redis_port,ws_redis_pass,ccs)
+    ws_instance.listen(int_http_port)
+
+    sync_client = tornado.httpclient.HTTPClient()
+    for cc in cc_str:
+        ip   = Config.get(cc,'ip')
+        auth_port = Config.get(cc,'auth_port')
+        auth_pass = Config.get(cc,'auth_pass')
+        msg = {
+            'name'       : ws_name,
+            'http_port'  : ext_http_port,
+            'redis_port' : ws_redis_port,
+            'redis_pass' : ws_redis_pass,
+            'auth_pass'  : auth_pass
+        }
+
+        uri = "http://"+ip+":"+auth_port+'/register_ws'
+        print uri
+        resp = sync_client.fetch(uri,method='POST',body=json.dumps(msg))
+
+        print resp.code
+            
+
+ 
+    #tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
     start()

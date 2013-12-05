@@ -343,12 +343,6 @@ class RegisterWSHandler(tornado.web.RequestHandler):
             http_port  = data['http_port']
             redis_port = data['redis_port']
             redis_pass = data['redis_pass']
-            #self.cc.registerWS(
-            #    ws_name,
-            #    ip,
-            #    http_port,
-            #    redis_port,
-            #    redis_pass)
 
             self.cc.db.sadd('active_ws',ws_name)
             self.cc.db.hset('ws:'+ws_name,':ip',ip)
@@ -356,7 +350,7 @@ class RegisterWSHandler(tornado.web.RequestHandler):
             self.cc.db.hset('ws:'+ws_name,':redis_port',redis_port)
             self.cc.db.hset('ws:'+ws_name,':redis_pass',redis_pass)
 
-            ws_db = redis.Redis(host=ip,port=redis_port)
+            ws_db = redis.Redis(host=ip,port=redis_port,password=redis_pass)
 
             self.cc.ws_dbs[ws_name] = ws_db
 

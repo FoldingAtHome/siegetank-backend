@@ -65,7 +65,13 @@ class TestWSRegistration(AsyncHTTPTestCase):
 
         #self.assertTrue(self.cc.ws_dbs[ws_name] is self.cc)
 
-class TestCC
+
+
+class TestStream(AsyncHTTPTestCase)
+    ''' Test and see if we can send a stream to the CC, which then gets
+        routed to the WS. '''
+    @classmethod
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
