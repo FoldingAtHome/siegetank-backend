@@ -19,6 +19,10 @@ import cStringIO
 import tarfile
 import sys
 
+# Tests
+# User registration
+# Workserver roundtrip
+
 class TestWSRegistration(AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
@@ -83,12 +87,12 @@ class TestCCMethods(AsyncHTTPTestCase):
         async_client = tornado.tornado.httpclient.AsyncHTTPClient()
         resp = self.fetch(
 
-#class TestStream(AsyncHTTPTestCase):
-#    ''' Test and see if we can send a stream to the CC, which then gets
-#        routed to the WS. '''
-#    @classmethod
-#    def setUpClass(self):
-#        self.cc     = cc.CommandCenter()
+class TestStream(AsyncHTTPTestCase):
+    ''' Test and see if we can send a stream to the CC, which then gets
+        routed to the WS. '''
+    @classmethod
+    def setUpClass(self):
+        self.cc     = cc.CommandCenter()
 
 
 
