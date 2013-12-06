@@ -150,7 +150,6 @@ class WSHandler(tornado.web.RequestHandler):
                 for stream_id in existing_streams:
                     if cc_redis.hget('stream:'+stream,'state') == 0:
                         target_id = cc_redis.hget('stream:'+stream_id+':target')
-                        # ws needs to send a list of 
                         cc_redis.zadd('target_id',target_id,frame_count)
 
         except Exception as e:
@@ -162,7 +161,14 @@ class WSHandler(tornado.web.RequestHandler):
 
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
-        ''' PGI - Post a new target '''
+        ''' PGI - Post a new target
+
+
+            
+
+        '''
+
+
         self.set_status(400)
         content = json.loads(self.request.body)
         try:
@@ -274,7 +280,6 @@ class JobHandler(tornado.web.RequestHandler):
         target_id = random.choice()
 
         # pick a random ws from the list of targets
-
         client = random.choice(ws_clients)
         pipe = client.pipeline()
         pipe.zrevrange('target:'+target_id+':queue',0,0)
@@ -376,7 +381,6 @@ def start():
                                           ])
     tornado.httpserver.HTTPServer(cc_instance).listen(cc_http_port)
     tornado.httpserver.HTTPServer(ws_registrar).listen(auth_port)
-
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":

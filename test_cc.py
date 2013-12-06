@@ -27,8 +27,6 @@ class TestWSRegistration(AsyncHTTPTestCase):
         self.registrar  = tornado.web.Application([
             (r"/register_ws",cc.RegisterWSHandler,
             dict(cc=self.cc, cc_auth_pass=self.auth_token))])
-        tornado.httpserver.HTTPServer(self.cc)
-        tornado.httpserver.HTTPServer(self.registrar)
         super(AsyncHTTPTestCase, self).setUpClass()
 
     @classmethod
@@ -64,6 +62,26 @@ class TestWSRegistration(AsyncHTTPTestCase):
         self.assertEqual(workserver.db.get('Test'),test_r_message)
         workserver.shutdown_redis()
         return ws_name
+
+class TestCCMethods(AsyncHTTPTestCase):
+    @classmethod
+    def post(self):
+        self.cc         = cc.CommandCenter('hoth','2438')
+        self.auth_token = hashlib.md5(str(uuid.uuid4())).hexdigest()
+        self.registrar  = tornado.web.Application([
+        super(AsyncHTTPTestCase, self).setUpClass()
+
+    @classmethod
+    def tearDownClass(self):
+        self.cc.shutdown_redis()
+        super(AsyncHTTPTestCase, self).tearDownClass()
+
+    def get_app(self):
+        return self.cc
+
+    def test_post_target(self):
+        async_client = tornado.tornado.httpclient.AsyncHTTPClient()
+        resp = self.fetch(
 
 #class TestStream(AsyncHTTPTestCase):
 #    ''' Test and see if we can send a stream to the CC, which then gets
