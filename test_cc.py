@@ -23,6 +23,8 @@ import sys
 # User registration
 # Workserver roundtrip
 
+# FAH user
+
 class TestWSRegistration(AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
