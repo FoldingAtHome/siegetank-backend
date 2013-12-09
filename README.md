@@ -4,6 +4,19 @@ F@h re-exposed using a web-based RESTful API with Python bindings.
 
 Standard Draft v0.1 
 
+<h1> Components </h1>
+
+ST - Siege Public, Public API
+CC - Command Center, Fixed IP
+WS - Work Server
+FU - FAH Users
+SS - Stats Server? 
+
+CC -> WS, via redis, and HTTP port 80 for communication (IP restriction)
+WS -> CC, HTTP backport for registration, HTTP port 80 for communication (IP Restriction). 
+CC -> FU, redis connection, FU blocks all ports (even 80), except for the redis port. (which is IP restricted)
+
+
 <h1> Key goals </h1>
 
 The major goals in the development of Siege Tank are:
