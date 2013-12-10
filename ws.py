@@ -490,6 +490,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 check_stream_freq_in_ms,tornado.ioloop.IOLoop.instance())
         pcb.start()
         signal.signal(signal.SIGINT, self.shutdown)
+        signal.signal(signal.SIGTERM, self.shutdown)
         super(WorkServer, self).__init__([
             (r'/frame', FrameHandler),
             (r'/stream', StreamHandler),

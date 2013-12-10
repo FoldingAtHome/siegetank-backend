@@ -1,5 +1,5 @@
 # User Server
 [US]
 name : firebat
-redis_port : 4378
+redis_port : 4379
 http_port : 5930

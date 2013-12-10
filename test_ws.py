@@ -52,7 +52,6 @@ class WSInitTestCase(AsyncHTTPTestCase):
 
     @classmethod
     def tearDownClass(self):
-        ''' Destroy the server '''
         self.ws.shutdown_redis()
         for folder in self._folders:
             if os.path.exists(folder):
