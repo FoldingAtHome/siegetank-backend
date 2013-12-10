@@ -41,7 +41,7 @@ import common
 
 # TODO: Change passwords to use bcrypt
 
-def cc_access_only(f):
+def cc_access(f):
     @functools.wraps(f)
     def decorated(self,*args,**kwargs):
         if self.request.remote_ip != '127.0.0.1':
@@ -50,6 +50,19 @@ def cc_access_only(f):
         else:
             return f(self,*args, **kwargs)
     return decorated
+
+'''
+def require_auth(f):
+    @functools.wraps(f)
+    def decorated(self,*args,**kwargs):
+        token = self.request.headers['token']
+        if self.get_user(token):
+            return f(self,*args, **kwargs)
+        else:
+            self.set_status(401)
+            return
+    return decorated
+'''
 
 class BaseHandler(tornado.web.RequestHandler):
     @property
@@ -111,7 +124,29 @@ class AuthHandler(BaseHandler):
             self.set_status(401)
 
 class UserHandler(BaseHandler):
-    @cc_access_only
+    def get(self):
+        ''' Return a list of targets owned by this user '''
+        try:
+            token_id = self.request.headers['token']
+            user_id = self.get_user(token_id)
+            if user_id:
+                # return a list of tokens and the ip of the cc its on
+                targets = self.db.smembers('user:'+user_id+':targets')
+                if targets:
+                    ccs = []
+                    ips = []
+                    for target_id in targets:
+                        cc = self.db.get('target:'+target_id+':cc')
+                        ccs.append(cc)
+                    self.set_status(200)
+                    self.write(json.dumps(dict(zip(targets,ccs))))
+            else:
+                self.set_status(401)
+        except Exception as e:
+            print 'Exception: ', e
+            self.set_status(400)
+    
+    @cc_access
     def post(self):
         ''' Add a new user to the database '''
         try:
@@ -132,28 +167,6 @@ class UserHandler(BaseHandler):
         pass
 
 class TargetHandler(BaseHandler):
-    def get(self):
-        ''' Return a list of targets owned by this user '''
-        try:
-            token_id = self.request.headers['token']
-            user_id = self.get_user(token_id)
-            if user_id:
-                # return a list of tokens and the ip of the cc its on
-                targets = self.db.smembers('user:'+user_id+':targets')
-                if targets:
-                    ccs = []
-                    ips = []
-                    for target_id in targets:
-                        cc = self.db.get('target:'+target_id+':cc')
-                        ccs.append(cc)
-                    self.set_status(200)
-                    self.write(json.dump(dict(zip(targets,ccs))))
-            else:
-                self.set_status(401)
-        except Exception as e:
-            self.set_status(400)
-            self.write('Missing token header')
-
     def post(self):
         ''' Add a new target owned by this user and indicate the CC it is on.'''
         # check if ip is a CC iP

@@ -18,6 +18,7 @@ import cStringIO
 import tarfile
 import signal
 import sys
+import sets
 
 class USInterfaceTestCase(AsyncHTTPTestCase):
     ''' This class tests the basic interface of the US to ensure DB entries
@@ -95,6 +96,26 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertTrue(self.us.db.sismember('user:'+user+':targets',target))
         self.assertEqual(self.us.db.get('target:'+target+':cc'),cc_id)
 
+        return user,test_token,target
+
+    def test_get_user(self):
+        user,test_token = self.test_auth_user()
+        targets = sets.Set()
+        for i in range(5):
+            target = str(uuid.uuid4())
+            targets.add(target)
+            cc_id  = 'firebat'
+            message = json.dumps({
+                    'target' : target,
+                    'cc'     : cc_id,
+                    'token'  : test_token
+                })
+            rep = self.fetch('/target',method='POST',body=message)
+        headers = {'token' : test_token}
+        rep = self.fetch('/user',method='GET',headers=headers)
+        target_mapping = json.loads(rep.body)
+        for target,cc in target_mapping.iteritems():
+            self.assertTrue(target in targets)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
