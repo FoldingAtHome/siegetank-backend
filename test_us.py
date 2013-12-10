@@ -38,7 +38,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         return self.us
 
     def test_add_user(self):
-        name = 'ramanujan'
+        name = str(uuid.uuid4())
         password = 'hehe'
         email = 'ramanujan@ramanujan.com'
         payload = json.dumps({
@@ -54,6 +54,19 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         # see if adding two users with same name dies
         rep = self.fetch('/user',method='POST',body=payload)
         self.assertEqual(rep.code,400)
+
+        return name,password
+
+    def test_auth_user(self):
+        username,password = self.test_add_user()
+        print username,password
+        payload = json.dumps({
+            'username' : username,
+            'password' : password
+        })
+        rep = self.fetch('/auth',method='POST',body=payload)
+        self.assertEqual(rep.body,self.us.db.hget('user:'+username,'token'))
+        self.assertEqual(rep.code,200)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

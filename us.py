@@ -55,11 +55,29 @@ class VerifyHandler(BaseHandler):
             self.set_status(400)
             self.write('Missing token header')
 
+class AuthHandler(BaseHandler):
+    def post(self):
+        ''' Generate a token used for id purposes, the token generated
+        is NOT a function of the password, it is a completely random
+        hash. Each time this is called, a new user token is generated
+        '''
+        try:
+            content = json.loads(self.request.body)
+            username = content['username']
+            password = content['password']
+            print username, password
+            digest = hashlib.sha256(os.urandom(256)).hexdigest()
+            print 'DIGEST:', digest
+            self.db.hset('user:'+username,'token',digest)
+            self.set_status(200)
+            return self.write(digest)
+        except Exception as e:
+            self.set_status(401)
+
 class UserHandler(BaseHandler):
     def post(self):
         ''' Add a new user to the database '''
         try:
-            print 'foo'
             if self.request.remote_ip != '127.0.0.1':
                 self.set_status(401)
                 return
@@ -110,7 +128,8 @@ class UserServer(tornado.web.Application, common.RedisMixin):
         super(UserServer, self).__init__([
             (r'/verify', VerifyHandler),
             (r'/target', TargetHandler),
-            (r'/user', UserHandler)
+            (r'/user', UserHandler),
+            (r'/auth', AuthHandler)
             ])
 
     def shutdown(self, signal_number=None, stack_frame=None):
