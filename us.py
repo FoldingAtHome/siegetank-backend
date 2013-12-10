@@ -15,6 +15,8 @@ import ConfigParser
 import signal
 import sys
 
+import functools
+
 import common
 
 # User Server
@@ -35,19 +37,48 @@ import common
 # STRNG KEY     'target:'+id+':cc'      | which CC the target is on
 # STRNG KEY     'token:'+id+':user'     | which user the token belongs to
 
+# STORAGE REQUIREMENTS: O(Number of Targets).
+
 # TODO: Change passwords to use bcrypt
+
+def cc_access_only(f):
+    @functools.wraps(f)
+    def decorated(self,*args,**kwargs):
+        if self.request.remote_ip != '127.0.0.1':
+            self.set_status(401)
+            return
+        else:
+            return f(self,*args, **kwargs)
+    return decorated
 
 class BaseHandler(tornado.web.RequestHandler):
     @property
     def db(self):
         return self.application.db
 
+    def get_user(self,token):
+        return self.db.get('token:'+token+':user')
+
+    def get_token(self,user):
+        return self.db.hget('user:'+user,'token')
+
+    def set_token(self,user,token):
+        self.db.hset('user:'+user,'token',token)
+        self.db.set('token:'+token+':user',user)
+
+    def add_target(self,user,target,cc):
+        self.db.sadd('user:'+user+':targets',target)
+        self.db.set('target:'+target+':cc',cc)
+
 class VerifyHandler(BaseHandler):
     def get(self):
         ''' Get the user the token belongs to '''
+        if self.request.remote_ip != '127.0.0.1':
+            self.set_status(401)
+            return  
         try:
             token_id = self.request.headers['token']
-            user_id = self.db.get('token:'+token_id+':user')
+            user_id = self.get_user(token_id)
             if user_id:
                 self.set_status(200)
                 self.write(user_id)
@@ -68,11 +99,10 @@ class AuthHandler(BaseHandler):
             username = content['username']
             password = content['password']
             digest = hashlib.sha256(os.urandom(256)).hexdigest()
-            old_token = self.db.hget('user:'+username,'token')
+            old_token = self.get_token(username)
             if old_token:
                 self.db.delete('token:'+old_token+':user')
-            self.db.hset('user:'+username,'token',digest)
-            self.db.set('token:'+digest+':user',username)
+            self.set_token(username,digest)
 
             self.set_status(200)
             return self.write(digest)
@@ -81,12 +111,10 @@ class AuthHandler(BaseHandler):
             self.set_status(401)
 
 class UserHandler(BaseHandler):
+    @cc_access_only
     def post(self):
         ''' Add a new user to the database '''
         try:
-            if self.request.remote_ip != '127.0.0.1':
-                self.set_status(401)
-                return
             content = json.loads(self.request.body)
             # make sure all relevant fields exist
             username = content['username']
@@ -98,7 +126,6 @@ class UserHandler(BaseHandler):
             self.db.hset('user:'+username,'password',password)
             self.db.hset('user:'+username,'email',email)
         except Exception as e:
-            print e
             self.set_status(400)
 
     def delete():
@@ -109,7 +136,7 @@ class TargetHandler(BaseHandler):
         ''' Return a list of targets owned by this user '''
         try:
             token_id = self.request.headers['token']
-            user_id = self.db.get('token:'+token_id+':user')
+            user_id = self.get_user(token_id)
             if user_id:
                 # return a list of tokens and the ip of the cc its on
                 targets = self.db.smembers('user:'+user_id+':targets')
@@ -128,11 +155,21 @@ class TargetHandler(BaseHandler):
             self.write('Missing token header')
 
     def post(self):
-        ''' Add a new target owned by this user and which CC it is on.'''
+        ''' Add a new target owned by this user and indicate the CC it is on.'''
         # check if ip is a CC iP
         if self.request.remote_ip != '127.0.0.1':
             self.set_status(401)
-            return        
+        try:
+            content = json.loads(self.request.body)
+            target  = content['target']
+            token   = content['token']
+            cc_id   = content['cc']
+            user_id = self.get_user(token)
+            self.add_target(user_id,target,cc_id)
+            self.set_status(200)
+        except Exception as e:
+            self.set_status(400)
+            print e
 
 class UserServer(tornado.web.Application, common.RedisMixin):
     def __init__(self,us_name,redis_port):
@@ -160,8 +197,8 @@ def start():
     us_redis_port = Config.getint('US','redis_port')
     http_port     = Config.getint('US','http_port')
     us_instance   = UserServer(us_name, us_redis_port)
-    us_server = tornado.httpserver.HTTPServer(us_instance,ssl_options={
-            'certfile' : 'ws.crt','keyfile'  : 'ws.key'})
+    us_server = tornado.httpserver.HTTPServer(us_instance,
+        ssl_options={'certfile' : 'ws.crt','keyfile' : 'ws.key'})
     us_server.listen(http_port)
     tornado.ioloop.IOLoop.instance().start()
 

@@ -37,7 +37,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
     def get_app(self):
         return self.us
 
-    def test_add_user(self):
+    def test_post_user(self):
         name = str(uuid.uuid4())
         password = 'hehe'
         email = 'ramanujan@ramanujan.com'
@@ -58,8 +58,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         return name,password
 
     def test_auth_user(self):
-        username,password = self.test_add_user()
-        print username,password
+        username,password = self.test_post_user()
         payload = json.dumps({
             'username' : username,
             'password' : password
@@ -77,6 +76,25 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(self.us.db.get('token:'+new_token+':user'),username)
         self.assertEqual(rep.code,200)
         self.assertFalse(self.us.db.get('token:'+token+':user'),username)
+
+        return username,new_token
+
+    def test_post_target(self):
+        user,test_token = self.test_auth_user()
+        target = str(uuid.uuid4())
+        cc_id  = 'firebat'
+
+        message = json.dumps({
+                'target' : target,
+                'cc'     : cc_id,
+                'token'  : test_token
+            })
+
+        rep = self.fetch('/target',method='POST',body=message)
+        self.assertEqual(rep.code,200)
+        self.assertTrue(self.us.db.sismember('user:'+user+':targets',target))
+        self.assertEqual(self.us.db.get('target:'+target+':cc'),cc_id)
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
