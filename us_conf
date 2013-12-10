@@ -1,5 +1,6 @@
 # User Server
 [US]
-name : firebat
+name       : firebat
 redis_port : 4379
-http_port : 5930
+http_port  : 5930
+cc_ips     : 127.0.0.1

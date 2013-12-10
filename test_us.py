@@ -65,8 +65,18 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'password' : password
         })
         rep = self.fetch('/auth',method='POST',body=payload)
-        self.assertEqual(rep.body,self.us.db.hget('user:'+username,'token'))
+        token = rep.body
         self.assertEqual(rep.code,200)
+        self.assertEqual(token,self.us.db.hget('user:'+username,'token'))
+        self.assertEqual(self.us.db.get('token:'+token+':user'),username)
+
+        # auth again to make sure the old token is deleted
+        rep = self.fetch('/auth',method='POST',body=payload)
+        new_token = rep.body
+        self.assertEqual(new_token,self.us.db.hget('user:'+username,'token'))
+        self.assertEqual(self.us.db.get('token:'+new_token+':user'),username)
+        self.assertEqual(rep.code,200)
+        self.assertFalse(self.us.db.get('token:'+token+':user'),username)
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

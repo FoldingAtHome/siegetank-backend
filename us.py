@@ -35,6 +35,8 @@ import common
 # STRNG KEY     'target:'+id+':cc'      | which CC the target is on
 # STRNG KEY     'token:'+id+':user'     | which user the token belongs to
 
+# TODO: Change passwords to use bcrypt
+
 class BaseHandler(tornado.web.RequestHandler):
     @property
     def db(self):
@@ -65,13 +67,17 @@ class AuthHandler(BaseHandler):
             content = json.loads(self.request.body)
             username = content['username']
             password = content['password']
-            print username, password
             digest = hashlib.sha256(os.urandom(256)).hexdigest()
-            print 'DIGEST:', digest
+            old_token = self.db.hget('user:'+username,'token')
+            if old_token:
+                self.db.delete('token:'+old_token+':user')
             self.db.hset('user:'+username,'token',digest)
+            self.db.set('token:'+digest+':user',username)
+
             self.set_status(200)
             return self.write(digest)
         except Exception as e:
+            print e
             self.set_status(401)
 
 class UserHandler(BaseHandler):
@@ -92,6 +98,7 @@ class UserHandler(BaseHandler):
             self.db.hset('user:'+username,'password',password)
             self.db.hset('user:'+username,'email',email)
         except Exception as e:
+            print e
             self.set_status(400)
 
     def delete():
@@ -119,6 +126,13 @@ class TargetHandler(BaseHandler):
         except Exception as e:
             self.set_status(400)
             self.write('Missing token header')
+
+    def post(self):
+        ''' Add a new target owned by this user and which CC it is on.'''
+        # check if ip is a CC iP
+        if self.request.remote_ip != '127.0.0.1':
+            self.set_status(401)
+            return        
 
 class UserServer(tornado.web.Application, common.RedisMixin):
     def __init__(self,us_name,redis_port):
