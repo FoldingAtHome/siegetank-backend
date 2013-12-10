@@ -412,6 +412,11 @@ class HeartbeatHandler(BaseHandler):
             increment amount. Defaults to once every 30 minutes '''
         self._increment = increment
 
+    def get(self):
+        print 'GOT REQUEST'
+        self.set_status(200)
+        return self.write('OK')
+
     def post(self):
         ''' Cores POST to this handler to notify the WS that it is still 
             alive. WS executes a zadd initially as well'''
@@ -544,8 +549,12 @@ def start():
         ccs.append((cc,cc_ip,cc_port))
 
     ws_instance = WorkServer(ws_name,ws_redis_port,ws_redis_pass,ccs)
-    ws_instance.listen(int_http_port)
+    ws_server = tornado.httpserver.HTTPServer(ws_instance,ssl_options={
+            'certfile' : 'ws.crt','keyfile'  : 'ws.key'})
+    #ws_server = tornado.httpserver.HTTPServer(ws_instance)
+    ws_server.listen(int_http_port)
 
+    '''
     sync_client = tornado.httpclient.HTTPClient()
     for cc in cc_str:
         ip   = Config.get(cc,'ip')
@@ -567,8 +576,11 @@ def start():
             print e
             print 'Could not connect to CC'
             ws_instance.shutdown()
-             
-    #tornado.ioloop.IOLoop.instance().start()
+     '''        
+
+    print 'starting IO loop'
+
+    tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
     start()

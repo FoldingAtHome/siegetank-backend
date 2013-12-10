@@ -1,6 +1,6 @@
 [WS]
 name : firebat
-redis_port : 2394
+redis_port : 4378
 redis_pass : test_pass
 int_http_port : 8959
 ext_http_port : 8959 

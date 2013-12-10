@@ -1,6 +1,12 @@
+# Command Center
 [CC]
 name : ktflash
 redis_port : 2412
 http_port : 8319
 auth_port : 4573
 auth_pass : PROTOSS_IS_FOR_NOOBS
+
+# Users Server
+[US]
+ip: 127.0.0.1
+http_port : 5298
