@@ -2,6 +2,76 @@ import redis
 import subprocess
 import sys
 import time
+import redis
+
+class HashSet(object):
+    
+    _rc   = None
+    _rmaps = []
+    
+    @classmethod
+    def set_redis(cls,rc):
+        cls._rc = rc
+
+    @classmethod
+    def exists(cls,id):
+        return cls._rc.sismember(cls._prefix+'s',id)
+    
+    @classmethod
+    def create(cls,id):
+        if cls.exists(id):
+            raise KeyError(id,'already exists')
+        cls._rc.sadd(cls._prefix+'s',id)
+                                      
+    @classmethod
+    def delete(cls,id):
+        if not cls.exists(id):
+            raise KeyError('key not found')
+        cls._rc.srem(cls._prefix+'s',id)
+        # cleanup rmap first
+        for field in cls._rmaps:
+            rmap_index = cls._rc.hget(cls._prefix+':'+id, field)
+            cls._rc.delete(field+':'+rmap_index+':'+cls._prefix)
+        cls._rc.delete(cls._prefix+':'+id)
+        
+    @classmethod
+    def instance(cls,id):
+        return cls(id)
+    
+    @classmethod
+    def rmap(cls,field,id):
+        if not field in cls._fields:
+            raise KeyError('invalid field')
+        if not field in cls._rmaps:
+            raise KeyError('key not rmapped')
+        return cls._rc.get(field+':'+id+':'+cls._prefix)
+    
+    def hincrby(self, attr, count=1):
+        if not attr in self.__class__._fields:
+            raise KeyError('invalid field')
+        if not self.__class__._fields[attr] is int:
+            raise TypeError('can only increment ints')
+        return self.__class__._rc.hincrby(self.__class__._prefix+':'+self._id,attr,count)
+
+    def __init__(self,id):
+        if not self.__class__.exists(id):
+            raise KeyError(id,'has not been created yet')
+        self.__dict__['_id'] = id
+
+    def __getattr__(self, attr):
+        if not attr in self._fields:
+            raise KeyError('invalid field')
+        # get value then type cast
+        return self.__class__._fields[attr](self.__class__._rc.hget(self.__class__._prefix+':'+self._id, attr))
+    
+    def __setattr__(self, attr, value):
+        if not attr in self._fields:
+            raise KeyError('invalid field')
+        if not isinstance(value,self._fields[attr]):
+            raise TypeError('expected',self.__class__._fields[attr],'got',type(value))
+        if attr in self.__class__._rmaps:
+            self.__class__._rc.set(attr+':'+value+':'+self.__class__._prefix,self._id)
+        self.__class__._rc.hset(self.__class__._prefix+':'+self._id, attr, value)
 
 class RedisMixin():
     def init_redis(self, redis_port, redis_pass=None):
@@ -21,7 +91,7 @@ class RedisMixin():
         redis_process = subprocess.Popen(args)
 
         if redis_process.poll() is not None:
-            print 'COULD NOT START REDIS-SERVER, aborting'
+            print 'Could not start redis server, aborting'
             sys.exit(0)
         redis_client = redis.Redis(host='localhost',password=redis_pass,
                                port=int(redis_port))
@@ -45,3 +115,5 @@ class RedisMixin():
     def shutdown_redis(self):
         print 'shutting down redis...'
         self.db.shutdown()
+
+    

@@ -55,15 +55,11 @@ import common
 #       FIELD   'http_port'             | http_port of the CC
 # STRNG KEY     'cc_ip:'+ip+':id'       | id given CC's ip
 # Note: passphrase is explicitly not stored in db
-# 
-# Not implemented yet (shove to stats server later on)
-# LIST  KEY     'stat:'+id+':donor'     | donor statistics
-# LIST  KEY     'stat:'+id+':frames'    | cardinality equal to above
 
 # [ MISC ]
 
 # ZSET  KEY     'heartbeats'                   | { stream_id : expire_time }
-# SET   KEY     'download_token:'+id+':stream' | stream the token maps to   
+# STRNG KEY     'download_token:'+id+':stream' | reverse mapping   
 # STRNG KEY     'shared_token:'+id+':stream'   | reverse mapping
 # SET   KEY     'file_hashes'                  | files that exist in /files
 
@@ -87,6 +83,28 @@ import common
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
+class StreamHS(common.HashSet):
+    _prefix = 'stream'
+    _fields = {'frames'          : int,
+               'status'          : str,
+               'error_count'     : int,
+               'system_hash'     : str,
+               'integrator_hash' : str,
+               'download_token'  : str,
+               'cc_id'           : str,
+               'steps_per_frame' : int
+               }
+    _rmaps  = {'download_token'}
+
+class ActiveStreamHS(common.HashSet):
+    _prefix = 'active_stream'
+    _fields = {'buffer_frames'  : int,
+               'shared_token'   : str,
+               'donor'          : str,
+               'steps'          : int,
+               }
+    _rmaps  = {'shared_token'}
+
 # General WS config
 # Block ALL ports except port 80
 # Redis port is only available to CC's IP on the intranet
@@ -106,9 +124,9 @@ class FrameHandler(BaseHandler):
         self._max_error_count = max_error_count
 
     def post(self):
-        ''' CORE - Used by the core to add a frame
+        ''' Used by the core to post a frame to the existing frames file
 
-            REQ Parameters:
+            Request parameters:
         
             HEADER { 'token_id'      : unique_id } 
             HEADER { 'error_state'   : status_code }    # optional
@@ -130,16 +148,19 @@ class FrameHandler(BaseHandler):
         try:
             token = self.request.headers['shared_token']
             stream_id = self.db.get('shared_token:'+token+':stream')
+            stream = StreamHS.instance(stream_id)
             if not stream_id:
                 self.set_status(400)
                 return
-            if self.db.hget('stream:'+stream_id,'status') != 'OK':
+            if stream.status != 'OK':
                 self.set_status(400)
                 return self.write('Stream status not OK')
             if 'error_code' in self.request.headers:
                 self.set_status(400)
-                errors = self.db.hincrby('stream:'+stream_id,'error_count',1)
-                #if errors > self._max_error_count:
+                error_count = stream.hincrby('error_count',1)
+
+                #self.db.hincrby('stream:'+stream_id,'error_count',1)
+                #if error_count > self._max_error_count:
                 self.deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
             self.db.hset('stream:'+stream_id,'error_count',0)
@@ -464,6 +485,10 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
     def __init__(self,ws_name,redis_port,redis_pass=None,ccs=None,increment=600):
         print 'Initialization redis server on port: ', redis_port
         self.db = self.init_redis(redis_port,redis_pass)
+        
+        StreamHS.set_redis(self.db)
+        ActiveStreamHS.set_redis(self.db)
+
         if not os.path.exists('files'):
             os.makedirs('files')
         if not os.path.exists('streams'):
