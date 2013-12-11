@@ -45,7 +45,8 @@ import common
 #       FIELD   'donor'                 | which donor stream belongs to
 #       FIELD   'steps'                 | checkpointed frames completed
 
-# On expiration, the donor stats are sent directly to the central stats server
+# On expiration, the donor/step stats are sent directly to the stats server on
+# the CC
 
 # [ COMMAND CENTER ]                    | reconfigured on restart
 
@@ -55,10 +56,6 @@ import common
 #       FIELD   'http_port'             | http_port of the CC
 # STRNG KEY     'cc_ip:'+ip+':id'       | id given CC's ip
 # Note: passphrase is explicitly not stored in db
-# 
-# Not implemented yet (shove to stats server later on)
-# LIST  KEY     'stat:'+id+':donor'     | donor statistics
-# LIST  KEY     'stat:'+id+':frames'    | cardinality equal to above
 
 # [ MISC ]
 
