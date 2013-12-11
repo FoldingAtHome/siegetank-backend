@@ -45,7 +45,8 @@ import common
 #       FIELD   'donor'                 | which donor stream belongs to
 #       FIELD   'steps'                 | checkpointed frames completed
 
-# On expiration, the donor stats are sent directly to the central stats server
+# On expiration, the donor/step stats are sent directly to the stats server on
+# the CC
 
 # [ COMMAND CENTER ]                    | reconfigured on restart
 
