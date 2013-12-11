@@ -4,6 +4,8 @@ import sys
 import time
 import redis
 
+# Todo pipelines.. (yuck)
+
 class HashSet(object):
     
     _rc   = None

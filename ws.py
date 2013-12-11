@@ -94,7 +94,7 @@ class StreamHS(common.HashSet):
                'download_token'  : str,
                'cc_id'           : str,
                'steps_per_frame' : int
-               }
+              }
     _rmaps  = {'download_token'}
 
 class ActiveStreamHS(common.HashSet):
@@ -103,8 +103,15 @@ class ActiveStreamHS(common.HashSet):
                'shared_token'   : str,
                'donor'          : str,
                'steps'          : int,
-               }
+              }
     _rmaps  = {'shared_token'}
+
+class CommandCenterHS(common.HashSet):
+    _prefix = 'cc'
+    _fields = {'ip'         : str,
+               'http_port'  : str 
+              }
+    _rmaps  = {'ip'}
 
 # General WS config
 # Block ALL ports except port 80
@@ -150,6 +157,7 @@ class FrameHandler(BaseHandler):
             token = self.request.headers['shared_token']
             stream_id = self.db.get('shared_token:'+token+':stream')
             stream = StreamHS.instance(stream_id)
+            active_stream = ActiveStreamHS.instance(stream_id)
             if not stream_id:
                 self.set_status(400)
                 return
@@ -164,7 +172,7 @@ class FrameHandler(BaseHandler):
                 #if error_count > self._max_error_count:
                 self.deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
-            self.db.hset('stream:'+stream_id,'error_count',0)
+            stream.error_count = 0
             tar_string = cStringIO.StringIO(self.request.body)
             with tarfile.open(mode='r', fileobj=tar_string) as tarball:
                 # Extract the frame
@@ -174,8 +182,7 @@ class FrameHandler(BaseHandler):
                 with open(buffer_path,'ab') as buffer_file:
                     buffer_file.write(frame_binary)
                 # Increment buffer frames by 1
-                self.db.hincrby('active_stream:'+stream_id, 
-                                 'buffer_frames',1)
+                active_stream.hincrby('buffer_frames',1)
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
                 # make sure time step has increased?
@@ -200,12 +207,9 @@ class FrameHandler(BaseHandler):
                                     break
                                 dest.write(chars)
                     # this need not be done atomically since no other client 
-                    # will modify the active_streams key except this ws
-                    buf_frames = self.db.hget('active_stream:'+stream_id,
-                                               'buffer_frames')    
-                    self.db.hincrby('stream:'+stream_id,'frames',buf_frames)
-                    self.db.hset('active_stream:'+stream_id,
-                                  'buffer_frames',0)
+                    # will modify the active_stream key except this ws
+                    stream.hincrby('frames',active_stream.buffer_frames)
+                    active_stream.buffer_frames = 0
                     # clear the buffer
                     with open(buffer_path,'w') as buffer_file:
                         pass
