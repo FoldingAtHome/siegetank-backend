@@ -159,10 +159,12 @@ class UserHandler(BaseHandler):
             if self.db.exists('user:'+username):
                 self.set_status(400)
                 self.write('user:'+username+' already exists in db') 
+                return
             self.db.hset('user:'+username,'password',password)
             self.db.hset('user:'+username,'email',email)
             self.set_status(200)
         except Exception as e:
+            print 'ERROR:', e
             self.set_status(400)
 
     def delete():

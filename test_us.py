@@ -27,6 +27,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
     def setUpClass(self):
         redis_port = str(3829)
         self.us    = us.UserServer('test_server',redis_port)
+        self.us.db.flushdb()
         super(AsyncHTTPTestCase, self).setUpClass()
 
     @classmethod
