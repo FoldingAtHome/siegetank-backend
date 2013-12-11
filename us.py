@@ -84,6 +84,7 @@ class BaseHandler(tornado.web.RequestHandler):
         self.db.set('target:'+target+':cc',cc)
 
 class VerifyHandler(BaseHandler):
+    @cc_access
     def get(self):
         ''' Get the user the token belongs to '''
         if self.request.remote_ip != '127.0.0.1':
@@ -105,7 +106,7 @@ class AuthHandler(BaseHandler):
     def post(self):
         ''' Generate a token used for id purposes, the token generated
         is NOT a function of the password, it is a completely random
-        hash. Each time this is called, a new user token is generated
+        hash. Each time this is called, a new user token is generated.
         '''
         try:
             content = json.loads(self.request.body)
@@ -151,7 +152,7 @@ class UserHandler(BaseHandler):
         ''' Add a new user to the database '''
         try:
             content = json.loads(self.request.body)
-            # make sure all relevant fields exist
+            # make sure all relevant fields exist beflore writing to db
             username = content['username']
             password = content['password']
             email    = content['email']
@@ -160,6 +161,7 @@ class UserHandler(BaseHandler):
                 self.write('user:'+username+' already exists in db') 
             self.db.hset('user:'+username,'password',password)
             self.db.hset('user:'+username,'email',email)
+            self.set_status(200)
         except Exception as e:
             self.set_status(400)
 
@@ -167,11 +169,9 @@ class UserHandler(BaseHandler):
         pass
 
 class TargetHandler(BaseHandler):
+    @cc_access
     def post(self):
         ''' Add a new target owned by this user and indicate the CC it is on.'''
-        # check if ip is a CC iP
-        if self.request.remote_ip != '127.0.0.1':
-            self.set_status(401)
         try:
             content = json.loads(self.request.body)
             target  = content['target']
@@ -211,7 +211,7 @@ def start():
     http_port     = Config.getint('US','http_port')
     us_instance   = UserServer(us_name, us_redis_port)
     us_server = tornado.httpserver.HTTPServer(us_instance,
-        ssl_options={'certfile' : 'ws.crt','keyfile' : 'ws.key'})
+        ssl_options = {'certfile' : 'ws.crt','keyfile' : 'ws.key'})
     us_server.listen(http_port)
     tornado.ioloop.IOLoop.instance().start()
 

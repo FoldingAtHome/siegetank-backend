@@ -57,7 +57,7 @@ import common
 #       FIELD   'system'                | checksum of file
 #       FIELD   'integrator'            | checksum of file
 #       FIELD   'creation_date'         | in seconds since 1/1/70  
-#       FIELD   'type'                  | full fah or beta
+#       FIELD   'status'                | disabled, beta, release
 # SET   KEY     'target:'+id+':streams' | set of stream ids
 # ZSET  KEY     'queue:'+id             | queue of inactive streams
 
@@ -164,7 +164,7 @@ class TargetHandler(tornado.web.RequestHandler):
         ''' PGI - Post a new target
 
 
-            
+
 
         '''
 

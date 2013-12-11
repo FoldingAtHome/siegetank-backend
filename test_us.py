@@ -116,6 +116,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         target_mapping = json.loads(rep.body)
         for target,cc in target_mapping.iteritems():
             self.assertTrue(target in targets)
+            self.assertEqual(cc,'firebat')
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

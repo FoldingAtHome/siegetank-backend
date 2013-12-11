@@ -19,12 +19,6 @@ import cStringIO
 import tarfile
 import sys
 
-# Tests
-# User registration
-# Workserver roundtrip
-
-# FAH user
-
 class TestWSRegistration(AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):

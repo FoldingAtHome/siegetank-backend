@@ -27,7 +27,7 @@ import common
 
 # SET   KEY     'streams'               | set of streams owned by this ws     
 # HASH  KEY     'stream:'+id            |
-#       FIELD   'frames'                | number of frames in frames.xtc        
+#       FIELD   'frames'                | total number of frames completed       
 #       FIELD   'status'                | 'OK', 'DISABLED'
 #       FIELD   'error_count'           | number of consecutive errors
 #       FIELD   'system_hash'           | hash for system.xml.gz
@@ -42,8 +42,10 @@ import common
 # HASH  KEY     'active_stream:'+id     | 
 #       FIELD   'buffer_frames'         | number of frames in buffer.xtc
 #       FIELD   'shared_token'          | each update must include this token 
-#       FIELD   'donor'                 | which donor the stream belongs to  
-#       FIELD   'steps'                 | steps completed thus far
+#       FIELD   'donor'                 | which donor stream belongs to
+#       FIELD   'steps'                 | checkpointed frames completed
+
+# On expiration, the donor stats are sent directly to the central stats server
 
 # [ COMMAND CENTER ]                    | reconfigured on restart
 
