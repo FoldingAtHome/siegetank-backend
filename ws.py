@@ -19,8 +19,6 @@ import time
 import traceback
 import shutil
 import ConfigParser
-
-
 import common
 
 # [ STREAMS ]                           | persist on restart
@@ -44,6 +42,7 @@ import common
 #       FIELD   'shared_token'          | each update must include this token 
 #       FIELD   'donor'                 | which donor stream belongs to
 #       FIELD   'steps'                 | checkpointed frames completed
+#       FIELD   'start_time'            | time started (server time)
 
 # On expiration, the donor/step stats are sent directly to the stats server on
 # the CC
@@ -103,6 +102,7 @@ class ActiveStreamHS(common.HashSet):
                'shared_token'   : str,
                'donor'          : str,
                'steps'          : int,
+               'start_time'     : float,
               }
     _rmaps  = {'shared_token'}
 
@@ -251,10 +251,10 @@ class FrameHandler(BaseHandler):
         '''
         try:
             shared_token = self.request.headers['shared_token']
-            if ActiveStreamHS.rmap('shared_token',shared_token) is None:
+            stream_id = ActiveStreamHS.rmap('shared_token',shared_token)
+            if stream_id is None:
                 self.set_status(401)
                 return self.write('Unknown token')
-            stream_id = ActiveStreamHS.rmap('shared_token',shared_token)
             stream = StreamHS.instance(stream_id)
             # return if stream is stopped by PG user or NaN'd
             if self.db.hget('stream:'+stream_id,'status') != 'OK':

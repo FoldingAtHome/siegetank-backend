@@ -19,6 +19,7 @@ import cStringIO
 import tarfile
 import signal
 import sys
+import common
 
 def _tar_strings(strings, names):
     ''' Returns a cStringIO'd tar file of strings with names in names '''
@@ -121,16 +122,14 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         stream_id, system_bin, state_bin, integrator_bin = \
             self.test_add_stream()
         token_id = str(uuid.uuid4())
-        self.redis_client.sadd('active_streams',stream_id)
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'shared_token', token_id)
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'donor', 'proteneer')
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'start_time', self.redis_client.time()[0])
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'steps', 0)
-        self.redis_client.set('shared_token:'+token_id+':active_stream', stream_id)
+
+        ws.ActiveStreamHS.create(stream_id)
+        active_stream = ws.ActiveStreamHS.instance(stream_id)
+        active_stream.shared_token = token_id
+        active_stream.donor = 'proteneer'
+        active_stream.start_time = float(self.redis_client.time()[0])
+        active_stream.steps = 0
+
         # set a really long timer to make sure this doesn't die half way
         ws_time = cc.sum_time(self.redis_client.time())
         self.redis_client.zadd('heartbeats',stream_id,ws_time+600)
@@ -162,7 +161,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                     self.assertEqual(tarball.extractfile(member).read(),
                                      integrator_bin)
     
-    @unittest.skip('no reason')     
+    #@unittest.skip('no reason')     
     def test_post_frame(self):
         res            = self.test_assign_stream()
         stream_id      = res[0]
