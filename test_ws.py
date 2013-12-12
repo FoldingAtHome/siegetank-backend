@@ -276,7 +276,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.redis_client.exists('active_stream:'+stream_id) and 
             self.redis_client.exists('shared_token:'+token_id+':active_stream'))
 
-    @unittest.skip('no reason')
     def test_post_stream(self):
         system_bin     = 'system.xml.gz'
         state_bin      = 'state.xml.gz'

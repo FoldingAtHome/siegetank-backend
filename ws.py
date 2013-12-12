@@ -155,12 +155,12 @@ class FrameHandler(BaseHandler):
         '''
         try:
             token = self.request.headers['shared_token']
-            stream_id = self.db.get('shared_token:'+token+':stream')
-            stream = StreamHS.instance(stream_id)
-            active_stream = ActiveStreamHS.instance(stream_id)
+            stream_id = ActiveStreamHS.rmap('shared_token',token)
             if not stream_id:
                 self.set_status(400)
                 return
+            stream = StreamHS.instance(stream_id)
+            active_stream = ActiveStreamHS.instance(stream_id)
             if stream.status != 'OK':
                 self.set_status(400)
                 return self.write('Stream status not OK')
