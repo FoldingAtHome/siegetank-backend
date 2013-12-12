@@ -33,8 +33,13 @@ class HashSet(object):
             rmap_id = cls._rc.hget(cls._prefix+':'+id, field)
             if rmap_id:
                 cls._rc.delete(field+':'+rmap_id+':'+cls._prefix)
+        # cleanup hash
         cls._rc.delete(cls._prefix+':'+id)
-        
+        # cleanup sets
+        for f_name, f_type in cls._fields:
+            if f_type is set:
+                cls._rc.delete(self.__class__._prefix+':'+self._id+':'+field)
+
     @classmethod
     def members(cls):
         return cls._rc.smembers(cls._prefix+'s')
@@ -43,6 +48,10 @@ class HashSet(object):
     def instance(cls,id):
         return cls(id)
     
+    @classmethod
+    def sadd(self, attr, value):
+        return
+
     @classmethod
     def rmap(cls,field,id):
         if not field in cls._fields:
@@ -63,21 +72,34 @@ class HashSet(object):
             raise KeyError(id,'has not been created yet')
         self.__dict__['_id'] = id
 
-
     def __getattr__(self, attr):
         if not attr in self._fields:
             raise KeyError('invalid field')
+
+        if isinstance(self._fields[attr],set):
+            return self.__class__._rc.smembers(self.__class__._prefix+':'+self._id+':'+attr)
+        else:
         # get value then type cast
-        return self.__class__._fields[attr](self.__class__._rc.hget(self.__class__._prefix+':'+self._id, attr))
+            return self.__class__._fields[attr](self.__class__._rc.hget(self.__class__._prefix+':'+self._id, attr))
     
     def __setattr__(self, attr, value):
+        if not value:
+            raise ValueError('got NaN')
         if not attr in self._fields:
             raise KeyError('invalid field')
         if not isinstance(value,self._fields[attr]):
             raise TypeError('expected',self.__class__._fields[attr],'got',type(value))
-        if attr in self.__class__._rmaps:
-            self.__class__._rc.set(attr+':'+value+':'+self.__class__._prefix,self._id)
-        self.__class__._rc.hset(self.__class__._prefix+':'+self._id, attr, value)
+        
+        # add support for sets
+        if isinstance(self._fields[attr],set):
+            if attr in self.__class__._rmaps:
+                raise TypeError('rmaps not supported for set types')
+            for element in value:
+                self.__class__._rc.sadd(self.__class__._prefix+':'+self._id+':'+attr,value)
+        elif:
+            if attr in self.__class__._rmaps:
+                self.__class__._rc.set(attr+':'+value+':'+self.__class__._prefix,self._id)
+            self.__class__._rc.hset(self.__class__._prefix+':'+self._id, attr, value)
 
 class RedisMixin():
     def init_redis(self, redis_port, redis_pass=None):
