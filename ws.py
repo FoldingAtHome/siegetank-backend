@@ -464,12 +464,12 @@ class HeartbeatHandler(BaseHandler):
 class WorkServer(tornado.web.Application, common.RedisMixin):
     def _cleanup(self):
         # clear active streams
-        if self.db.smembers('active_streams'):
-            for stream in self.db.smembers('active_streams'):
+        active_streams = ActiveStreamHS.members()
+        if active_streams:
+            for stream in active_streams:
                 # deactivate this stream
                 self.deactivate_stream(stream)
-            # delete all keys in this
-            self.db.delete('active_streams')
+        assert len(ActiveStreamHS.members()) == 0
         # clear command centers 
         if self.db.smembers('ccs'):
             for cc_id in self.db.smembers('ccs'):

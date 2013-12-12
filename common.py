@@ -36,6 +36,10 @@ class HashSet(object):
         cls._rc.delete(cls._prefix+':'+id)
         
     @classmethod
+    def members(cls):
+        return cls._rc.smembers(cls._prefix+'s')
+
+    @classmethod
     def instance(cls,id):
         return cls(id)
     
