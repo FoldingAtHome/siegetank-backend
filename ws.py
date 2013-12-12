@@ -251,18 +251,17 @@ class FrameHandler(BaseHandler):
         '''
         try:
             shared_token = self.request.headers['shared_token']
-            if not self.db.exists('shared_token:'+shared_token+':stream'):
+            if ActiveStreamHS.rmap('shared_token',shared_token) is None:
                 self.set_status(401)
                 return self.write('Unknown token')
-            stream_id  = self.db.get('shared_token:'+shared_token+':stream')
+            stream_id = ActiveStreamHS.rmap('shared_token',shared_token)
+            stream = StreamHS.instance(stream_id)
             # return if stream is stopped by PG user or NaN'd
             if self.db.hget('stream:'+stream_id,'status') != 'OK':
                 self.set_status(400)
                 return self.write('Stream Disabled')
-            sys_hash   = self.db.hget('stream:'+stream_id,'system_hash')
-            intg_hash  = self.db.hget('stream:'+stream_id,'integrator_hash')
-            sys_file   = os.path.join('files',sys_hash)
-            intg_file  = os.path.join('files',intg_hash)
+            sys_file   = os.path.join('files',stream.system_hash)
+            intg_file  = os.path.join('files',stream.integrator_hash)
             state_file = os.path.join('streams',stream_id,'state.xml.gz')
             # Make a tarball in memory and send directly
             c = cStringIO.StringIO()
