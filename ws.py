@@ -328,7 +328,7 @@ class StreamHandler(BaseHandler):
             # Step 1. Check if request is valid.
             state_bin = self.request.files['state_bin'][0]['body']
             required_strings = ['system','integrator']
-            redis_pipe = self.db.pipeline()
+
             file_hashes = {}
             file_buffer = {}
             for s in required_strings:
@@ -359,9 +359,14 @@ class StreamHandler(BaseHandler):
             open(path,'w').write(state_bin)
             for f_hash,f_bin in file_buffer.iteritems():
                 open(os.path.join('files',f_hash),'w').write(f_bin)
+            redis_pipe = self.db.pipeline()
+            StreamHS.create(stream_id)
+            stream = StreamHS.instance(stream_id)
             redis_pipe.sadd('streams',stream_id)
             redis_pipe.hset('stream:'+stream_id, 'frames', 0)
             redis_pipe.hset('stream:'+stream_id, 'status', 'OK')
+            
+
             for k,v in file_hashes.iteritems():
                 redis_pipe.hset('stream:'+stream_id, k, v)
             redis_pipe.execute()
