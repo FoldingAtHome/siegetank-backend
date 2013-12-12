@@ -5,9 +5,7 @@ import time
 import redis
 
 # Todo pipelines.. (yuck)
-
 class HashSet(object):
-    
     _rc   = None
     _rmaps = []
     
@@ -31,7 +29,6 @@ class HashSet(object):
             raise KeyError('key not found')
         cls._rc.srem(cls._prefix+'s',id)
         # cleanup rmap first
-        print 'BAR', cls._rmaps
         for field in cls._rmaps:
             rmap_id = cls._rc.hget(cls._prefix+':'+id, field)
             if rmap_id:
@@ -61,6 +58,7 @@ class HashSet(object):
         if not self.__class__.exists(id):
             raise KeyError(id,'has not been created yet')
         self.__dict__['_id'] = id
+
 
     def __getattr__(self, attr):
         if not attr in self._fields:

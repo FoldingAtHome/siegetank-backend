@@ -21,6 +21,14 @@ import shutil
 import ConfigParser
 import common
 
+# Capacity
+
+# Suppose each stream returns a frame once every 5 minutes. A single stream returns 288 frames
+# per day. The WS is designed to handle about 50 frame POSTS per second. In a single day, a 
+# WS can handle about 4,320,000 frames. This is equal to about 86,400 active streams. Note
+# that 4.3 million frames @ 80kb/frame = 328GB worth of data per day. We will fill up 117 TB
+# worth of a data a year - so we will run out of disk space way before that. 
+
 # [ STREAMS ]                           | persist on restart
 
 # SET   KEY     'streams'               | set of streams owned by this ws     
@@ -167,9 +175,8 @@ class FrameHandler(BaseHandler):
             if 'error_code' in self.request.headers:
                 self.set_status(400)
                 error_count = stream.hincrby('error_count',1)
-
-                #self.db.hincrby('stream:'+stream_id,'error_count',1)
                 #if error_count > self._max_error_count:
+                #   set status to bad
                 self.deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
             stream.error_count = 0
@@ -186,9 +193,8 @@ class FrameHandler(BaseHandler):
                 # TODO: Check to make sure the frame is valid 
                 # valid in both md5 hash integrity and xtc header integrity
                 # make sure time step has increased?
-                # If the stream NaNs 
 
-                # See if state is present, if so, the buffer.xtc is
+                # See if checkpoint state is present, if so, the buffer.xtc is
                 # appended to the frames.xtc
                 try:
                     chkpt_member = tarball.getmember('state.xml.gz')
@@ -223,7 +229,7 @@ class FrameHandler(BaseHandler):
             return self.write('Bad Request')
 
     def get(self):
-        ''' CORE - The core calls this method to retrieve a frame only after
+        ''' CORE - The core calls this method to retrieve a job only after
             first going to CC to get a shared_token. The CC initializes the
             necessary redis internals, starts a heartbeat, and sets the hash.
             'active_stream'+stream_id.
@@ -256,10 +262,8 @@ class FrameHandler(BaseHandler):
                 self.set_status(401)
                 return self.write('Unknown token')
             stream = StreamHS.instance(stream_id)
-            # return if stream is stopped by PG user or NaN'd
-            if self.db.hget('stream:'+stream_id,'status') != 'OK':
-                self.set_status(400)
-                return self.write('Stream Disabled')
+            # a core should NEVER be able to catch a non OK stream
+            assert stream.status == 'OK'
             sys_file   = os.path.join('files',stream.system_hash)
             intg_file  = os.path.join('files',stream.integrator_hash)
             state_file = os.path.join('streams',stream_id,'state.xml.gz')
@@ -420,11 +424,7 @@ class StreamHandler(BaseHandler):
                 if stream:
                     # remove stream from memory
                     self.deactivate_stream(stream_id)
-                    print 'FOO'
                     StreamHS.delete(stream_id)
-                    self.db.delete('download_token:'+stream_id+':stream')
-                    self.db.delete('stream:'+stream_id)
-                    self.db.srem('streams',stream_id)
                     # remove stream from disk
                     shutil.rmtree(os.path.join('streams',stream_id))
                     self.set_status(200)
@@ -445,7 +445,6 @@ class HeartbeatHandler(BaseHandler):
         self._increment = increment
 
     def get(self):
-        print 'GOT REQUEST'
         self.set_status(200)
         return self.write('OK')
 

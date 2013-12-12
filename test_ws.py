@@ -203,7 +203,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
             raise Exception('Checkpoint state file missing!')
      
-    @unittest.skip('no reason')
     def test_post_bad_frame(self):
         # Test POSTing an error 
         res = self.test_assign_stream()
@@ -225,7 +224,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertFalse(rc.exists('active_stream:'+stream_id))
         self.assertEqual(rc.hget('stream:'+stream_id,'error_count'),str(1))
     
-    @unittest.skip('no reason')
     def test_disable_stream(self):
         res = self.test_assign_stream()
         stream_id = res[0]
@@ -367,7 +365,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         os.remove(os.path.join('files',system_hash))
         os.remove(os.path.join('files',integrator_hash))
 
-    @unittest.skip('no reason')
     def test_post_bad_stream(self):
         system_bin     = 'system.xml.gz'
         state_bin      = 'state.xml.gz'
@@ -399,7 +396,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         self.assertEqual(hashlib.md5(string1).hexdigest(),
                          hashlib.md5(string2).hexdigest())
 
-    @unittest.skip('no reason')
     def test_post_frames_get_stream(self):
         res            = self.test_assign_stream()
         stream_id      = res[0]
@@ -462,7 +458,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         }
         resp = self.fetch('/stream', headers=headers, method='GET')
         self.assertEqualHash(true_frames, resp.body)
-        
+
     def test_delete_stream(self):
         # create and assign a stream
         res = self.test_assign_stream()
