@@ -349,7 +349,7 @@ class StreamHandler(BaseHandler):
                     return self.write('missing content: '+s+'_bin/hash')
                 file_hashes[s+'_hash'] = bin_hash
                 
-            # Step 2. Valid Request. Generate uuid and write to disk
+            # Step 2. Valid Request, generate uuid and write to disk
             stream_id = str(uuid.uuid4())
             stream_folder = os.path.join('streams',stream_id)
             if not os.path.exists(stream_folder):
@@ -362,14 +362,10 @@ class StreamHandler(BaseHandler):
             redis_pipe = self.db.pipeline()
             StreamHS.create(stream_id)
             stream = StreamHS.instance(stream_id)
-            redis_pipe.sadd('streams',stream_id)
-            redis_pipe.hset('stream:'+stream_id, 'frames', 0)
-            redis_pipe.hset('stream:'+stream_id, 'status', 'OK')
-            
-
+            stream.frames = 0
+            stream.status = 'OK'
             for k,v in file_hashes.iteritems():
-                redis_pipe.hset('stream:'+stream_id, k, v)
-            redis_pipe.execute()
+                setattr(stream, k, v)
             self.set_status(200)
             return self.write(stream_id)
         except KeyError as e:
@@ -420,9 +416,12 @@ class StreamHandler(BaseHandler):
         try:
             if 'stream_id' in self.request.headers:
                 stream_id = self.request.headers['stream_id']
-                if self.db.sismember('streams', stream_id):
+                stream = StreamHS.instance(stream_id)
+                if stream:
                     # remove stream from memory
                     self.deactivate_stream(stream_id)
+                    print 'FOO'
+                    StreamHS.delete(stream_id)
                     self.db.delete('download_token:'+stream_id+':stream')
                     self.db.delete('stream:'+stream_id)
                     self.db.srem('streams',stream_id)
@@ -436,6 +435,7 @@ class StreamHandler(BaseHandler):
             else:
                 return self.write('Missing data')
         except Exception as e:
+            print e
             return
 
 class HeartbeatHandler(BaseHandler):
@@ -550,12 +550,9 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             for dead_stream in dead_streams:
                 self.deactivate_stream(dead_stream)
 
-    def deactivate_stream(self, dead_stream):
-        shared_token = self.db.hget('active_stream:'+dead_stream,'shared_token')
-        self.db.delete('shared_token:'+shared_token+':stream')
-        self.db.delete('active_stream:'+dead_stream)
-        self.db.srem('active_streams', dead_stream)
-        buffer_path = os.path.join('streams',dead_stream,'buffer.xtc')
+    def deactivate_stream(self, dead_stream_id):
+        ActiveStreamHS.delete(dead_stream_id)
+        buffer_path = os.path.join('streams',dead_stream_id,'buffer.xtc')
         if os.path.exists(buffer_path):
             with open(buffer_path,'w') as buffer_file:
                 pass

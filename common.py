@@ -31,9 +31,11 @@ class HashSet(object):
             raise KeyError('key not found')
         cls._rc.srem(cls._prefix+'s',id)
         # cleanup rmap first
+        print 'BAR', cls._rmaps
         for field in cls._rmaps:
-            rmap_index = cls._rc.hget(cls._prefix+':'+id, field)
-            cls._rc.delete(field+':'+rmap_index+':'+cls._prefix)
+            rmap_id = cls._rc.hget(cls._prefix+':'+id, field)
+            if rmap_id:
+                cls._rc.delete(field+':'+rmap_id+':'+cls._prefix)
         cls._rc.delete(cls._prefix+':'+id)
         
     @classmethod

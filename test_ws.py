@@ -395,7 +395,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                           body=prep.body)
         self.assertEqual(resp.code, 400)
 
-    @unittest.skip('no reason')
     def assertEqualHash(self, string1, string2):
         self.assertEqual(hashlib.md5(string1).hexdigest(),
                          hashlib.md5(string2).hexdigest())
@@ -463,8 +462,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         }
         resp = self.fetch('/stream', headers=headers, method='GET')
         self.assertEqualHash(true_frames, resp.body)
-
-    @unittest.skip('no reason')
+        
     def test_delete_stream(self):
         # create and assign a stream
         res = self.test_assign_stream()
