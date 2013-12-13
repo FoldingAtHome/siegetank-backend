@@ -1,52 +1,44 @@
-import redis
-import subprocess
-import sys
-import time
-import redis
-
-# TDoes not support pipelines.. if we really did need insane performance, 
-# it's better use EVAL'd LUA scripts instead. 
+# Class methods must explicitly pass in a db argument
 
 
-
-# requirements how 
 class HashSet(object):
+    
     _rmaps = []
-
-    @classmethod
-    def exists(cls,id,rc):
-        return cls._rc.sismember(cls._prefix+'s',id)
     
     @classmethod
-    def create(cls,id,rc):
-        if cls.exists(id):
+    def exists(cls,id,db):
+        return db.sismember(cls._prefix+'s',id)
+    
+    @classmethod
+    def create(cls,id,db):
+        if cls.exists(id,db):
             raise KeyError(id,'already exists')
-        cls._rc.sadd(cls._prefix+'s',id)
+        db.sadd(cls._prefix+'s',id)
                                       
     @classmethod
-    def delete(cls,id,rc):
+    def delete(cls,id,db):
         if not cls.exists(id):
             raise KeyError('key not found')
-        cls._rc.srem(cls._prefix+'s',id)
+        db.srem(cls._prefix+'s',id)
         # cleanup rmap first
         for field in cls._rmaps:
-            rmap_id = cls._rc.hget(cls._prefix+':'+id, field)
+            rmap_id = db.hget(cls._prefix+':'+id, field)
             if rmap_id:
-                cls._rc.delete(field+':'+rmap_id+':'+cls._prefix)
+                db.delete(field+':'+rmap_id+':'+cls._prefix)
         # cleanup hash
-        cls._rc.delete(cls._prefix+':'+id)
+        db.delete(cls._prefix+':'+id)
         # cleanup sets
         for f_name, f_type in cls._fields:
             if f_type is set:
-                cls._rc.delete(self.__class__._prefix+':'+self._id+':'+field)
+                db.delete(self.__class__._prefix+':'+self._id+':'+field)
 
     @classmethod
-    def members(cls,rc):
+    def members(cls,db):
         return cls._rc.smembers(cls._prefix+'s')
 
     @classmethod
-    def instance(cls,rc):
-        return cls(id)
+    def instance(cls,id,db):
+        return cls(id,db)
     
     @classmethod
     def rmap(cls,field,id):
@@ -55,6 +47,8 @@ class HashSet(object):
         if not field in cls._rmaps:
             raise KeyError('key not rmapped')
         return cls._rc.get(field+':'+id+':'+cls._prefix)
+
+    # Item specific type of 
 
     def sadd(self, attr, value):
         return
@@ -69,12 +63,13 @@ class HashSet(object):
             raise TypeError('can only increment ints')
         return self.__class__._rc.hincrby(self.__class__._prefix+':'+self._id,attr,count)
 
-    def __init__(self,id):
+    def __init__(self,id,db):
+        self._db = db
         if not self.__class__.exists(id):
             raise KeyError(id,'has not been created yet')
         self.__dict__['_id'] = id
-
-    def __getattr__(self, attr):
+        
+    def __getitem__(self, attr):
         if not attr in self._fields:
             raise KeyError('invalid field')
 
@@ -84,7 +79,7 @@ class HashSet(object):
         # get value then type cast
             return self.__class__._fields[attr](self.__class__._rc.hget(self.__class__._prefix+':'+self._id, attr))
     
-    def __setattr__(self, attr, value):
+    def __setitem__(self, attr, value):
         if not value:
             raise ValueError('got NaN')
         if not attr in self._fields:
@@ -102,48 +97,4 @@ class HashSet(object):
             if attr in self.__class__._rmaps:
                 self.__class__._rc.set(attr+':'+value+':'+self.__class__._prefix,self._id)
             self.__class__._rc.hset(self.__class__._prefix+':'+self._id, attr, value)
-
-class RedisMixin():
-    def init_redis(self, redis_port, redis_pass=None):
-        ''' Spawn a redis subprocess port and returns a redis client.
-
-            Parameters:
-            redis_port - port of the redis server
-            redis_pass - authenticate token. All other cilents must use
-                         this token before they can send messages 
-
-        '''
-        redis_port = str(redis_port)
-        args = ["redis/src/redis-server", "--port", redis_port]
-        if redis_pass:
-            args.append('--requirepass')
-            args.append(str(redis_pass))
-        redis_process = subprocess.Popen(args)
-
-        if redis_process.poll() is not None:
-            print 'Could not start redis server, aborting'
-            sys.exit(0)
-        redis_client = redis.Redis(host='localhost',password=redis_pass,
-                               port=int(redis_port))
-        # poll until redis server is alive
-        alive = False
-        start_time = time.time()
-        while time.time()-start_time < 15.0:
-            try:
-                alive = redis_client.ping()
-                break 
-            except Exception as e:
-                pass
-        if not alive:
-            raise ValueError('Could not start redis')
-
-        return redis_client
-
-    def get_db(self):
-        return self.db
-
-    def shutdown_redis(self):
-        print 'shutting down redis...'
-        self.db.shutdown()
-
-    
+       

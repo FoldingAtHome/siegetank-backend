@@ -44,7 +44,7 @@ import common
 
 # [ STREAMS ]
 #
-# SET   HASH     'stream:'+id                
+# HASH  KEY      'stream:'+id                
 #       FIELD    'ws'                   | ws the stream resides on
 #       FIELD    'target'               | target the stream belongs to
 

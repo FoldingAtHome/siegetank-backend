@@ -33,7 +33,7 @@ import common
 #       FIELD   'password'              | password of the user
 #       FIELD   'token'                 | authentication token
 #       FIELD   'e-mail'                | user email
-# SET   KEY     'user:'+id+':targets'   | set of target ids
+# SET   KEY     'user:'+id+':targets'   | set of target ids belonging to user
 # STRNG KEY     'target:'+id+':cc'      | which CC the target is on
 # STRNG KEY     'token:'+id+':user'     | which user the token belongs to
 
