@@ -75,6 +75,7 @@ class TestHashSet(unittest.TestCase):
         self.assertEqual(person.smembers('kids'),{'jamie','jackie','johnny','jenny'})
         person.srem('kids','johnny')
         self.assertEqual(person.smembers('kids'),{'jamie','jackie','jenny'})
+        person.remove()
 
     def test_members(self):
         p1 = self._create_key()
@@ -85,7 +86,7 @@ class TestHashSet(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.db.keys('*')
+        print cls.db.keys('*')
         cls.db.shutdown()
         pass
 
