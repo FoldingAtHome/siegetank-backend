@@ -49,7 +49,7 @@ class HashSet(object):
         bob.rpush('travel_history','canada')
 
         # reverse lookup - find id of bob given ssn
-        Person.lookup('ssn','598-20-6839')
+        Person.lookup('ssn','598-20-6839', rc)
 
         bob.delete()
         # or Person.delete('bob',rc)
@@ -57,6 +57,10 @@ class HashSet(object):
 
     _lookups = []
     
+    @classmethod
+    def prefix(cls):
+        return cls._prefix
+
     @classmethod
     def exists(cls,id,db):
         return db.sismember(cls._prefix+'s',id)
@@ -81,9 +85,9 @@ class HashSet(object):
         # cleanup hash
         db.delete(cls._prefix+':'+id)
         # cleanup sets
-        for f_name, f_type in cls._fields:
+        for f_name, f_type in cls._fields.iteritems():
             if f_type is set:
-                db.delete(self.__class__._prefix+':'+self._id+':'+field)
+                db.delete(cls._prefix+':'+id+':'+f_name)
 
     @classmethod
     def members(cls,db):
@@ -99,9 +103,6 @@ class HashSet(object):
         if not field in cls._lookups:
             raise KeyError('key not in _lookups')
         return db.get(field+':'+id+':'+cls._prefix)
-
-    def delete(self):
-        self.__class__.delete(self.__class__,self._id,self._db)
 
     @check_field
     def sadd(self,field,*values):
@@ -125,6 +126,17 @@ class HashSet(object):
             raise KeyError(id,'has not been created yet')
         self.__dict__['_id'] = id
        
+    def remove(self):
+        self.__class__.delete(self._id, self._db)
+
+    @property
+    def id(self):
+        return self._id
+
+    @property
+    def db(self):
+        return self._db
+   
     @check_field 
     def __getitem__(self, field):
         if isinstance(self._fields[field],set):
@@ -144,5 +156,7 @@ class HashSet(object):
                 self._db.sadd(self.__class__._prefix+':'+self._id+':'+field,element)
         else:
             if field in self.__class__._lookups:
+                if self._db.exists(field+':'+value+':'+self.__class__._prefix):
+                    raise ValueError('FATAL: this value already exists!')
                 self._db.set(field+':'+value+':'+self.__class__._prefix,self._id)
             self._db.hset(self.__class__._prefix+':'+self._id, field, value)
