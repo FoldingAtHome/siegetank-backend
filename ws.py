@@ -492,7 +492,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
     def __init__(self,ws_name,redis_port,redis_pass=None,ccs=None,increment=600):
         print 'Initialization redis server on port: ', redis_port
-        self.db = self.init_redis(redis_port,redis_pass)
+        self.db = common.init_redis(redis_port,redis_pass)
         
         StreamHS.set_redis(self.db)
         ActiveStreamHS.set_redis(self.db)

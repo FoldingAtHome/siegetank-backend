@@ -1,5 +1,6 @@
-# Class methods must explicitly pass in a db argument
+# Class methods must explicitly pass in a db argument.
 from functools import wraps
+
 def check_field(func):
     @wraps(func)
     def _wrapper(self_cls, field, *args, **kwargs):
@@ -9,8 +10,52 @@ def check_field(func):
     return _wrapper
 
 class HashSet(object):
-    
-    _rmaps = []
+    ''' A HashSet is a class that manages objects stored in redis. A row 
+        is represented using a redis hash, and sets. It supports
+        reverse mappings, sets, lists, creation and deletion of rows to ensure
+        proper cleanup. 
+
+        Currently supported field mappings: int,float,string,sets,
+
+        For example, suppose we wanted to implement a Person db table:
+
+               pkey
+        type   str   |      str      |      set     | int | list
+        value  name  |      ssn      |      kids    | age | travel_history
+
+        row   'bob'  | '598-20-6839' | 'jane','joe' | 35  | 'usa','canada'  
+        row   'jack' | '502-25-4392' | 'eve','abel' | 45  | 'china','africa'
+
+        class Person(HashSet):
+
+            _prefix = 'person'
+            # name is an implicit id (the primary key)
+            _fields = {'ssn'            : str,
+                       'kids'           : set,
+                       'age'            : int,
+                       'travel_history' : list
+                       }
+
+            _lookups = {'ssn'}
+
+            rc = redis.StrictRedis(port=6378)
+
+        bob = Person.create('bob',rc)
+        bob['ssn'] = 598-20-6839
+        bob.sadd('kids','jane')
+        bob.sadd('kids','joe')
+        bob['age'] = 35
+        bob.rpush('travel_history','usa')
+        bob.rpush('travel_history','canada')
+
+        # reverse lookup - find id of bob given ssn
+        Person.lookup('ssn','598-20-6839')
+
+        bob.delete()
+        # or Person.delete('bob',rc)
+    '''    
+
+    _lookups = []
     
     @classmethod
     def exists(cls,id,db):
@@ -21,17 +66,18 @@ class HashSet(object):
         if cls.exists(id,db):
             raise KeyError(id,'already exists')
         db.sadd(cls._prefix+'s',id)
+        return cls(id,db)
                                       
     @classmethod
     def delete(cls,id,db):
         if not cls.exists(id,db):
             raise KeyError('key ',id,' not found')
         db.srem(cls._prefix+'s',id)
-        # cleanup rmap first
-        for field in cls._rmaps:
-            rmap_id = db.hget(cls._prefix+':'+id, field)
-            if rmap_id:
-                db.delete(field+':'+rmap_id+':'+cls._prefix)
+        # cleanup lookup first
+        for field in cls._lookups:
+            lookup_id = db.hget(cls._prefix+':'+id, field)
+            if lookup_id:
+                db.delete(field+':'+lookup_id+':'+cls._prefix)
         # cleanup hash
         db.delete(cls._prefix+':'+id)
         # cleanup sets
@@ -49,32 +95,30 @@ class HashSet(object):
     
     @classmethod
     @check_field
-    def rmap(cls,field,id,db):
-        if not field in cls._fields:
-            raise KeyError('invalid field')
-        if not field in cls._rmaps:
-            raise KeyError('key not rmapped')
+    def lookup(cls,field,id,db):
+        if not field in cls._lookups:
+            raise KeyError('key not in _lookups')
         return db.get(field+':'+id+':'+cls._prefix)
 
-    # Item specific methods
-    @check_field
-    def sadd(self, field, value):
-        
-        return
+    def delete(self):
+        self.__class__.delete(self.__class__,self._id,self._db)
 
+    @check_field
+    def sadd(self,field,*values):
+        return self._db.sadd(self.__class__._prefix+':'+self._id+':'+field,*values)
+        
     @check_field
     def sismember(self, field, value):
-        return
+        return self._db.sismember(self.__class__._prefix+':'+self._id+':'+field,value)
 
     @check_field
-    def sdel(self, field, value):
-        return
+    def srem(self, field, *values):
+        return self._db.srem(self.__class__._prefix+':'+self._id+':'+field, *values)
     
     @check_field
     def hincrby(self, field, count=1):
         return self._db.hincrby(self.__class__._prefix+':'+self._id,field,count)
 
-    @check_field
     def __init__(self,id,db):
         self._db = db
         if not self.__class__.exists(id,db):
@@ -95,12 +139,10 @@ class HashSet(object):
             raise TypeError('expected',self.__class__._fields[field],'got',type(value))
         
         # add support for sets
-        if isinstance(self._fields[field],set):
-            if field in self.__class__._rmaps:
-                raise TypeError('rmaps not supported for set types')
+        if isinstance(value,set):
             for element in value:
-                self._db.sadd(self.__class__._prefix+':'+self._id+':'+field,value)
-        elif:
-            if field in self.__class__._rmaps:
+                self._db.sadd(self.__class__._prefix+':'+self._id+':'+field,element)
+        else:
+            if field in self.__class__._lookups:
                 self._db.set(field+':'+value+':'+self.__class__._prefix,self._id)
             self._db.hset(self.__class__._prefix+':'+self._id, field, value)
