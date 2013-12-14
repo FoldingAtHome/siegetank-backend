@@ -1,4 +1,7 @@
 # Class methods must explicitly pass in a db argument.
+# A object relational mapping wrapper for redis.
+# Copyright 2012 Yutong Zhao <proteneer@gmail.com>
+
 from functools import wraps
 
 def check_field(func):
@@ -87,7 +90,7 @@ class HashSet(object):
 
     @classmethod
     def members(cls,db):
-        return cls._rc.smembers(cls.prefix+'s')
+        return db.smembers(cls.prefix+'s')
 
     @classmethod
     def instance(cls,id,db):
