@@ -59,6 +59,23 @@ class TestHashSet(unittest.TestCase):
         self.assertEqual(Person.lookup('ssn',ssn,person.db),person.id)
         person.remove()
 
+    def test_hash_methods(self):
+        person = Person.create(str(uuid.uuid4()),self.db)
+        person['age'] = 25
+        person.hincrby('age',1)
+        self.assertEqual(person['age'],26)
+        person.remove()
+
+    def test_set_methods(self):
+        person = Person.create(str(uuid.uuid4()),self.db)
+        person['kids'] = {'jamie'}
+        person.sadd('kids','jackie')
+        person.sadd('kids',*['johnny','jenny'])
+        self.assertTrue(person.sismember('kids','johnny'))
+        self.assertEqual(person.smembers('kids'),{'jamie','jackie','johnny','jenny'})
+        person.srem('kids','johnny')
+        self.assertEqual(person.smembers('kids'),{'jamie','jackie','jenny'})
+
     def test_members(self):
         p1 = self._create_key()
         p2 = self._create_key()

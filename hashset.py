@@ -116,6 +116,10 @@ class HashSet(object):
         return self._db.srem(self.__class__.prefix+':'+self._id+':'+field, *values)
     
     @check_field
+    def smembers(self,field):
+        return self._db.smembers(self.__class__.prefix+':'+self._id+':'+field)
+
+    @check_field
     def hincrby(self, field, count=1):
         return self._db.hincrby(self.__class__.prefix+':'+self._id,field,count)
 
