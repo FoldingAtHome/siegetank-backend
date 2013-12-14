@@ -6,14 +6,14 @@ import uuid
 
 class Person(hashset.HashSet):
 
-    _prefix = 'person'
+    prefix = 'person'
     # name is an implicit id (the primary key)
-    _fields = {'ssn'            : str,
-               'kids'           : set,
-               'age'            : int
-               }
+    fields = {'ssn'  : str,
+              'kids' : set,
+              'age'  : int
+             }
 
-    _lookups = {'ssn'}
+    lookups = {'ssn'}
 
 class TestHashSet(unittest.TestCase):
 	@classmethod
@@ -40,7 +40,8 @@ class TestHashSet(unittest.TestCase):
 		person.remove()
 		self.assertFalse(self.db.sismember('persons', person.id))
 		self.assertFalse(self.db.exists('person:'+person.id))
-		self.assertFalse(self.db.exists('ssn:'+ssn+':'+Person.prefix()))
+		self.assertFalse(self.db.exists('ssn:'+ssn+':'+person.prefix))
+		self.assertFalse(self.db.exists('ssn:'+ssn+':'+Person.prefix))
 
 	def test_lookup(self):
 		person = self.test_create_key()
