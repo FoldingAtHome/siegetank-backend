@@ -8,9 +8,10 @@ class Person(hashset.HashSet):
 
     prefix = 'person'
     # name is an implicit id (the primary key)
-    fields = {'ssn'  : str,
-              'kids' : set,
-              'age'  : int
+    fields = {'ssn'   : str,     # string
+              'kids'  : set,     # set
+              'age'   : int,     # integer
+              'tasks' : dict, 
              }
 
     lookups = {'ssn'}
@@ -76,6 +77,15 @@ class TestHashSet(unittest.TestCase):
         person.srem('kids','johnny')
         self.assertEqual(person.smembers('kids'),{'jamie','jackie','jenny'})
         person.remove()
+
+    def test_zset_methods(self):
+        person = Person.create(str(uuid.uuid4()),self.db)
+        person['tasks'] = { 'mow_lawn' : 3,
+                            'groceries' : 5,
+                            'sleep': 0 }
+        self.assertEqual(person['tasks'],['sleep','mow_lawn','groceries'])
+        person.remove()
+        #print person['tasks']
 
     def test_members(self):
         p1 = self._create_key()

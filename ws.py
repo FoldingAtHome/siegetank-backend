@@ -92,35 +92,35 @@ import hashset
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
-class StreamHS(common.HashSet):
-    _prefix = 'stream'
-    _fields = {'frames'          : int,
-               'status'          : str,
-               'error_count'     : int,
-               'system_hash'     : str,
-               'integrator_hash' : str,
-               'download_token'  : str,
-               'cc_id'           : str,
-               'steps_per_frame' : int
-              }
-    _rmaps  = {'download_token'}
+class Stream(common.HashSet):
+    prefix = 'stream'
+    fields = {'frames'          : int,
+              'status'          : str,
+              'error_count'     : int,
+              'system_hash'     : str,
+              'integrator_hash' : str,
+              'download_token'  : str,
+              'cc_id'           : str,
+              'steps_per_frame' : int
+             }
+    lookups = {'download_token'}
 
-class ActiveStreamHS(common.HashSet):
-    _prefix = 'active_stream'
-    _fields = {'buffer_frames'  : int,
-               'shared_token'   : str,
-               'donor'          : str,
-               'steps'          : int,
-               'start_time'     : float,
-              }
-    _rmaps  = {'shared_token'}
+class ActiveStream(common.HashSet):
+    prefix = 'active_stream'
+    fields = {'buffer_frames'   : int,
+              'shared_token'    : str,
+              'donor'           : str,
+              'steps'           : int,
+              'start_time'      : float,
+             }
+    lookups = {'shared_token'}
 
-class CommandCenterHS(common.HashSet):
-    _prefix = 'cc'
-    _fields = {'ip'         : str,
-               'http_port'  : str 
-              }
-    _rmaps  = {'ip'}
+class CommandCenter(common.HashSet):
+    prefix = 'cc'
+    fields = {'ip'              : str,
+              'http_port'       : str 
+             }
+    lookups = {'ip'}
 
 # General WS config
 # Block ALL ports except port 80
@@ -388,6 +388,8 @@ class StreamHandler(BaseHandler):
             download_token: download_token automatically maps to the right
                             stream_id
             RESPONDS with the appropriate frames.
+
+            TODO: Record the file size
         '''
         self.set_status(400)
         try:

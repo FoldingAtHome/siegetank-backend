@@ -4,11 +4,12 @@
 
 from functools import wraps
 
+
 def check_field(func):
     @wraps(func)
     def _wrapper(self_cls, field, *args, **kwargs):
         if not field in self_cls.fields:
-            raise KeyError('invalid field')
+            raise   ('invalid field')
         return func(self_cls, field, *args, **kwargs)
     return _wrapper
 
@@ -44,7 +45,7 @@ class HashSet(object):
             rc = redis.StrictRedis(port=6378)
 
         bob = Person.create('bob',rc)
-        bob['ssn'] = 598-20-6839
+        bob['ssn'] = '598-20-6839'
         bob.sadd('kids','jane')
         bob.sadd('kids','joe')
         bob['age'] = 35
@@ -85,7 +86,7 @@ class HashSet(object):
         db.delete(cls.prefix+':'+id)
         # cleanup sets
         for f_name, f_type in cls.fields.iteritems():
-            if f_type is set:
+            if f_type is set or f_type is dict:
                 db.delete(cls.prefix+':'+id+':'+f_name)
 
     @classmethod
@@ -142,8 +143,10 @@ class HashSet(object):
    
     @check_field 
     def __getitem__(self, field):
-        if isinstance(self.fields[field],set):
+        if self.fields[field] is set:
             return self._db.smembers(self.__class__.prefix+':'+self._id+':'+field)
+        if self.fields[field] is dict:
+            return self._db.zrange(self.__class__.prefix+':'+self._id+':'+field, 0, -1)
         else:
         # get value then type cast
             return self.__class__.fields[field](self._db.hget(self.__class__.prefix+':'+self._id, field))
@@ -151,12 +154,14 @@ class HashSet(object):
     @check_field
     def __setitem__(self, field, value):
         if not isinstance(value,self.fields[field]):
-            raise TypeError('expected',self.__class__.fields[field],'got',type(value))
-        
+            raise TypeError('expected',self.__class__.fields[field],'got',type(value))  
         # add support for sets
         if isinstance(value,set):
             for element in value:
                 self._db.sadd(self.__class__.prefix+':'+self._id+':'+field,element)
+        elif isinstance(value,dict):
+            for element in value:
+                self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,**value)
         else:
             if field in self.__class__.lookups:
                 if self._db.exists(field+':'+value+':'+self.__class__.prefix):
