@@ -84,6 +84,10 @@ class TestHashSet(unittest.TestCase):
                             'groceries' : 5,
                             'sleep': 0 }
         self.assertEqual(person['tasks'],['sleep','mow_lawn','groceries'])
+        person.zadd('tasks','tennis',6)
+        self.assertEqual(person['tasks'],['sleep','mow_lawn','groceries','tennis'])
+        person.zrem('tasks','mow_lawn')
+        self.assertEqual(person['tasks'],['sleep','groceries','tennis'])
         person.remove()
         #print person['tasks']
 

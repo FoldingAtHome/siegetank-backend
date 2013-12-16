@@ -107,7 +107,7 @@ class HashSet(object):
     @check_field
     def sadd(self,field,*values):
         return self._db.sadd(self.__class__.prefix+':'+self._id+':'+field,*values)
-        
+
     @check_field
     def sismember(self, field, value):
         return self._db.sismember(self.__class__.prefix+':'+self._id+':'+field,value)
@@ -119,6 +119,20 @@ class HashSet(object):
     @check_field
     def smembers(self,field):
         return self._db.smembers(self.__class__.prefix+':'+self._id+':'+field)
+        
+    @check_field
+    def zadd(self,field,key,score):
+        return self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,key,score)
+
+    @check_field
+    def zrem(self,field,key):
+        return self._db.zrem(self.__class__.prefix+':'+self._id+':'+field,key)
+
+    @check_field
+    def zadd(self,field,key,score):
+        return self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,key,score)
+
+    
 
     @check_field
     def hincrby(self, field, count=1):
