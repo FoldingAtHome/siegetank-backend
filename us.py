@@ -61,19 +61,6 @@ def cc_access(f):
             return f(self,*args, **kwargs)
     return decorated
 
-'''
-def require_auth(f):
-    @functools.wraps(f)
-    def decorated(self,*args,**kwargs):
-        token = self.request.headers['token']
-        if self.get_user(token):
-            return f(self,*args, **kwargs)
-        else:
-            self.set_status(401)
-            return
-    return decorated
-'''
-
 class BaseHandler(tornado.web.RequestHandler):
     @property
     def db(self):
@@ -123,11 +110,8 @@ class AuthHandler(BaseHandler):
             username = content['username']
             password = content['password']
             digest = hashlib.sha256(os.urandom(256)).hexdigest()
-            old_token = self.get_token(username)
-            if old_token:
-                self.db.delete('token:'+old_token+':user')
-            self.set_token(username,digest)
-
+            user = User.instance(username)
+            user['token'] = digest
             self.set_status(200)
             return self.write(digest)
         except Exception as e:
@@ -139,13 +123,13 @@ class UserHandler(BaseHandler):
         ''' Return a list of targets owned by this user '''
         try:
             token_id = self.request.headers['token']
-            user_id = self.get_user(token_id)
-            if user_id:
-                # return a list of tokens and the ip of the cc its on
-                targets = self.db.smembers('user:'+user_id+':targets')
+            user_id = User.lookup('token',token_id, self.db)
+            user = User.instance('user_id', self.db)
+            if user:
+                # return a list of targets and the ip of the cc its on
+                targets = user['targets']
                 if targets:
                     ccs = []
-                    ips = []
                     for target_id in targets:
                         cc = self.db.get('target:'+target_id+':cc')
                         ccs.append(cc)
