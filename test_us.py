@@ -79,6 +79,11 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(rep.code,200)
         self.assertFalse(self.us.db.get('token:'+token+':user'),username)
 
+        # auth with a bad password
+        payload = json.dumps({'username' : username, 
+                              'password' : str(uuid.uuid4())})
+        rep = self.fetch('/auth',method='POST',body=payload)
+        self.assertEqual(rep.code,401)
         return username,new_token
 
     def test_post_target(self):
@@ -98,6 +103,22 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(self.us.db.get('target:'+target+':cc'),cc_id)
 
         return user,test_token,target
+
+    def test_delete_target(self):
+        user,test_token,target = self.test_post_target()
+
+        headers = {
+                'target' : target,
+                'token'  : test_token
+                }
+
+        rep = self.fetch('/target',method='DELETE',headers=headers)
+        self.assertEqual(rep.code,200)
+        self.assertFalse(self.us.db.get('target:'+target+':cc'))
+        self.assertFalse(
+            self.us.db.sismember('user:'+user+':targets',target))
+        
+
 
     def test_get_user(self):
         user,test_token = self.test_auth_user()

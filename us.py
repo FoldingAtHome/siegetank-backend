@@ -44,7 +44,7 @@ class User(hashset.HashSet):
     prefix = 'user'
     fields = {'password'    : str,
               'token'       : str,
-              'email'      : str,
+              'email'       : str,
               'targets'     : set,
              }
     lookups = {'token'}
@@ -95,8 +95,11 @@ class AuthHandler(BaseHandler):
             content = json.loads(self.request.body)
             username = content['username']
             password = content['password']
-            digest = hashlib.sha256(os.urandom(256)).hexdigest()
             user = User.instance(username, self.db)
+            if password != user['password']:
+                self.set_status(401)
+                return
+            digest = hashlib.sha256(os.urandom(256)).hexdigest()
             user['token'] = digest
             self.set_status(200)
             return self.write(digest)
@@ -135,7 +138,7 @@ class UserHandler(BaseHandler):
         try:
             content = json.loads(self.request.body)
             # json posts everything as unicode
-            username = str(content['username'])
+            username = content['username']
             password = str(content['password'])
             email    = str(content['email'])
             try: 
@@ -155,6 +158,9 @@ class UserHandler(BaseHandler):
 
     @cc_access
     def delete():
+        ''' Delete a user from the db. 
+            When a user is deleted, are the streams also deleted?'''
+
         pass
 
 class TargetHandler(BaseHandler):
@@ -172,6 +178,26 @@ class TargetHandler(BaseHandler):
             self.db.set('target:'+target+':cc',cc_id)
             self.set_status(200)
         except Exception as e:
+            self.set_status(400)
+
+    @cc_access
+    def delete(self):
+        ''' Delete a target owned by this user. '''
+        try:    
+            content = self.request.headers
+            target  = str(content['target'])
+            token   = str(content['token'])
+            user_id = User.lookup('token',token,self.db)
+            user = User.instance(user_id, self.db)
+            count = user.srem('targets',target)
+            if count == 0:
+                self.write('Target not removed')
+                self.set_status(400)
+                return 
+            self.db.delete('target:'+target+':cc')
+            self.set_status(200)
+        except Exception as e:
+            print e
             self.set_status(400)
 
 class UserServer(tornado.web.Application, common.RedisMixin):
