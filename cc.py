@@ -17,6 +17,9 @@ import sys
 
 import common
 
+# The command center manages several work servers in addition to managing 
+# the stats system for each work server. 
+
 # CC uses Antirez's redis extensively as NoSQL store mainly because of 
 # its blazing fast speed. Binary blobs such as states, systems, and 
 # frames are written directly to disk.

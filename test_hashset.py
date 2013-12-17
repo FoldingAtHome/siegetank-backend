@@ -58,6 +58,11 @@ class TestHashSet(unittest.TestCase):
         person = self._create_key()
         ssn = person['ssn']
         self.assertEqual(Person.lookup('ssn',ssn,person.db),person.id)
+        # test assigning a new ssn and see if it breaks horribly
+        new_ssn = str(uuid.uuid4())
+        person['ssn'] = new_ssn
+        self.assertEqual(Person.lookup('ssn',new_ssn,person.db),person.id)
+        self.assertFalse(person.lookup('ssn',ssn,person.db))
         person.remove()
 
     def test_hash_methods(self):

@@ -18,6 +18,7 @@ import sys
 import functools
 
 import common
+import hashset
 
 # User Server
 # 
@@ -38,6 +39,15 @@ import common
 # STRNG KEY     'token:'+id+':user'     | which user the token belongs to
 
 # STORAGE REQUIREMENTS: O(Number of Targets).
+
+class User(hashset.HashSet):
+    prefix = 'user'
+    fields = {'password'    : str,
+              'token'       : str,
+              'e-mail'      : str,
+              'targets'     : set,
+             }
+    lookups = {'token'}
 
 # TODO: Change passwords to use bcrypt
 
@@ -92,7 +102,7 @@ class VerifyHandler(BaseHandler):
             return  
         try:
             token_id = self.request.headers['token']
-            user_id = self.get_user(token_id)
+            user_id = User.lookup('token',token_id)
             if user_id:
                 self.set_status(200)
                 self.write(user_id)

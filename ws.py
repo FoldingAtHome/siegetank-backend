@@ -464,7 +464,7 @@ class HeartbeatHandler(BaseHandler):
 
 class WorkServer(tornado.web.Application, common.RedisMixin):
     def _cleanup(self):
-        # clear active streams
+        # clear active streams (and clear buffer)
         active_streams = ActiveStream.members(self.db)
         if active_streams:
             for stream in active_streams:
@@ -478,9 +478,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         # inform the CC gracefully that the WS is dying (ie.expire everything)
 
     def __init__(self,ws_name,redis_port,redis_pass=None,ccs=None,increment=600):
-        print 'Initialization redis server on port: ', redis_port
         self.db = common.init_redis(redis_port,redis_pass)
-
         if not os.path.exists('files'):
             os.makedirs('files')
         if not os.path.exists('streams'):
@@ -496,10 +494,6 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 cc_name = cc[0]
                 cc_ip   = cc[1]
                 cc_port = cc[2]
-
-                print cc_ip, type(cc_ip)
-                print cc_port, type(cc_port)
-
                 cc_instance = CommandCenter.create(cc_name,self.db)
                 cc_instance['ip'] = cc_ip
                 cc_instance['http_port'] = cc_port
@@ -541,6 +535,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         if os.path.exists(buffer_path):
             with open(buffer_path,'w') as buffer_file:
                 pass
+        # push this stream back into queues
 
     def push_stream_to_cc(stream_id):
         pass
@@ -569,11 +564,10 @@ def start():
 
     ws_instance = WorkServer(ws_name,ws_redis_port,ws_redis_pass,ccs)
     ws_server = tornado.httpserver.HTTPServer(ws_instance,ssl_options={
-            'certfile' : 'ws.crt','keyfile'  : 'ws.key'})
+                    'certfile' : 'ws.crt','keyfile'  : 'ws.key'})
     #ws_server = tornado.httpserver.HTTPServer(ws_instance)
     ws_server.listen(int_http_port)
 
-    '''
     sync_client = tornado.httpclient.HTTPClient()
     for cc in cc_str:
         ip   = Config.get(cc,'ip')
@@ -595,7 +589,6 @@ def start():
             print e
             print 'Could not connect to CC'
             ws_instance.shutdown()
-     '''        
 
     print 'starting IO loop'
 

@@ -35,10 +35,10 @@ class HashSet(object):
             prefix = 'person'
             # name is an implicit id (the primary key)
             fields = {'ssn'            : str,
-                       'kids'           : set,
-                       'age'            : int,
-                       'travel_history' : list
-                       }
+                      'kids'           : set,
+                      'age'            : int,
+                      'travel_history' : list
+                      }
 
             lookups = {'ssn'}
 
@@ -174,5 +174,7 @@ class HashSet(object):
             if field in self.__class__.lookups:
                 if self._db.exists(field+':'+value+':'+self.__class__.prefix):
                     raise ValueError('FATAL: this value already exists!')
+                # remove old mapped value to maintain bijection
+                self._db.delete(field+':'+self.__getitem__(field)+':'+self.__class__.prefix)
                 self._db.set(field+':'+value+':'+self.__class__.prefix,self._id)
             self._db.hset(self.__class__.prefix+':'+self._id, field, value)
