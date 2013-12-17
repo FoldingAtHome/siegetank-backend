@@ -89,7 +89,6 @@ class TestHashSet(unittest.TestCase):
         person.zrem('tasks','mow_lawn')
         self.assertEqual(person['tasks'],['sleep','groceries','tennis'])
         person.remove()
-        #print person['tasks']
 
     def test_members(self):
         p1 = self._create_key()

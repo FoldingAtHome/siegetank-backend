@@ -47,7 +47,7 @@ class WSInitTestCase(AsyncHTTPTestCase):
         cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
         self.ws = ws.WorkServer(
             'test_server',redis_port,None,[cc],self.increment)
-        self.redis_client = self.ws.get_db()
+        self.redis_client = self.ws.db
         self._folders = ['streams','files']
         super(AsyncHTTPTestCase, self).setUpClass()
 
@@ -85,7 +85,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
         self.ws = ws.WorkServer(
             'test_server',redis_port,None,[cc],self.increment)
-        self.redis_client = self.ws.get_db()
+        self.redis_client = self.ws.db
         self._folders = ['streams','files']
         super(AsyncHTTPTestCase, self).setUpClass()
 
@@ -123,19 +123,17 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.test_add_stream()
         token_id = str(uuid.uuid4())
 
-        ws.ActiveStreamHS.create(stream_id)
-        active_stream = ws.ActiveStreamHS.instance(stream_id)
-        active_stream.shared_token = token_id
-        active_stream.donor = 'proteneer'
-        active_stream.start_time = float(self.redis_client.time()[0])
-        active_stream.steps = 0
+        active_stream = ws.ActiveStream.create(stream_id,self.redis_client)
+        active_stream['shared_token'] = token_id
+        active_stream['donor'] = 'proteneer'
+        active_stream['start_time'] = float(self.redis_client.time()[0])
+        active_stream['steps'] = 0
 
         # set a really long timer to make sure this doesn't die half way
         ws_time = cc.sum_time(self.redis_client.time())
         self.redis_client.zadd('heartbeats',stream_id,ws_time+600)
         return stream_id, token_id, system_bin, state_bin, integrator_bin
 
-    
     def test_get_frame(self):
         res = self.test_assign_stream()
         stream_id      = res[0]
@@ -147,7 +145,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         headers  = {'shared_token' : token_id}
         # Test GET a job
         response = self.fetch('/frame', headers=headers, method='GET') 
-        print 'debug: ', response.code
         with tarfile.open(mode='r', fileobj=
                           cStringIO.StringIO(response.body)) as tarball:
             for member in tarball.getmembers():
@@ -160,8 +157,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                 if member.name == 'integrator.xml.gz':
                     self.assertEqual(tarball.extractfile(member).read(),
                                      integrator_bin)
-    
-    #@unittest.skip('no reason')     
+   
     def test_post_frame(self):
         res            = self.test_assign_stream()
         stream_id      = res[0]
@@ -202,7 +198,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.assertEqual(f.read(),frame_binary1+frame_binary2)
         if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
             raise Exception('Checkpoint state file missing!')
-     
+
     def test_post_bad_frame(self):
         # Test POSTing an error 
         res = self.test_assign_stream()
@@ -244,7 +240,6 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                     method='POST', body=tar_out.getvalue())
         self.assertEqual(resp.code, 200)
 
-    @unittest.skip('no reason')
     def test_heartbeat(self):
         token_id = str(uuid.uuid4())
         stream_id = str(uuid.uuid4())
@@ -395,7 +390,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
     def assertEqualHash(self, string1, string2):
         self.assertEqual(hashlib.md5(string1).hexdigest(),
                          hashlib.md5(string2).hexdigest())
-
+    
     def test_post_frames_get_stream(self):
         res            = self.test_assign_stream()
         stream_id      = res[0]

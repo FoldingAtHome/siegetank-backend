@@ -92,7 +92,7 @@ import hashset
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
-class Stream(common.HashSet):
+class Stream(hashset.HashSet):
     prefix = 'stream'
     fields = {'frames'          : int,
               'status'          : str,
@@ -105,7 +105,7 @@ class Stream(common.HashSet):
              }
     lookups = {'download_token'}
 
-class ActiveStream(common.HashSet):
+class ActiveStream(hashset.HashSet):
     prefix = 'active_stream'
     fields = {'buffer_frames'   : int,
               'shared_token'    : str,
@@ -115,7 +115,7 @@ class ActiveStream(common.HashSet):
              }
     lookups = {'shared_token'}
 
-class CommandCenter(common.HashSet):
+class CommandCenter(hashset.HashSet):
     prefix = 'cc'
     fields = {'ip'              : str,
               'http_port'       : str 
@@ -164,13 +164,13 @@ class FrameHandler(BaseHandler):
         '''
         try:
             token = self.request.headers['shared_token']
-            stream_id = ActiveStreamHS.rmap('shared_token',token)
+            stream_id = ActiveStream.lookup('shared_token',token,self.db)
             if not stream_id:
                 self.set_status(400)
                 return
-            stream = StreamHS.instance(stream_id)
-            active_stream = ActiveStreamHS.instance(stream_id)
-            if stream.status != 'OK':
+            stream = Stream.instance(stream_id, self.db)
+            active_stream = ActiveStream.instance(stream_id, self.db)
+            if stream['status'] != 'OK':
                 self.set_status(400)
                 return self.write('Stream status not OK')
             if 'error_code' in self.request.headers:
@@ -180,7 +180,7 @@ class FrameHandler(BaseHandler):
                 #   set status to bad
                 self.deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
-            stream.error_count = 0
+            stream['error_count'] = 0
             tar_string = cStringIO.StringIO(self.request.body)
             with tarfile.open(mode='r', fileobj=tar_string) as tarball:
                 # Extract the frame
@@ -215,8 +215,8 @@ class FrameHandler(BaseHandler):
                                 dest.write(chars)
                     # this need not be done atomically since no other client 
                     # will modify the active_stream key except this ws
-                    stream.hincrby('frames',active_stream.buffer_frames)
-                    active_stream.buffer_frames = 0
+                    stream.hincrby('frames',active_stream['buffer_frames'])
+                    active_stream['buffer_frames'] = 0
                     # clear the buffer
                     with open(buffer_path,'w') as buffer_file:
                         pass
@@ -258,15 +258,15 @@ class FrameHandler(BaseHandler):
         '''
         try:
             shared_token = self.request.headers['shared_token']
-            stream_id = ActiveStreamHS.rmap('shared_token',shared_token)
+            stream_id = ActiveStream.lookup('shared_token',shared_token,self.db)
             if stream_id is None:
                 self.set_status(401)
                 return self.write('Unknown token')
-            stream = StreamHS.instance(stream_id)
+            stream = Stream.instance(stream_id, self.db)
             # a core should NEVER be able to catch a non OK stream
-            assert stream.status == 'OK'
-            sys_file   = os.path.join('files',stream.system_hash)
-            intg_file  = os.path.join('files',stream.integrator_hash)
+            assert stream['status'] == 'OK'
+            sys_file   = os.path.join('files',stream['system_hash'])
+            intg_file  = os.path.join('files',stream['integrator_hash'])
             state_file = os.path.join('streams',stream_id,'state.xml.gz')
             # Make a tarball in memory and send directly
             c = cStringIO.StringIO()
@@ -353,7 +353,7 @@ class StreamHandler(BaseHandler):
                 else:
                     return self.write('missing content: '+s+'_bin/hash')
                 file_hashes[s+'_hash'] = bin_hash
-                
+     
             # Step 2. Valid Request, generate uuid and write to disk
             stream_id = str(uuid.uuid4())
             stream_folder = os.path.join('streams',stream_id)
@@ -365,15 +365,16 @@ class StreamHandler(BaseHandler):
             for f_hash,f_bin in file_buffer.iteritems():
                 open(os.path.join('files',f_hash),'w').write(f_bin)
             redis_pipe = self.db.pipeline()
-            StreamHS.create(stream_id)
-            stream = StreamHS.instance(stream_id)
-            stream.frames = 0
-            stream.status = 'OK'
+            Stream.create(stream_id,self.db)
+            stream = Stream.instance(stream_id, self.db)
+            stream['frames'] = 0
+            stream['status'] = 'OK'
             for k,v in file_hashes.iteritems():
-                setattr(stream, k, v)
+                stream[k] = v
             self.set_status(200)
             return self.write(stream_id)
         except KeyError as e:
+            print 'BLAHBLAHBLAH   asdfasdfasdfASDFASD asdfASDF'
             print repr(e)
             ex_type, ex, tb = sys.exc_info()
             traceback.print_tb(tb)
@@ -394,7 +395,7 @@ class StreamHandler(BaseHandler):
         self.set_status(400)
         try:
             token = self.request.headers['download_token']
-            stream_id = self.db.get('download_token:'+token+':stream')
+            stream_id = Stream.lookup('download_token',token,self.db)
             if stream_id:
                 filename = os.path.join('streams',stream_id,'frames.xtc')
                 buf_size = 4096
@@ -423,11 +424,11 @@ class StreamHandler(BaseHandler):
         try:
             if 'stream_id' in self.request.headers:
                 stream_id = self.request.headers['stream_id']
-                stream = StreamHS.instance(stream_id)
+                stream = Stream.instance(stream_id, self.db)
                 if stream:
                     # remove stream from memory
                     self.deactivate_stream(stream_id)
-                    StreamHS.delete(stream_id)
+                    stream.remove()
                     # remove stream from disk
                     shutil.rmtree(os.path.join('streams',stream_id))
                     self.set_status(200)
@@ -457,7 +458,7 @@ class HeartbeatHandler(BaseHandler):
         try:
             content = json.loads(self.request.body)
             token_id = content['shared_token']
-            stream_id = self.db.get('shared_token:'+token_id+':stream')
+            stream_id = ActiveStream.lookup('shared_token',token_id,self.db)
             self.db.zadd('heartbeats',stream_id,
                           time.time()+self._increment)
             self.set_status(200)
@@ -467,12 +468,12 @@ class HeartbeatHandler(BaseHandler):
 class WorkServer(tornado.web.Application, common.RedisMixin):
     def _cleanup(self):
         # clear active streams
-        active_streams = ActiveStreamHS.members()
+        active_streams = ActiveStream.members(self.db)
         if active_streams:
             for stream in active_streams:
                 # deactivate this stream
                 self.deactivate_stream(stream)
-        assert len(ActiveStreamHS.members()) == 0
+        assert len(ActiveStream.members(self.db)) == 0
         # clear command centers 
         if self.db.smembers('ccs'):
             for cc_id in self.db.smembers('ccs'):
@@ -496,9 +497,6 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
     def __init__(self,ws_name,redis_port,redis_pass=None,ccs=None,increment=600):
         print 'Initialization redis server on port: ', redis_port
         self.db = common.init_redis(redis_port,redis_pass)
-        
-        StreamHS.set_redis(self.db)
-        ActiveStreamHS.set_redis(self.db)
 
         if not os.path.exists('files'):
             os.makedirs('files')
@@ -553,7 +551,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 self.deactivate_stream(dead_stream)
 
     def deactivate_stream(self, dead_stream_id):
-        ActiveStreamHS.delete(dead_stream_id)
+        ActiveStream.delete(dead_stream_id,self.db)
         buffer_path = os.path.join('streams',dead_stream_id,'buffer.xtc')
         if os.path.exists(buffer_path):
             with open(buffer_path,'w') as buffer_file:

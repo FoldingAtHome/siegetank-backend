@@ -129,12 +129,6 @@ class HashSet(object):
         return self._db.zrem(self.__class__.prefix+':'+self._id+':'+field,key)
 
     @check_field
-    def zadd(self,field,key,score):
-        return self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,key,score)
-
-    
-
-    @check_field
     def hincrby(self, field, count=1):
         return self._db.hincrby(self.__class__.prefix+':'+self._id,field,count)
 
