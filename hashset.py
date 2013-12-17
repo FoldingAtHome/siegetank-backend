@@ -9,7 +9,7 @@ def check_field(func):
     @wraps(func)
     def _wrapper(self_cls, field, *args, **kwargs):
         if not field in self_cls.fields:
-            raise   ('invalid field')
+            raise TypeError('invalid field')
         return func(self_cls, field, *args, **kwargs)
     return _wrapper
 

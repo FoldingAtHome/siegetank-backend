@@ -248,7 +248,7 @@ class FrameHandler(BaseHandler):
                   ------------------------------------------------------------
                   |c       core 1      |c|              core 2           |c|
                   ---                  --|--                             -----
-            frame: x|1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
+            frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
                     ---------------------| ------------------------------- ---
         
             When a core fetches a checkpoint, it makes sure to NOT write the
@@ -323,7 +323,7 @@ class StreamHandler(BaseHandler):
                            400 - BAD REQUEST
                            401 - UNAUTHORIZED
             '''
-        if not self.db.exists('cc_ip:'+self.request.remote_ip+':id'):
+        if not CommandCenter.lookup('ip',self.request.remote_ip,self.db):
             print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
@@ -374,7 +374,6 @@ class StreamHandler(BaseHandler):
             self.set_status(200)
             return self.write(stream_id)
         except KeyError as e:
-            print 'BLAHBLAHBLAH   asdfasdfasdfASDFASD asdfASDF'
             print repr(e)
             ex_type, ex, tb = sys.exc_info()
             traceback.print_tb(tb)
@@ -424,12 +423,10 @@ class StreamHandler(BaseHandler):
         try:
             if 'stream_id' in self.request.headers:
                 stream_id = self.request.headers['stream_id']
-                stream = Stream.instance(stream_id, self.db)
+                stream = Stream.instance(stream_Fid, self.db)
                 if stream:
-                    # remove stream from memory
                     self.deactivate_stream(stream_id)
                     stream.remove()
-                    # remove stream from disk
                     shutil.rmtree(os.path.join('streams',stream_id))
                     self.set_status(200)
                     return
@@ -471,26 +468,12 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         active_streams = ActiveStream.members(self.db)
         if active_streams:
             for stream in active_streams:
-                # deactivate this stream
                 self.deactivate_stream(stream)
-        assert len(ActiveStream.members(self.db)) == 0
-        # clear command centers 
-        if self.db.smembers('ccs'):
-            for cc_id in self.db.smembers('ccs'):
-                self.db.delete('cc:'+cc_id)
-        self.db.delete('ccs')
-        cc_ips = self.db.keys('cc_ip:*')
-        if cc_ips:
-            for cc_ip in cc_ips:
-                self.db.delete('cc_ip:'+cc_ip+':id')
-        # remove heartbeats
+        ccs = CommandCenter.members(self.db)
+        if ccs:
+            for cc_id in ccs:
+                CommandCenter.delete(cc_id, self.db)
         self.db.delete('heartbeats')
-        # remove tokens
-        #for expression in ['download_token:*','shared_token:*']:
-        for expression in ['shared_token:*']:
-            keys = self.db.keys(expression)
-            if keys:
-                self.db.delete(*keys)
 
         # inform the CC gracefully that the WS is dying (ie.expire everything)
 
@@ -513,11 +496,13 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 cc_name = cc[0]
                 cc_ip   = cc[1]
                 cc_port = cc[2]
-                self.db.sadd('ccs',cc_name)
-                self.db.hset('cc:'+cc_name,'ip',cc_ip)
-                self.db.hset('cc:'+cc_name,'http_port',cc_port)
-                self.db.set('cc_ip:'+cc_ip+':id',cc_name)
-                # inform the CCs that we are alive. 
+
+                print cc_ip, type(cc_ip)
+                print cc_port, type(cc_port)
+
+                cc_instance = CommandCenter.create(cc_name,self.db)
+                cc_instance['ip'] = cc_ip
+                cc_instance['http_port'] = cc_port
         else:
             print 'WARNING: No CCs were specified for this WS'
 
