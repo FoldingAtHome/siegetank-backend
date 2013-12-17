@@ -56,7 +56,6 @@ def cc_access(f):
     def decorated(self,*args,**kwargs):
         if self.request.remote_ip != '127.0.0.1':
             self.set_status(401)
-            print 'UNAUTHORIZED'
             return
         else:
             return f(self,*args, **kwargs)
@@ -107,7 +106,9 @@ class AuthHandler(BaseHandler):
 
 class UserHandler(BaseHandler):
     def get(self):
-        ''' Return a list of targets owned by this user '''
+        ''' Return a dictionary of targets owned by this user:
+            { target_id_1 : cc_id,
+              target_id_2 : cc_id } '''
         try:
             token_id = self.request.headers['token']
             user_id = User.lookup('token',token_id, self.db)
@@ -172,7 +173,6 @@ class TargetHandler(BaseHandler):
             self.set_status(200)
         except Exception as e:
             self.set_status(400)
-            print 'TEST',e
 
 class UserServer(tornado.web.Application, common.RedisMixin):
     def __init__(self,us_name,redis_port):

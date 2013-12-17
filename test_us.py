@@ -112,6 +112,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
                     'token'  : test_token
                 })
             rep = self.fetch('/target',method='POST',body=message)
+            self.assertTrue(rep.code,200)
         headers = {'token' : test_token}
         rep = self.fetch('/user',method='GET',headers=headers)
         self.assertEqual(rep.code,200)
