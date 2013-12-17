@@ -33,7 +33,7 @@ import hashset
 # HASH  KEY     'user:'+id              | id of the user
 #       FIELD   'password'              | password of the user
 #       FIELD   'token'                 | authentication token
-#       FIELD   'e-mail'                | user email
+#       FIELD   'email'                | user email
 # SET   KEY     'user:'+id+':targets'   | set of target ids belonging to user
 # STRNG KEY     'target:'+id+':cc'      | which CC the target is on
 # STRNG KEY     'token:'+id+':user'     | which user the token belongs to
@@ -44,7 +44,7 @@ class User(hashset.HashSet):
     prefix = 'user'
     fields = {'password'    : str,
               'token'       : str,
-              'e-mail'      : str,
+              'email'      : str,
               'targets'     : set,
              }
     lookups = {'token'}
@@ -56,6 +56,7 @@ def cc_access(f):
     def decorated(self,*args,**kwargs):
         if self.request.remote_ip != '127.0.0.1':
             self.set_status(401)
+            print 'UNAUTHORIZED'
             return
         else:
             return f(self,*args, **kwargs)
@@ -66,20 +67,6 @@ class BaseHandler(tornado.web.RequestHandler):
     def db(self):
         return self.application.db
 
-    def get_user(self,token):
-        return self.db.get('token:'+token+':user')
-
-    def get_token(self,user):
-        return self.db.hget('user:'+user,'token')
-
-    def set_token(self,user,token):
-        self.db.hset('user:'+user,'token',token)
-        self.db.set('token:'+token+':user',user)
-
-    def add_target(self,user,target,cc):
-        self.db.sadd('user:'+user+':targets',target)
-        self.db.set('target:'+target+':cc',cc)
-
 class VerifyHandler(BaseHandler):
     @cc_access
     def get(self):
@@ -89,7 +76,7 @@ class VerifyHandler(BaseHandler):
             return  
         try:
             token_id = self.request.headers['token']
-            user_id = User.lookup('token',token_id)
+            user_id = User.lookup('token',token_id,self.db)
             if user_id:
                 self.set_status(200)
                 self.write(user_id)
@@ -110,7 +97,7 @@ class AuthHandler(BaseHandler):
             username = content['username']
             password = content['password']
             digest = hashlib.sha256(os.urandom(256)).hexdigest()
-            user = User.instance(username)
+            user = User.instance(username, self.db)
             user['token'] = digest
             self.set_status(200)
             return self.write(digest)
@@ -124,7 +111,7 @@ class UserHandler(BaseHandler):
         try:
             token_id = self.request.headers['token']
             user_id = User.lookup('token',token_id, self.db)
-            user = User.instance('user_id', self.db)
+            user = User.instance(user_id, self.db)
             if user:
                 # return a list of targets and the ip of the cc its on
                 targets = user['targets']
@@ -146,21 +133,26 @@ class UserHandler(BaseHandler):
         ''' Add a new user to the database '''
         try:
             content = json.loads(self.request.body)
-            # make sure all relevant fields exist beflore writing to db
-            username = content['username']
-            password = content['password']
-            email    = content['email']
-            if self.db.exists('user:'+username):
+            # json posts everything as unicode
+            username = str(content['username'])
+            password = str(content['password'])
+            email    = str(content['email'])
+            try: 
+                User.instance(username,self.db)
                 self.set_status(400)
                 self.write('user:'+username+' already exists in db') 
                 return
-            self.db.hset('user:'+username,'password',password)
-            self.db.hset('user:'+username,'email',email)
+            except KeyError:
+                pass
+            user = User.create(username,self.db)
+            user['password'] = password
+            user['email'] = email
             self.set_status(200)
         except Exception as e:
             print 'ERROR:', e
             self.set_status(400)
 
+    @cc_access
     def delete():
         pass
 
@@ -170,19 +162,21 @@ class TargetHandler(BaseHandler):
         ''' Add a new target owned by this user and indicate the CC it is on.'''
         try:
             content = json.loads(self.request.body)
-            target  = content['target']
-            token   = content['token']
-            cc_id   = content['cc']
-            user_id = self.get_user(token)
-            self.add_target(user_id,target,cc_id)
+            target  = str(content['target'])
+            token   = str(content['token'])
+            cc_id   = str(content['cc'])
+            user_id = User.lookup('token',token,self.db)
+            user = User.instance(user_id,self.db)
+            user.sadd('targets',target)
+            self.db.set('target:'+target+':cc',cc_id)
             self.set_status(200)
         except Exception as e:
             self.set_status(400)
-            print e
+            print 'TEST',e
 
 class UserServer(tornado.web.Application, common.RedisMixin):
     def __init__(self,us_name,redis_port):
-        self.db = self.init_redis(redis_port)
+        self.db = common.init_redis(redis_port)
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         super(UserServer, self).__init__([

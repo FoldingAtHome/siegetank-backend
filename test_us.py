@@ -58,7 +58,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(rep.code,400)
 
         return name,password
-
+    
     def test_auth_user(self):
         username,password = self.test_post_user()
         payload = json.dumps({
@@ -114,11 +114,12 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             rep = self.fetch('/target',method='POST',body=message)
         headers = {'token' : test_token}
         rep = self.fetch('/user',method='GET',headers=headers)
+        self.assertEqual(rep.code,200)
         target_mapping = json.loads(rep.body)
         for target,cc in target_mapping.iteritems():
             self.assertTrue(target in targets)
             self.assertEqual(cc,'firebat')
-
+    
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     unittest.TextTestRunner(verbosity=3).run(suite)
