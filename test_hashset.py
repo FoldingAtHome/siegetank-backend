@@ -104,7 +104,7 @@ class TestHashSet(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        print cls.db.keys('*')
+        print(cls.db.keys('*'))
         cls.db.shutdown()
         pass
 

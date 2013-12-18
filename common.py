@@ -21,10 +21,10 @@ def init_redis(redis_port, redis_pass=None):
     redis_process = subprocess.Popen(args)
 
     if redis_process.poll() is not None:
-        print 'Could not start redis server, aborting'
+        print('Could not start redis server, aborting')
         sys.exit(0)
     redis_client = redis.Redis(host='localhost',password=redis_pass,
-                           port=int(redis_port))
+                           port=int(redis_port),decode_responses=True)
     # poll until redis server is alive
     alive = False
     start_time = time.time()
@@ -42,5 +42,5 @@ def init_redis(redis_port, redis_pass=None):
 class RedisMixin():
 
     def shutdown_redis(self):
-        print 'shutting down redis...'
+        print('shutting down redis...')
         self.db.shutdown()

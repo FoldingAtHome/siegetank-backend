@@ -85,7 +85,7 @@ class HashSet(object):
         # cleanup hash
         db.delete(cls.prefix+':'+id)
         # cleanup sets
-        for f_name, f_type in cls.fields.iteritems():
+        for f_name, f_type in cls.fields.items():
             if f_type is set or f_type is dict:
                 db.delete(cls.prefix+':'+id+':'+f_name)
 

@@ -8,17 +8,11 @@ import subprocess
 import json
 import time
 import uuid
-import base64
 import os
 import random
-import struct
-import requests
-import shutil
-import cStringIO
 import tarfile
 import signal
 import sys
-import sets
 
 class USInterfaceTestCase(AsyncHTTPTestCase):
     ''' This class tests the basic interface of the US to ensure DB entries
@@ -48,6 +42,9 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'password' : password,
             'email'    : email
         })
+
+        print('DEBUG PAYLOAD', payload)
+
         rep = self.fetch('/user',method='POST',body=payload)
         self.assertEqual(rep.code,200)
         self.assertTrue(self.us.db.exists('user:'+name))
@@ -59,6 +56,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
 
         return name,password
     
+    '''
     def test_auth_user(self):
         username,password = self.test_post_user()
         payload = json.dumps({
@@ -108,9 +106,9 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         user,test_token,target = self.test_post_target()
 
         headers = {
-                'target' : target,
-                'token'  : test_token
-                }
+            'target' : target,
+            'token'  : test_token
+        }
 
         rep = self.fetch('/target',method='DELETE',headers=headers)
         self.assertEqual(rep.code,200)
@@ -118,6 +116,11 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertFalse(
             self.us.db.sismember('user:'+user+':targets',target))
         
+        headers = {
+            'target' : target,
+            'token'  : str(uuid.uuid4())
+        }
+
     def test_get_user(self):
         user,test_token = self.test_auth_user()
         targets = sets.Set()
@@ -139,7 +142,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         for target,cc in target_mapping.iteritems():
             self.assertTrue(target in targets)
             self.assertEqual(cc,'firebat')
-    
+    '''
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     unittest.TextTestRunner(verbosity=3).run(suite)

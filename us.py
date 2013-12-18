@@ -9,9 +9,8 @@ import json
 import os
 import uuid
 import random
-import requests
 import redis
-import ConfigParser
+import configparser
 import signal
 import sys
 
@@ -104,7 +103,7 @@ class AuthHandler(BaseHandler):
             self.set_status(200)
             return self.write(digest)
         except Exception as e:
-            print e
+            print(e)
             self.set_status(401)
 
 class UserHandler(BaseHandler):
@@ -129,18 +128,18 @@ class UserHandler(BaseHandler):
             else:
                 self.set_status(401)
         except Exception as e:
-            print 'Exception: ', e
+            print('Exception: ', e)
             self.set_status(400)
     
     @cc_access
     def post(self):
         ''' Add a new user to the database '''
         try:
-            content = json.loads(self.request.body)
+            content = json.loads(self.request.body.decode('utf-8'))
             # json posts everything as unicode
             username = content['username']
-            password = str(content['password'])
-            email    = str(content['email'])
+            password = content['password']
+            email    = content['email']
             try: 
                 User.instance(username,self.db)
                 self.set_status(400)
@@ -153,7 +152,7 @@ class UserHandler(BaseHandler):
             user['email'] = email
             self.set_status(200)
         except Exception as e:
-            print 'ERROR:', e
+            print('ERROR:', e)
             self.set_status(400)
 
     @cc_access
@@ -197,7 +196,7 @@ class TargetHandler(BaseHandler):
             self.db.delete('target:'+target+':cc')
             self.set_status(200)
         except Exception as e:
-            print e
+            print(e)
             self.set_status(400)
 
 class UserServer(tornado.web.Application, common.RedisMixin):
@@ -214,13 +213,13 @@ class UserServer(tornado.web.Application, common.RedisMixin):
 
     def shutdown(self, signal_number=None, stack_frame=None):
         self.shutdown_redis()       
-        print 'shutting down tornado...'
+        print('shutting down tornado...')
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
 
 def start():
     config_file = 'us_conf'
-    Config = ConfigParser.ConfigParser()
+    Config = configparser.ConfigParser()
     Config.read(config_file)    
     us_name       = Config.get('US','name')
     us_redis_port = Config.getint('US','redis_port')
