@@ -118,8 +118,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertFalse(
             self.us.db.sismember('user:'+user+':targets',target))
         
-
-
     def test_get_user(self):
         user,test_token = self.test_auth_user()
         targets = sets.Set()
