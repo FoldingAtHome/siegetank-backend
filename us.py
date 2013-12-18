@@ -91,9 +91,10 @@ class AuthHandler(BaseHandler):
         hash. Each time this is called, a new user token is generated.
         '''
         try:
-            content = json.loads(self.request.body)
+            content = json.loads(self.request.body.decode())
             username = content['username']
             password = content['password']
+            print(username, password)
             user = User.instance(username, self.db)
             if password != user['password']:
                 self.set_status(401)
@@ -135,7 +136,7 @@ class UserHandler(BaseHandler):
     def post(self):
         ''' Add a new user to the database '''
         try:
-            content = json.loads(self.request.body.decode('utf-8'))
+            content = json.loads(self.request.body.decode())
             # json posts everything as unicode
             username = content['username']
             password = content['password']

@@ -42,9 +42,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'password' : password,
             'email'    : email
         })
-
-        print('DEBUG PAYLOAD', payload)
-
         rep = self.fetch('/user',method='POST',body=payload)
         self.assertEqual(rep.code,200)
         self.assertTrue(self.us.db.exists('user:'+name))
@@ -56,22 +53,24 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
 
         return name,password
     
-    '''
     def test_auth_user(self):
         username,password = self.test_post_user()
         payload = json.dumps({
             'username' : username,
             'password' : password
         })
+
+        print('debug:',username,password)
+
         rep = self.fetch('/auth',method='POST',body=payload)
-        token = rep.body
+        token = rep.body.decode()
         self.assertEqual(rep.code,200)
-        self.assertEqual(token,self.us.db.hget('user:'+username,'token'))
+        self.assertEqual(token, self.us.db.hget('user:'+username,'token'))
         self.assertEqual(self.us.db.get('token:'+token+':user'),username)
 
         # auth again to make sure the old token is deleted
         rep = self.fetch('/auth',method='POST',body=payload)
-        new_token = rep.body
+        new_token = rep.body.decode()
         self.assertEqual(new_token,self.us.db.hget('user:'+username,'token'))
         self.assertEqual(self.us.db.get('token:'+new_token+':user'),username)
         self.assertEqual(rep.code,200)
@@ -84,6 +83,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(rep.code,401)
         return username,new_token
 
+    '''
     def test_post_target(self):
         user,test_token = self.test_auth_user()
         target = str(uuid.uuid4())
