@@ -142,6 +142,14 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         for target,cc in target_mapping.items():
             self.assertTrue(target in targets)
             self.assertEqual(cc,'firebat')
+
+    def test_verify(self):
+        user,test_token = self.test_auth_user()
+        headers = {'Authorization' : test_token}
+        rep = self.fetch('/verify',headers=headers,method='GET')
+        self.assertEqual(rep.code,200)
+        content = json.loads(rep.body.decode())
+        self.assertEqual(content['user'],user)
     
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

@@ -68,16 +68,14 @@ class BaseHandler(tornado.web.RequestHandler):
 class VerifyHandler(BaseHandler):
     @cc_access
     def get(self):
-        ''' Get the user the token belongs to '''
-        if self.request.remote_ip != '127.0.0.1':
-            self.set_status(401)
-            return  
         try:
-            token_id = self.request.headers['token']
+            token_id = self.request.headers['Authorization']
             user_id = User.lookup('token',token_id,self.db)
             if user_id:
                 self.set_status(200)
-                self.write(user_id)
+                self.write(json.dumps({
+                        'user' : user_id
+                    }))
             else:
                 self.set_status(401)
         except Exception as e:
@@ -86,7 +84,7 @@ class VerifyHandler(BaseHandler):
 
 class AuthHandler(BaseHandler):
     def post(self):
-        ''' Generate a token used for id purposes, the token generated
+        ''' Generate an authorization token, note the token generated
         is NOT a function of the password, it is a completely random
         hash. Each time this is called, a new user token is generated.
         
