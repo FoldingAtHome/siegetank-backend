@@ -42,13 +42,13 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'password' : password,
             'email'    : email
         })
-        rep = self.fetch('/user',method='POST',body=payload)
+        rep = self.fetch('/users',method='POST',body=payload)
         self.assertEqual(rep.code,200)
         self.assertTrue(self.us.db.exists('user:'+name))
         self.assertEqual(self.us.db.hget('user:'+name,'password'),password)
         self.assertEqual(self.us.db.hget('user:'+name,'email'),email)
         # see if adding two users with same name dies
-        rep = self.fetch('/user',method='POST',body=payload)
+        rep = self.fetch('/users',method='POST',body=payload)
         self.assertEqual(rep.code,400)
 
         return name,password
@@ -60,14 +60,17 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'password' : password
         })
         rep = self.fetch('/auth',method='POST',body=payload)
-        token = rep.body.decode()
+        print('TEST', rep.body.decode())
+        content = json.loads(rep.body.decode())
+        token = content['authorization']
         self.assertEqual(rep.code,200)
         self.assertEqual(token, self.us.db.hget('user:'+username,'token'))
         self.assertEqual(self.us.db.get('token:'+token+':user'),username)
 
         # auth again to make sure the old token is deleted
         rep = self.fetch('/auth',method='POST',body=payload)
-        new_token = rep.body.decode()
+        content = json.loads(rep.body.decode())
+        new_token = content['authorization']
         self.assertEqual(new_token,self.us.db.hget('user:'+username,'token'))
         self.assertEqual(self.us.db.get('token:'+new_token+':user'),username)
         self.assertEqual(rep.code,200)
@@ -80,6 +83,9 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(rep.code,401)
         return username,new_token
 
+
+    '''
+
     def test_post_target(self):
         user,test_token = self.test_auth_user()
         target = str(uuid.uuid4())
@@ -91,7 +97,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
                 'token'  : test_token
             })
 
-        rep = self.fetch('/target',method='POST',body=message)
+        rep = self.fetch('/targets',method='POST',body=message)
         self.assertEqual(rep.code,200)
         self.assertTrue(self.us.db.sismember('user:'+user+':targets',target))
         self.assertEqual(self.us.db.get('target:'+target+':cc'),cc_id)
@@ -117,7 +123,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'token'  : str(uuid.uuid4())
         }
     
-    def test_get_user(self):
+    def test_get_targets(self):
         user,test_token = self.test_auth_user()
         targets = set()
         for i in range(5):
@@ -131,13 +137,15 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
                 })
             rep = self.fetch('/target',method='POST',body=message)
             self.assertTrue(rep.code,200)
-        headers = {'token' : test_token}
-        rep = self.fetch('/user',method='GET',headers=headers)
+        headers = {'Authorization' : test_token}
+        rep = self.fetch('/targets',method='GET',headers=headers)
         self.assertEqual(rep.code,200)
-        target_mapping = json.loads(rep.body)
-        for target,cc in target_mapping.iteritems():
+        target_mapping = json.loads(rep.body.decode())
+        for target,cc in target_mapping.items():
             self.assertTrue(target in targets)
             self.assertEqual(cc,'firebat')
+
+    '''
     
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

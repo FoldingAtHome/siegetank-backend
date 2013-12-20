@@ -89,6 +89,20 @@ class AuthHandler(BaseHandler):
         ''' Generate a token used for id purposes, the token generated
         is NOT a function of the password, it is a completely random
         hash. Each time this is called, a new user token is generated.
+        
+        Request Body:
+
+            {
+                'username' : username,
+                'password' : password,
+            }
+
+        Response:
+            
+            {
+                'authorization' : token
+            }
+
         '''
         try:
             content = json.loads(self.request.body.decode())
@@ -101,49 +115,35 @@ class AuthHandler(BaseHandler):
             digest = hashlib.sha256(os.urandom(256)).hexdigest()
             user['token'] = digest
             self.set_status(200)
-            return self.write(digest)
+            auth_dict = { 'authorization' : digest }
+            return self.write(json.dumps(auth_dict))
         except Exception as e:
             print(e)
             self.set_status(401)
 
-class UserHandler(BaseHandler):
-    def get(self):
-        ''' Return a list of targets and the cc it resides on. 
+class UsersHandler(BaseHandler):
+    @cc_access
+    def post(self):
+        ''' Add a new user to the database. Body content must be
+            in JSON format. 
 
-            Required Headers:
+            Request Body:
 
-            [Authorization]
+            {
+                'username' : username,
+                'password' : password,
+                'email'    : email
+            }
 
             Response:
 
-            { target_id_1 : cc_id,
-              target_id_2 : cc_id } '''
-        try:
-            auth_token = self.request.headers['Authorization']
-            user_id = User.lookup('token', auth_token, self.db)
-            user = User.instance(user_id, self.db)
-            if user:
-                # return a list of targets and the ip of the cc its on
-                targets = user['targets']
-                if targets:
-                    ccs = []
-                    for target_id in targets:
-                        cc = self.db.get('target:'+target_id+':cc')
-                        ccs.append(cc)
-                    self.set_status(200)
-                    self.write(json.dumps(dict(zip(targets,ccs))))
-            else:
-                self.set_status(401)
-        except Exception as e:
-            print('Exception: ', e)
-            self.set_status(400)
-    
-    @cc_access
-    def post(self):
-        ''' Add a new user to the database '''
+            200 - OK
+            400 - Bad Request
+
+        '''
+
         try:
             content = json.loads(self.request.body.decode())
-            # json posts everything as unicode
             username = content['username']
             password = content['password']
             email    = content['email']
@@ -169,16 +169,39 @@ class UserHandler(BaseHandler):
 
         pass
 
-class TargetHandler(BaseHandler):
+# Add a target:
+# Restricted to CC
+# POST x.com/targets
+
+# Delete a target:
+# Restricted to CC
+# DELETE x.com/targets/id
+
+# Get a list of targets
+# GET x.com/targets
+class TargetsHandler(BaseHandler):
     @cc_access
     def post(self):
-        ''' Add a new target owned by this user and indicate the CC it is on.'''
+        ''' Add a target owned by the user.
+
+            Request Body:
+
+                {
+                    'target' : target_id,
+                    'cc'     : cc_id
+                    'user'   : user_id
+                }
+
+            Response:
+
+                200 - OK
+
+        '''
         try:
             content = json.loads(self.request.body.decode())
             target  = content['target']
-            token   = content['token']
             cc_id   = content['cc']
-            user_id = User.lookup('token',token,self.db)
+            user_id = content['user']
             user = User.instance(user_id,self.db)
             user.sadd('targets',target)
             self.db.set('target:'+target+':cc',cc_id)
@@ -186,6 +209,41 @@ class TargetHandler(BaseHandler):
         except Exception as e:
             self.set_status(400)
 
+    def get(self):
+        ''' Return a list of targets and the cc it resides on
+
+            Required Headers:
+
+                Authorization
+
+            Response:
+
+                { target_id_1 : cc_id,
+                  target_id_2 : cc_id } 
+
+        '''
+
+        try:
+            auth_token = self.request.headers['Authorization']
+            user_id = User.lookup('token', auth_token, self.db)
+            user = User.instance(user_id, self.db)
+            if user:
+                # return a list of targets and the ip of the cc its on
+                targets = user['targets']
+                if targets:
+                    ccs = []
+                    for target_id in targets:
+                        cc = self.db.get('target:'+target_id+':cc')
+                        ccs.append(cc)
+                    self.set_status(200)
+                    self.write(json.dumps(dict(zip(targets,ccs))))
+            else:
+                self.set_status(401)
+        except Exception as e:
+            print('Exception: ', e)
+            self.set_status(400)
+
+class DeleteTargetHandler(BaseHandler):
     @cc_access
     def delete(self):
         ''' Delete a target owned by this user. '''
@@ -213,8 +271,8 @@ class UserServer(tornado.web.Application, common.RedisMixin):
         signal.signal(signal.SIGTERM, self.shutdown)
         super(UserServer, self).__init__([
             (r'/verify', VerifyHandler),
-            (r'/target', TargetHandler),
-            (r'/user', UserHandler),
+            (r'/targets', TargetsHandler),
+            (r'/users', UsersHandler),
             (r'/auth', AuthHandler)
             ])
 
