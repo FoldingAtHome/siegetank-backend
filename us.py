@@ -94,7 +94,6 @@ class AuthHandler(BaseHandler):
             content = json.loads(self.request.body.decode())
             username = content['username']
             password = content['password']
-            print(username, password)
             user = User.instance(username, self.db)
             if password != user['password']:
                 self.set_status(401)
@@ -168,10 +167,10 @@ class TargetHandler(BaseHandler):
     def post(self):
         ''' Add a new target owned by this user and indicate the CC it is on.'''
         try:
-            content = json.loads(self.request.body)
-            target  = str(content['target'])
-            token   = str(content['token'])
-            cc_id   = str(content['cc'])
+            content = json.loads(self.request.body.decode())
+            target  = content['target']
+            token   = content['token']
+            cc_id   = content['cc']
             user_id = User.lookup('token',token,self.db)
             user = User.instance(user_id,self.db)
             user.sadd('targets',target)

@@ -59,9 +59,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'username' : username,
             'password' : password
         })
-
-        print('debug:',username,password)
-
         rep = self.fetch('/auth',method='POST',body=payload)
         token = rep.body.decode()
         self.assertEqual(rep.code,200)
@@ -83,7 +80,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(rep.code,401)
         return username,new_token
 
-    '''
     def test_post_target(self):
         user,test_token = self.test_auth_user()
         target = str(uuid.uuid4())
@@ -121,9 +117,10 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'token'  : str(uuid.uuid4())
         }
 
+    
     def test_get_user(self):
         user,test_token = self.test_auth_user()
-        targets = sets.Set()
+        targets = set()
         for i in range(5):
             target = str(uuid.uuid4())
             targets.add(target)
@@ -142,7 +139,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         for target,cc in target_mapping.iteritems():
             self.assertTrue(target in targets)
             self.assertEqual(cc,'firebat')
-    '''
+    
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
     unittest.TextTestRunner(verbosity=3).run(suite)
