@@ -82,7 +82,7 @@ class VerifyHandler(BaseHandler):
                 self.set_status(401)
         except Exception as e:
             self.set_status(400)
-            self.write('Missing token header')
+            traceback.print_exc()
 
 class AuthHandler(BaseHandler):
     def post(self):
@@ -118,7 +118,7 @@ class AuthHandler(BaseHandler):
             auth_dict = { 'authorization' : digest }
             return self.write(json.dumps(auth_dict))
         except Exception as e:
-            print(e)
+            traceback.print_exc()
             self.set_status(401)
 
 class UsersHandler(BaseHandler):
@@ -159,7 +159,7 @@ class UsersHandler(BaseHandler):
             user['email'] = email
             self.set_status(200)
         except Exception as e:
-            print('ERROR:', e)
+            traceback.print_exc()
             self.set_status(400)
 
     @cc_access
@@ -169,16 +169,6 @@ class UsersHandler(BaseHandler):
 
         pass
 
-# Add a target:
-# Restricted to CC
-# POST x.com/targets
-
-# Delete a target:
-# Restricted to CC
-# DELETE x.com/targets/id
-
-# Get a list of targets
-# GET x.com/targets
 class TargetsHandler(BaseHandler):
     @cc_access
     def post(self):
@@ -211,6 +201,7 @@ class TargetsHandler(BaseHandler):
             self.db.set('target:'+target+':cc',cc_id)
             self.set_status(200)
         except Exception as e:
+            traceback.print_exc()
             self.set_status(400)
 
     def get(self):
@@ -243,7 +234,7 @@ class TargetsHandler(BaseHandler):
             else:
                 self.set_status(401)
         except Exception as e:
-            print('Exception: ', e)
+            traceback.print_exc()
             self.set_status(400)
 
 class DeleteTargetHandler(BaseHandler):
@@ -264,6 +255,7 @@ class DeleteTargetHandler(BaseHandler):
                 200 - OK
 
         '''
+
         try:    
             content = self.request.headers
             auth_token = content['Authorization']
@@ -277,7 +269,6 @@ class DeleteTargetHandler(BaseHandler):
             self.db.delete('target:'+target+':cc')
             self.set_status(200)
         except Exception as e:
-            print(e)
             traceback.print_exc()
             self.set_status(400)
 
