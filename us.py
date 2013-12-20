@@ -32,7 +32,7 @@ import hashset
 # HASH  KEY     'user:'+id              | id of the user
 #       FIELD   'password'              | password of the user
 #       FIELD   'token'                 | authentication token
-#       FIELD   'email'                | user email
+#       FIELD   'email'                 | user email
 # SET   KEY     'user:'+id+':targets'   | set of target ids belonging to user
 # STRNG KEY     'target:'+id+':cc'      | which CC the target is on
 # STRNG KEY     'token:'+id+':user'     | which user the token belongs to
@@ -184,12 +184,15 @@ class TargetsHandler(BaseHandler):
     def post(self):
         ''' Add a target owned by the user.
 
+            Request Headers:
+
+                Authorization - Authorizing user's token
+
             Request Body:
 
                 {
                     'target' : target_id,
                     'cc'     : cc_id
-                    'user'   : user_id
                 }
 
             Response:
@@ -201,7 +204,8 @@ class TargetsHandler(BaseHandler):
             content = json.loads(self.request.body.decode())
             target  = content['target']
             cc_id   = content['cc']
-            user_id = content['user']
+            token   = self.request.headers['Authorization']
+            user_id = User.lookup('token',token,self.db)
             user = User.instance(user_id,self.db)
             user.sadd('targets',target)
             self.db.set('target:'+target+':cc',cc_id)
@@ -228,7 +232,6 @@ class TargetsHandler(BaseHandler):
             user_id = User.lookup('token', auth_token, self.db)
             user = User.instance(user_id, self.db)
             if user:
-                # return a list of targets and the ip of the cc its on
                 targets = user['targets']
                 if targets:
                     ccs = []
@@ -245,13 +248,26 @@ class TargetsHandler(BaseHandler):
 
 class DeleteTargetHandler(BaseHandler):
     @cc_access
-    def delete(self):
-        ''' Delete a target owned by this user. '''
+    def delete(self,target):
+        ''' Delete a target owned by the authorizing user
+
+            URI:
+
+            x.com/targets/id
+
+            Request Headers:
+
+                Authorization
+
+            Reponse:
+
+                200 - OK
+
+        '''
         try:    
             content = self.request.headers
-            target  = str(content['target'])
-            token   = str(content['token'])
-            user_id = User.lookup('token',token,self.db)
+            auth_token = content['Authorization']
+            user_id = User.lookup('token',auth_token,self.db)
             user = User.instance(user_id, self.db)
             count = user.srem('targets',target)
             if count == 0:
@@ -262,6 +278,7 @@ class DeleteTargetHandler(BaseHandler):
             self.set_status(200)
         except Exception as e:
             print(e)
+            traceback.print_exc()
             self.set_status(400)
 
 class UserServer(tornado.web.Application, common.RedisMixin):
@@ -272,6 +289,7 @@ class UserServer(tornado.web.Application, common.RedisMixin):
         super(UserServer, self).__init__([
             (r'/verify', VerifyHandler),
             (r'/targets', TargetsHandler),
+            (r'/targets/(.+)', DeleteTargetHandler),
             (r'/users', UsersHandler),
             (r'/auth', AuthHandler)
             ])

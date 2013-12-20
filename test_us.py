@@ -60,7 +60,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'password' : password
         })
         rep = self.fetch('/auth',method='POST',body=payload)
-        print('TEST', rep.body.decode())
         content = json.loads(rep.body.decode())
         token = content['authorization']
         self.assertEqual(rep.code,200)
@@ -88,30 +87,29 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         target = str(uuid.uuid4())
         cc_id  = 'firebat'
 
+        headers = {'Authorization' : test_token}
+
         message = json.dumps({
                 'target' : target,
                 'cc'     : cc_id,
-                'user'   : user
             })
 
-        rep = self.fetch('/targets',method='POST',body=message)
+        rep = self.fetch('/targets',method='POST',headers=headers, 
+                body=message)
         self.assertEqual(rep.code,200)
         self.assertTrue(self.us.db.sismember('user:'+user+':targets',target))
         self.assertEqual(self.us.db.get('target:'+target+':cc'),cc_id)
 
         return user,test_token,target
 
-
-    '''
     def test_delete_target(self):
         user,test_token,target = self.test_post_target()
 
         headers = {
-            'target' : target,
-            'token'  : test_token
+            'Authorization' : test_token
         }
 
-        rep = self.fetch('/target',method='DELETE',headers=headers)
+        rep = self.fetch('/targets/'+target,method='DELETE',headers=headers)
         self.assertEqual(rep.code,200)
         self.assertFalse(self.us.db.get('target:'+target+':cc'))
         self.assertFalse(
@@ -119,23 +117,24 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         
         headers = {
             'target' : target,
-            'token'  : str(uuid.uuid4())
+            'user'   : user
         }
-    
-    def test_get_targets(self):
+
+    def test_get_list_of_targets(self):
         user,test_token = self.test_auth_user()
         targets = set()
         for i in range(5):
             target = str(uuid.uuid4())
             targets.add(target)
             cc_id  = 'firebat'
+            headers = {'Authorization' : test_token}
             message = json.dumps({
                     'target' : target,
                     'cc'     : cc_id,
-                    'token'  : test_token
                 })
-            rep = self.fetch('/target',method='POST',body=message)
-            self.assertTrue(rep.code,200)
+            rep = self.fetch('/targets',method='POST',headers=headers, 
+                body=message)
+            self.assertEqual(rep.code,200)
         headers = {'Authorization' : test_token}
         rep = self.fetch('/targets',method='GET',headers=headers)
         self.assertEqual(rep.code,200)
@@ -143,8 +142,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         for target,cc in target_mapping.items():
             self.assertTrue(target in targets)
             self.assertEqual(cc,'firebat')
-
-    '''
     
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
