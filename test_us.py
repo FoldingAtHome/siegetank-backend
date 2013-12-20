@@ -83,9 +83,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         self.assertEqual(rep.code,401)
         return username,new_token
 
-
-    '''
-
     def test_post_target(self):
         user,test_token = self.test_auth_user()
         target = str(uuid.uuid4())
@@ -94,7 +91,7 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
         message = json.dumps({
                 'target' : target,
                 'cc'     : cc_id,
-                'token'  : test_token
+                'user'   : user
             })
 
         rep = self.fetch('/targets',method='POST',body=message)
@@ -104,6 +101,8 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
 
         return user,test_token,target
 
+
+    '''
     def test_delete_target(self):
         user,test_token,target = self.test_post_target()
 
