@@ -116,7 +116,6 @@ class USInterfaceTestCase(AsyncHTTPTestCase):
             'target' : target,
             'token'  : str(uuid.uuid4())
         }
-
     
     def test_get_user(self):
         user,test_token = self.test_auth_user()

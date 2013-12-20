@@ -108,12 +108,19 @@ class AuthHandler(BaseHandler):
 
 class UserHandler(BaseHandler):
     def get(self):
-        ''' Return a dictionary of targets owned by this user:
+        ''' Return a list of targets and the cc it resides on. 
+
+            Required Headers:
+
+            [Authorization]
+
+            Response:
+
             { target_id_1 : cc_id,
               target_id_2 : cc_id } '''
         try:
-            token_id = self.request.headers['token']
-            user_id = User.lookup('token',token_id, self.db)
+            auth_token = self.request.headers['Authorization']
+            user_id = User.lookup('token', auth_token, self.db)
             user = User.instance(user_id, self.db)
             if user:
                 # return a list of targets and the ip of the cc its on
