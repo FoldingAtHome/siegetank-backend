@@ -345,7 +345,7 @@ class StreamHandler(BaseHandler):
                     else:
                         pass
                 elif s+'_hash' in self.request.files: 
-                    bin_hash = self.request.files[s+'_hash'][0]['body']
+                    bin_hash = self.request.files[s+'_hash'][0]['body'].decode()
                     if not self.db.sismember('file_hashes', bin_hash):
                         return self.write('Gave me a hash for a file not \
                                            in files directory')
@@ -360,15 +360,16 @@ class StreamHandler(BaseHandler):
                 os.makedirs(stream_folder)
             # Write the initial state
             path = os.path.join(stream_folder,'state.xml.gz')
-            open(path,'w').write(state_bin)
-            for f_hash,f_bin in file_buffer.iteritems():
-                open(os.path.join('files',f_hash),'w').write(f_bin)
+            open(path,'wb').write(state_bin)
+            for f_hash,f_bin in file_buffer.items():
+                open(os.path.join('files',f_hash),'wb').write(f_bin)
             redis_pipe = self.db.pipeline()
             Stream.create(stream_id,self.db)
             stream = Stream.instance(stream_id, self.db)
             stream['frames'] = 0
             stream['status'] = 'OK'
-            for k,v in file_hashes.iteritems():
+            for k,v in file_hashes.items():
+                print(k,v,type(k),type(v))
                 stream[k] = v
             self.set_status(200)
             return self.write(stream_id)

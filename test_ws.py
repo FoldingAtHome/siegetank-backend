@@ -102,9 +102,9 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
     def test_add_stream(self):
         # Add a stream
-        system_bin      = str(uuid.uuid4())
-        state_bin       = str(uuid.uuid4())
-        integrator_bin  = str(uuid.uuid4())
+        system_bin      = str(uuid.uuid4()).encode()
+        state_bin       = str(uuid.uuid4()).encode()
+        integrator_bin  = str(uuid.uuid4()).encode()
         files = {
             'state_bin' : state_bin,
             'system_bin' : system_bin,
@@ -269,10 +269,11 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.redis_client.exists('shared_token:'+token_id+':active_stream'))
 
     def test_post_stream(self):
-        system_bin     = 'system.xml.gz'
-        state_bin      = 'state.xml.gz'
-        integrator_bin = 'integrator.xml.gz'
+        system_bin     = 'system.xml.gz'.encode()
+        state_bin      = 'state.xml.gz'.encode()
+        integrator_bin = 'integrator.xml.gz'.encode()
         system_hash = hashlib.md5(system_bin).hexdigest()
+
         integrator_hash = hashlib.md5(integrator_bin).hexdigest()
 
         # Test send binaries of system.xml and integrator
@@ -285,7 +286,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
         self.assertEqual(resp.code, 200)
-        stream_id1 = resp.body
+        stream_id1 = resp.body.decode()
         self.assertTrue(
             self.redis_client.sismember('file_hashes',system_hash) and 
             self.redis_client.sismember('file_hashes',integrator_hash) and
@@ -303,7 +304,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         prep = requests.Request('POST','http://url',files=files).prepare()
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
-        stream_id2 = resp.body
+        stream_id2 = resp.body.decode()
         self.assertEqual(resp.code, 200)
         server_streams = self.redis_client.smembers('streams')
         self.assertTrue(stream_id1 in server_streams)
@@ -318,7 +319,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         prep = requests.Request('POST','http://myurl',files=files).prepare()
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
-        stream_id3 = resp.body
+        stream_id3 = resp.body.decode()
         self.assertEqual(resp.code, 200)
         server_streams = self.redis_client.smembers('streams')
         self.assertTrue(stream_id1 in server_streams)
@@ -330,8 +331,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.redis_client.sismember('file_hashes',system_hash) and 
             self.redis_client.sismember('file_hashes',integrator_hash))
 
-        system_bin_read = open(os.path.join('files',system_hash)).read()
-        integ_bin_read = open(os.path.join('files',integrator_hash)).read()
+        system_bin_read = open(os.path.join('files',system_hash),'rb').read()
+        integ_bin_read = open(os.path.join('files',integrator_hash),'rb').read()
         self.assertEqual(system_bin_read, system_bin)
         self.assertEqual(integ_bin_read, integrator_bin)
 
@@ -351,7 +352,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
 
         for stream in stream_ids:
             state_bin_read = open(os.path.join('streams',stream,
-                                  'state.xml.gz')).read()
+                                  'state.xml.gz'),'rb').read()
             self.assertEqual(state_bin_read, state_bin)
         
         for stream in stream_ids:
