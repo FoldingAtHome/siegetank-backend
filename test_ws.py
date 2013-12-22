@@ -21,15 +21,15 @@ import sys
 import common
 
 def _tar_strings(strings, names):
-    ''' Returns a cStringIO'd tar file of strings with names in names '''
+    ''' Returns a io'd tar file of strings with names in names '''
     assert len(strings) == len(names)
 
-    tar_outfile = cStringIO.StringIO()
+    tar_outfile = io.BytesIO()
     with tarfile.open(mode='w', fileobj=tar_outfile) as tarball:
         for string, name in zip(strings,names):
             frame_binary = string
             # binary string
-            frame_string = cStringIO.StringIO()
+            frame_string = io.BytesIO()
             frame_string.write(frame_binary)
             frame_string.seek(0)
             info = tarfile.TarInfo(name=name)
@@ -114,13 +114,15 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
         self.assertEqual(resp.code, 200)
-        stream_id = resp.body
+        stream_id = resp.body.decode()
         return stream_id, system_bin, state_bin, integrator_bin
 
     def test_assign_stream(self):
         stream_id, system_bin, state_bin, integrator_bin = \
             self.test_add_stream()
         token_id = str(uuid.uuid4())
+
+        print('TOKEN ID:', token_id,type(token_id))
 
         active_stream = ws.ActiveStream.create(stream_id,self.redis_client)
         active_stream['shared_token'] = token_id
@@ -145,7 +147,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         # Test GET a job
         response = self.fetch('/frame', headers=headers, method='GET') 
         with tarfile.open(mode='r', fileobj=
-                          cStringIO.StringIO(response.body)) as tarball:
+                          io.StringIO(response.body)) as tarball:
             for member in tarball.getmembers():
                 if member.name == 'system.xml.gz':
                     self.assertEqual(tarball.extractfile(member).read(),

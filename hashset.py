@@ -67,6 +67,8 @@ class HashSet(object):
     
     @classmethod
     def create(cls,id,db):
+        if isinstance(id,bytes):
+            raise TypeError('id must be a string')
         if cls.exists(id,db):
             raise KeyError(id,'already exists')
         db.sadd(cls.prefix+'s',id)

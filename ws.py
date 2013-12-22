@@ -181,7 +181,7 @@ class FrameHandler(BaseHandler):
                 self.deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
             stream['error_count'] = 0
-            tar_string = cStringIO.StringIO(self.request.body)
+            tar_string = io.StringIO(self.request.body)
             with tarfile.open(mode='r', fileobj=tar_string) as tarball:
                 # Extract the frame
                 frame_member = tarball.getmember('frame.xtc')
@@ -263,13 +263,13 @@ class FrameHandler(BaseHandler):
                 self.set_status(401)
                 return self.write('Unknown token')
             stream = Stream.instance(stream_id, self.db)
-            # a core should NEVER be able to catch a non OK stream
+            # a core should NEVER be able to get a non OK stream
             assert stream['status'] == 'OK'
             sys_file   = os.path.join('files',stream['system_hash'])
             intg_file  = os.path.join('files',stream['integrator_hash'])
             state_file = os.path.join('streams',stream_id,'state.xml.gz')
             # Make a tarball in memory and send directly
-            c = cStringIO.StringIO()
+            c = io.StringIO()
             tarball = tarfile.open(mode='w', fileobj=c)
             tarball.add(sys_file, arcname='system.xml.gz')
             tarball.add(intg_file, arcname='integrator.xml.gz')
@@ -369,7 +369,6 @@ class StreamHandler(BaseHandler):
             stream['frames'] = 0
             stream['status'] = 'OK'
             for k,v in file_hashes.items():
-                print(k,v,type(k),type(v))
                 stream[k] = v
             self.set_status(200)
             return self.write(stream_id)
