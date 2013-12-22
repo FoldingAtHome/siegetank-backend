@@ -1,5 +1,4 @@
 import ws
-import cc
 import hashlib
 import redis
 import tornado.ioloop
@@ -15,7 +14,7 @@ import random
 import struct
 import requests
 import shutil
-import cStringIO
+import io
 import tarfile
 import signal
 import sys
@@ -130,7 +129,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         active_stream['steps'] = 0
 
         # set a really long timer to make sure this doesn't die half way
-        ws_time = cc.sum_time(self.redis_client.time())
+        ws_time = common.sum_time(self.redis_client.time())
         self.redis_client.zadd('heartbeats',stream_id,ws_time+600)
         return stream_id, token_id, system_bin, state_bin, integrator_bin
 
@@ -250,7 +249,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             response = self.fetch('/heartbeat', method='POST',
                                 body=json.dumps({'shared_token' : token_id}))
             hb = self.redis_client.zscore('heartbeats',stream_id)
-            ws_start_time = cc.sum_time(self.redis_client.time())
+            ws_start_time = common.sum_time(self.redis_client.time())
             self.assertAlmostEqual(ws_start_time+self.increment, hb, places=1)
         # test expirations
         response = self.fetch('/heartbeat', method='POST',

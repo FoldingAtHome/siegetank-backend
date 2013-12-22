@@ -4,6 +4,9 @@ import sys
 import time
 import redis
 
+def sum_time(time):
+    return int(time[0])+float(time[1])/10**6
+
 def init_redis(redis_port, redis_pass=None):
     ''' Spawn a redis subprocess port and returns a redis client.
 

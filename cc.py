@@ -97,10 +97,7 @@ def test_ws(ws_id):
         ws_redis_clients(ws_id).ping()
     except:
         remove_ws(ws_id)
-
-def sum_time(time):
-    return int(time[0])+float(time[1])/10**6
-
+        
 def get_idle_ws():
     n_available_ws = cc_redis.card('workservers')
     while n_available_ws > 0:

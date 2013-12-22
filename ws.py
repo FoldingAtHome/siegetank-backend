@@ -5,7 +5,7 @@ import tornado.httputil
 import tornado.httpserver
 import tornado.httpclient
 import redis
-import cStringIO
+import io
 import tarfile
 import signal
 import uuid
@@ -18,7 +18,7 @@ import hashlib
 import time
 import traceback
 import shutil
-import ConfigParser
+import configparser
 import common
 import hashset
 
@@ -223,7 +223,7 @@ class FrameHandler(BaseHandler):
                 except KeyError as e:
                     pass
         except KeyError as e:
-            print repr(e)
+            print(repr(e))
             ex_type, ex, tb = sys.exc_info()
             traceback.print_tb(tb)
             self.set_status(400)
@@ -279,7 +279,7 @@ class FrameHandler(BaseHandler):
             self.set_status(200)
             return self.write(c.getvalue())
         except Exception as e:
-            print repr(e)
+            print(repr(e))
             ex_type, ex, tb = sys.exc_info()
             traceback.print_tb(tb)
             self.set_status(400)
@@ -324,7 +324,6 @@ class StreamHandler(BaseHandler):
                            401 - UNAUTHORIZED
             '''
         if not CommandCenter.lookup('ip',self.request.remote_ip,self.db):
-            print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
         # Assume request is bad by default
@@ -374,7 +373,6 @@ class StreamHandler(BaseHandler):
             self.set_status(200)
             return self.write(stream_id)
         except KeyError as e:
-            print repr(e)
             ex_type, ex, tb = sys.exc_info()
             traceback.print_tb(tb)
             self.set_status(400)
@@ -411,13 +409,12 @@ class StreamHandler(BaseHandler):
             else:
                 self.set_status(400)
         except Exception as e:
-            print e
+            print(repr(e))
 
     def delete(self):
         self.set_status(400)
         ''' PRIVATE - Delete a stream. '''
         if not self.db.exists('cc_ip:'+self.request.remote_ip+':id'):
-            print self.request.remote_ip
             self.set_status(401)
             return self.write('not authorized')
         try:
@@ -431,13 +428,11 @@ class StreamHandler(BaseHandler):
                     self.set_status(200)
                     return
                 else:
-                    print 'FATAL: tried to delete a non existing stream on WS'
                     return self.write('stream not found')
             else:
                 return self.write('Missing data')
         except Exception as e:
-            print e
-            return
+            print(e)
 
 class HeartbeatHandler(BaseHandler):
     def initialize(self, increment=30*60):
@@ -498,7 +493,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 cc_instance['ip'] = cc_ip
                 cc_instance['http_port'] = cc_port
         else:
-            print 'WARNING: No CCs were specified for this WS'
+            print('WARNING: No CCs were specified for this WS')
 
         check_stream_freq_in_ms = 60000
         pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats, 
@@ -514,7 +509,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
     def shutdown(self, signal_number=None, stack_frame=None):
         self.shutdown_redis()       
-        print 'shutting down tornado...'
+        print('shutting down tornado...')
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
 
@@ -581,17 +576,12 @@ def start():
             'auth_pass'  : auth_pass
         }
         uri = "http://"+ip+":"+auth_port+'/register_ws'
-        print uri
-        print json.dumps(msg)
         try:
             resp = sync_client.fetch(uri,method='POST',body=json.dumps(msg))
         except tornado.httpclient.HTTPError as e: 
-            print e
-            print 'Could not connect to CC'
+            print(repr(e))
+            print('Could not connect to CC')
             ws_instance.shutdown()
-
-    print 'starting IO loop'
-
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
