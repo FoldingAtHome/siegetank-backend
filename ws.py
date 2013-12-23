@@ -92,6 +92,18 @@ import hashset
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
+# URIs and methods
+
+# PG Interface
+# POST x.com/streams             - add a new stream
+# DELETE x.com/streams/stream_id - delete a stream
+# GET x.com/streams/stream_id    - download a stream
+
+# CORE Interface
+# GET x.com/streams              - get a job
+# POST x.com/streams/stream_id   - add a frame to a stream
+# POST x.com/heartbeat            - add a heartbeat
+
 class Stream(hashset.HashSet):
     prefix = 'stream'
     fields = {'frames'          : int,
@@ -181,7 +193,7 @@ class FrameHandler(BaseHandler):
                 self.deactivate_stream(stream_id)
                 return self.write('Bad state.. terminating')
             stream['error_count'] = 0
-            tar_string = io.StringIO(self.request.body)
+            tar_string = io.BytesIO(self.request.body)
             with tarfile.open(mode='r', fileobj=tar_string) as tarball:
                 # Extract the frame
                 frame_member = tarball.getmember('frame.xtc')
@@ -269,7 +281,7 @@ class FrameHandler(BaseHandler):
             intg_file  = os.path.join('files',stream['integrator_hash'])
             state_file = os.path.join('streams',stream_id,'state.xml.gz')
             # Make a tarball in memory and send directly
-            c = io.StringIO()
+            c = io.BytesIO()
             tarball = tarfile.open(mode='w', fileobj=c)
             tarball.add(sys_file, arcname='system.xml.gz')
             tarball.add(intg_file, arcname='integrator.xml.gz')

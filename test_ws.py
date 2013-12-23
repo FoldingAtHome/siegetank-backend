@@ -100,6 +100,7 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
     def get_app(self):
         return self.ws
 
+    '''
     def test_add_stream(self):
         # Add a stream
         system_bin      = str(uuid.uuid4()).encode()
@@ -269,13 +270,14 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
             self.redis_client.sismember('active_streams',stream_id) and
             self.redis_client.exists('active_stream:'+stream_id) and 
             self.redis_client.exists('shared_token:'+token_id+':active_stream'))
+    '''
+
 
     def test_post_stream(self):
         system_bin     = 'system.xml.gz'.encode()
         state_bin      = 'state.xml.gz'.encode()
         integrator_bin = 'integrator.xml.gz'.encode()
         system_hash = hashlib.md5(system_bin).hexdigest()
-
         integrator_hash = hashlib.md5(integrator_bin).hexdigest()
 
         # Test send binaries of system.xml and integrator
@@ -389,6 +391,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
                           body=prep.body)
         self.assertEqual(resp.code, 400)
 
+    '''
+
     def assertEqualHash(self, string1, string2):
         self.assertEqual(hashlib.md5(string1).hexdigest(),
                          hashlib.md5(string2).hexdigest())
@@ -476,6 +480,8 @@ class WSHandlerTestCase(AsyncHTTPTestCase):
         stream_path = os.path.join('streams',stream_id)
 
         self.assertFalse(os.path.exists(stream_path))
+
+    '''
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
