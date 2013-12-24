@@ -100,7 +100,7 @@ import hashset
 # GET x.com/streams/stream_id     - download a stream
 
 # CORE Interface
-# GET x.com/streams/job.json      - get a job
+# GET x.com/streams/job           - get a job
 # POST x.com/streams/frames       - add a frame to a stream
 # POST x.com/heartbeat            - send a heartbeat
 
@@ -336,17 +336,22 @@ class StreamHandler(BaseHandler):
             Request:
 
                 {
-
-                    
-
+                    'files' : {
+                        'system' : system.xml.gz.b64,
+                        'integrator' : integrator.xml.gz.b64,
+                        'state' : state.xml.gz.b64,
+                    }
+                    'hashes' : {
+                        'system' : system.xml.md5,
+                        'integrator' : system.xml.md5,
+                        'state' : system.xml.md5,
+                    }
                 }
 
             Response:
 
                 {
-
                     'stream_id' : hash
-
                 }
 
             '''
