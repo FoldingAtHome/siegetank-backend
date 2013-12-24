@@ -95,14 +95,14 @@ import hashset
 # URIs and methods
 
 # PG Interface
-# POST x.com/streams             - add a new stream
-# DELETE x.com/streams/stream_id - delete a stream
-# GET x.com/streams/stream_id    - download a stream
+# POST x.com/streams              - add a new stream
+# DELETE x.com/streams/stream_id  - delete a stream
+# GET x.com/streams/stream_id     - download a stream
 
 # CORE Interface
-# GET x.com/streams              - get a job
-# POST x.com/streams/stream_id   - add a frame to a stream
-# POST x.com/heartbeat            - add a heartbeat
+# GET x.com/streams/job.json      - get a job
+# POST x.com/streams/frames       - add a frame to a stream
+# POST x.com/heartbeat            - send a heartbeat
 
 class Stream(hashset.HashSet):
     prefix = 'stream'
@@ -130,7 +130,7 @@ class ActiveStream(hashset.HashSet):
 class CommandCenter(hashset.HashSet):
     prefix = 'cc'
     fields = {'ip'              : str,
-              'http_port'       : str 
+              'http_port'       : str
              }
     lookups = {'ip'}
 
@@ -148,31 +148,30 @@ class BaseHandler(tornado.web.RequestHandler):
 
 class FrameHandler(BaseHandler):
     def initialize(self, max_error_count=10):
-        ''' Each heartbeat received by the core increments the timer by
-            increment amount. Defaults to once every 30 minutes '''
         self._max_error_count = max_error_count
 
     def post(self):
-        ''' Used by the core to post a frame to the existing frames file
+        ''' Post a frame to a stream
 
-            Request parameters:
-        
-            HEADER { 'token_id'      : unique_id } 
-            HEADER { 'error_state'   : status_code }    # optional
-            HEADER { 'error_message' : error_message }  # optional
-            
-            Valid values for error:
-                - 'InitError'      | failed to initialize
-                - 'FailedRefCheck' | failed check against reference
-                - 'BadState'       | bad state (Bad Forces, NaNs, Etc)
+            Request Header:
 
-            BODY   binary_tar # a binary tar file containing filenames:
-                              # 'frame.xtc', a single xtc frame
-                              # state.xml.gz', checkpoint file
-            
-            REPLY:
-            200 - OK 
-            400 - Bad Request
+                Authorization - shared_token
+
+            Request Body:
+            {
+                [required]
+                'status' : ['OK' | 'Error'],
+    
+                [required if status == 'OK]
+                'frame' : frame.xtc (b64 encoded)
+
+                [required if status == 'Error']
+                'message' : error_message
+
+                [optional]
+                'checkpoint' : checkpoint.xtc (b64 encoded)
+            }
+
         '''
         try:
             token = self.request.headers['shared_token']
@@ -241,17 +240,20 @@ class FrameHandler(BaseHandler):
             self.set_status(400)
             return self.write('Bad Request')
 
+class JobHandler(BaseHandler):
     def get(self):
-        ''' CORE - The core calls this method to retrieve a job only after
-            first going to CC to get a shared_token. The CC initializes the
-            necessary redis internals, starts a heartbeat, and sets the hash.
-            'active_stream'+stream_id.
+        ''' The core first goes to the CC to get an authorization token. The CC
+            activates a stream, and maps authorization token to the stream.
+            
+            Request Header:
 
-            REQUEST:
-            shared_token: token # used for Core identification
+                Authorization - shared_token
 
-            REPLY:
-            200 - send binaries state/system/integrator
+            Reply:
+
+                'state' : xml.b64.gz
+                'system' : xml.b64.gz
+                'integrator' : xml.b64.gz
 
             We need to be extremely careful about checkpoints and frames, as 
             it is important we avoid writing duplicate frames on the first 
@@ -269,7 +271,7 @@ class FrameHandler(BaseHandler):
             are sent back to the workserver.
         '''
         try:
-            shared_token = self.request.headers['shared_token']
+            shared_token = self.request.headers['Authorization']
             stream_id = ActiveStream.lookup('shared_token',shared_token,self.db)
             if stream_id is None:
                 self.set_status(401)
@@ -331,9 +333,22 @@ class StreamHandler(BaseHandler):
             resp = self.fetch('/stream', method='POST', headers=prep.headers,
                           body=prep.body)
 
-            Response code: 200 - OK
-                           400 - BAD REQUEST
-                           401 - UNAUTHORIZED
+            Request:
+
+                {
+
+                    
+
+                }
+
+            Response:
+
+                {
+
+                    'stream_id' : hash
+
+                }
+
             '''
         if not CommandCenter.lookup('ip',self.request.remote_ip,self.db):
             self.set_status(401)
