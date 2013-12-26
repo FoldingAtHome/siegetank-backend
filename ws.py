@@ -443,9 +443,13 @@ class StreamHandler(BaseHandler):
         except Exception as e:
             print(repr(e))
 
-    def delete(self):
+    def delete(self, stream_id):
         self.set_status(400)
-        ''' PRIVATE - Delete a stream. '''
+        ''' Delete a stream
+
+
+
+        '''
         if not self.db.exists('cc_ip:'+self.request.remote_ip+':id'):
             self.set_status(401)
             return self.write('not authorized')
