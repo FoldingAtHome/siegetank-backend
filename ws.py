@@ -122,6 +122,8 @@ import hashset
 # stream. However, PUTing the same frame twice (by means of checking the 
 # md5sum) would still result in only a single frame being appended.
 
+# TODO: Decide if initial seed states should be unique
+
 class Stream(hashset.HashSet):
     prefix = 'stream'
     fields = {'frames'          : int,
