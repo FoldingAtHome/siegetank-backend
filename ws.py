@@ -104,6 +104,24 @@ import hashset
 # PUT x.com/streams/frames        - add a frame to a stream (idempotent)
 # POST x.com/heartbeat            - send a heartbeat
 
+# In general, we should try and use PUTs whenever possible. Idempotency
+# is an incredibly good tool to deal with failures. Suppose a core 
+# either POSTs (non idempotent), or PUTs (idempotent) a frame to a stream.
+
+# One of two failure scenarios can happen:
+
+#              FAILS 
+#   Core --Send Request--> Client --Send Reply--> Core
+
+#                                      FAILS
+#   Core --Send Request--> Client --Send Reply--> Core
+
+# Note that the Core does NOT know which scenario happened. All it knows
+# is that it did not get a reply. In the second scenarior, POSTing the same 
+# frame twice would be bad, since the stream would end up with a duplicate
+# stream. However, PUTing the same frame twice (by means of checking the 
+# md5sum) would still result in only a single frame being appended.
+
 class Stream(hashset.HashSet):
     prefix = 'stream'
     fields = {'frames'          : int,
