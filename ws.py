@@ -101,7 +101,7 @@ import hashset
 
 # CORE Interface
 # GET x.com/streams/job           - get a job
-# POST x.com/streams/frames       - add a frame to a stream
+# PUT x.com/streams/frames        - add a frame to a stream (idempotent)
 # POST x.com/heartbeat            - send a heartbeat
 
 class Stream(hashset.HashSet):
@@ -124,6 +124,7 @@ class ActiveStream(hashset.HashSet):
               'donor'           : str,
               'steps'           : int,
               'start_time'      : float,
+              'last_frame_md5'  : str,
              }
     lookups = {'shared_token'}
 
