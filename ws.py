@@ -100,9 +100,9 @@ import hashset
 # GET x.com/streams/stream_id     - download a stream
 
 # CORE Interface
-# GET x.com/streams/job           - get a job
-# PUT x.com/streams/frames        - add a frame to a stream (idempotent)
-# POST x.com/heartbeat            - send a heartbeat
+# POST x.com/core/assign          - get the assigned job
+# PUT x.com/core/frames           - add a frame to a stream (idempotent)
+# POST x.com/core/heartbeat       - send a heartbeat
 
 # In general, we should try and use PUTs whenever possible. Idempotency
 # is an incredibly good tool to deal with failures. Suppose a core 
@@ -264,7 +264,7 @@ class FrameHandler(BaseHandler):
 class JobHandler(BaseHandler):
     def get(self):
         ''' The core first goes to the CC to get an authorization token. The CC
-            activates a stream, and maps authorization token to the stream.
+            activates a stream, and maps the authorization token to the stream.
             
             Request Header:
 
@@ -362,6 +362,7 @@ class StreamHandler(BaseHandler):
                         'integrator' : integrator.xml.gz.b64,
                         'state' : state.xml.gz.b64,
                     }
+
                     'hashes' : {
                         'system' : system.xml.md5,
                         'integrator' : system.xml.md5,

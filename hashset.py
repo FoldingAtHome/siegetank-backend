@@ -59,6 +59,15 @@ class HashSet(object):
         # or Person.delete('bob',rc)
     '''    
 
+    # TODO - have lookups always use hashes (and not raw strings)
+    # TODO - support one-to-many hashed mappings:
+    #      - ws:stream 
+    #      - target:stream
+    #      - rc.hset('stream:'+str(id),'ws',stream_id)
+    #      - rc.hset('stream:'+str(id),'target',stream_id)
+    #      - ws.lookup('stream',stream_id)
+    #      - target.lookup('stream',stream_id)
+
     lookups = []
 
     @classmethod

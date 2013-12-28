@@ -64,6 +64,17 @@ import common
 # SET   KEY     'target:'+id+':streams' | set of stream ids
 # ZSET  KEY     'queue:'+id             | queue of inactive streams
 
+class WorkServer(hashset.HashSet):
+    prefix = 'ws'
+    fields = {'ip'          : str,
+              'http_port'   : int,
+              'redis_port'  : int,
+             }
+    lookups = {'ip'}
+
+
+
+
 # WS Connect:
 # -sadd ws_id to active_ws
 # -(re)configure hash ws:ws_id, as ip and ports may have changed
@@ -81,6 +92,21 @@ import common
 # -figure out which ws are still active by looking through saved active_ws, and 'ws:'+id
 # -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
 
+# PG Interface
+# PUT x.com/targets 
+# DELETE x.com/targets/:target_id
+# GET x.com/targets/:target_id
+#   Returns a list of streams and the CC it's on. 
+
+# Core Interface
+# POST x.com/assign
+#   assign a stream on a particular WS to the core
+#   If successful:
+#       Return an HTTP Code 302 - with URL
+
+# WS Interface
+# POST x.com/streams/stop
+
 def remove_ws(ws_id):
     streams = cc_redis.smembers('ws:'+ws_id+':streams')
     for stream in streams:
@@ -97,7 +123,7 @@ def test_ws(ws_id):
         ws_redis_clients(ws_id).ping()
     except:
         remove_ws(ws_id)
-        
+
 def get_idle_ws():
     n_available_ws = cc_redis.card('workservers')
     while n_available_ws > 0:
