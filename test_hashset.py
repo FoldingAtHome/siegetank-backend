@@ -11,10 +11,10 @@ class Person(hashset.HashSet):
     fields = {'ssn'   : str,     # string
               'kids'  : set,     # set
               'age'   : int,     # integer
-              'tasks' : dict, 
+              'tasks' : dict
              }
 
-    lookups = {'ssn'}
+    lookups = {'ssn', 'kids', 'tasks'}
 
 class TestHashSet(unittest.TestCase):
     @classmethod
@@ -65,6 +65,28 @@ class TestHashSet(unittest.TestCase):
         self.assertFalse(person.lookup('ssn',ssn,person.db))
         person.remove()
 
+    def test_set_lookup(self):
+        person = Person.create(str(uuid.uuid4()),self.db)
+        person.sadd('kids','jackie')
+        self.assertTrue(Person.lookup('kids','jackie',self.db), person.id)
+        person.sadd('kids','jamie')
+        self.assertTrue(Person.lookup('kids','jackie',self.db), person.id)
+        self.assertTrue(Person.lookup('kids','jamie',self.db), person.id)
+        person.srem('kids','jamie')
+        self.assertFalse(person.sismember('kids','jamie'))
+        self.assertFalse(Person.lookup('kids','jamie',self.db))
+        person.remove()
+        '''
+    def test_zset_lookup(self):
+        person = Person.create(str(uuid.uuid4()),self.db)
+        person['tasks'] = { 'mow_lawn' : 3,
+                            'groceries' : 5,
+                            'sleep': 0 }
+        self.assertTrue(Person.lookup('tasks','mow_lawn',self.db),person.id)
+        person.delete()
+        pass
+        '''
+
     def test_hash_methods(self):
         person = Person.create(str(uuid.uuid4()),self.db)
         person['age'] = 25
@@ -104,7 +126,7 @@ class TestHashSet(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        print(cls.db.keys('*'))
+        assert(cls.db.keys('*') == [])
         cls.db.shutdown()
         pass
 

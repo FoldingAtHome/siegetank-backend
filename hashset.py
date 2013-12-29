@@ -17,7 +17,8 @@ class HashSet(object):
     ''' A HashSet is a class that manages objects stored in redis. A row 
         is represented using a redis hash, and sets. It supports
         reverse mappings, sets, lists, creation and deletion of rows to ensure
-        proper cleanup. 
+        proper cleanup. Regular types (str,int,float) must map 1-to-1 in lookups,
+        set and zsets can map 1 to many. 
 
         Currently supported field mappings: int,float,string,sets,
 
@@ -88,16 +89,28 @@ class HashSet(object):
         if not cls.exists(id,db):
             raise KeyError('key ',id,' not found')
         db.srem(cls.prefix+'s',id)
+
         # cleanup lookup first
         for field in cls.lookups:
-            lookup_id = db.hget(cls.prefix+':'+id, field)
-            if lookup_id:
-                db.delete(field+':'+lookup_id+':'+cls.prefix)
+            if not cls.fields[field] is set and not cls.fields[field] is dict:
+                lookup_id = db.hget(cls.prefix+':'+id, field)
+                if lookup_id:
+                    db.delete(field+':'+lookup_id, cls.prefix)
+        
         # cleanup hash
         db.delete(cls.prefix+':'+id)
+
         # cleanup sets
         for f_name, f_type in cls.fields.items():
-            if f_type is set or f_type is dict:
+            if f_type is set:
+                if f_name in cls.lookups:
+                    for member in db.smembers(cls.prefix+':'+id+':'+f_name):
+                        db.hdel(f_name+':'+member, cls.prefix)
+                db.delete(cls.prefix+':'+id+':'+f_name)
+            if f_type is dict:
+                if f_name in cls.lookups:
+                    for member in db.zrange(cls.prefix+':'+id+':'+f_name,0,-1):
+                        db.hdel(f_name+':'+member, cls.prefix)
                 db.delete(cls.prefix+':'+id+':'+f_name)
 
     @classmethod
@@ -113,11 +126,14 @@ class HashSet(object):
     def lookup(cls,field,id,db):
         if not field in cls.lookups:
             raise KeyError('key not in lookups')
-        return db.get(field+':'+id+':'+cls.prefix)
+        return db.hget(field+':'+id, cls.prefix)
 
     @check_field
     def sadd(self,field,*values):
-        return self._db.sadd(self.__class__.prefix+':'+self._id+':'+field,*values)
+        if field in self.__class__.lookups:
+            for val in values:
+                self._db.hset(field+':'+val, self.__class__.prefix, self.id)
+        return self._db.sadd(self.__class__.prefix+':'+self._id+':'+field, *values)
 
     @check_field
     def sismember(self, field, value):
@@ -125,19 +141,26 @@ class HashSet(object):
 
     @check_field
     def srem(self, field, *values):
+        if field in self.__class__.lookups:
+            for val in values:
+                self._db.hdel(field+':'+val, self.__class__.prefix)
         return self._db.srem(self.__class__.prefix+':'+self._id+':'+field, *values)
     
     @check_field
-    def smembers(self,field):
+    def smembers(self, field):
         return self._db.smembers(self.__class__.prefix+':'+self._id+':'+field)
         
     @check_field
-    def zadd(self,field,key,score):
-        return self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,key,score)
+    def zadd(self, field, *args, **kwargs):
+        #if field in self.__class__.lookups:
+        #    self._db.hset(field+':'+key, self.__class__.prefix, self.id)
+        return self._db.zadd(self.__class__.prefix+':'+self._id+':'+field, *args, **kwargs)
 
     @check_field
-    def zrem(self,field,key):
-        return self._db.zrem(self.__class__.prefix+':'+self._id+':'+field,key)
+    def zrem(self, field, *values):
+        #if field in self.__class__.lookups:
+        #    self._db.hdel(field+':'+key, self.__class__.prefix)
+        return self._db.zrem(self.__class__.prefix+':'+self._id+':'+field, *values)
 
     @check_field
     def hincrby(self, field, count=1):
@@ -176,16 +199,18 @@ class HashSet(object):
             raise TypeError('expected',self.__class__.fields[field],'got',type(value))  
         # add support for sets
         if isinstance(value,set):
-            for element in value:
-                self._db.sadd(self.__class__.prefix+':'+self._id+':'+field,element)
+            self.sadd(field,*value)
+            #for element in value:
+            #    self._db.sadd(self.__class__.prefix+':'+self._id+':'+field,element)
+                #if field in self.__class__.lookups:
+                #    self._db.hset(field+':'+value,self.__class__.prefix,self._id)
         elif isinstance(value,dict):
-            for element in value:
-                self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,**value)
+            self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,**value)
         else:
             if field in self.__class__.lookups:
-                if self._db.exists(field+':'+value+':'+self.__class__.prefix):
+                if self._db.hexists(field+':'+value, self.__class__.prefix):
                     raise ValueError('FATAL: this value already exists!')
                 # remove old mapped value to maintain bijection
-                self._db.delete(field+':'+self.__getitem__(field)+':'+self.__class__.prefix)
-                self._db.set(field+':'+value+':'+self.__class__.prefix,self._id)
+                self._db.hdel(field+':'+self.__getitem__(field), self.__class__.prefix)
+                self._db.hset(field+':'+value, self.__class__.prefix, self._id)
             self._db.hset(self.__class__.prefix+':'+self._id, field, value)
