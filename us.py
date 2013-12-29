@@ -20,9 +20,8 @@ import common
 import hashset
 
 # User Server
-# 
-# Manages Folding@home users. All connections to the US must use HTTPS since
-# we do not roll our own crypto. We do not allow external access to the 
+
+# Manages Folding@home users. We do not allow external access to the 
 # underlying redis db since we would otherwise need to use something like
 # stunnel. Since we have to have a tornado server anyways, we might as well as
 # wrap all functionality behind it to prevent MitM attacks. 
@@ -33,19 +32,23 @@ import hashset
 #       FIELD   'password'              | password of the user
 #       FIELD   'token'                 | authentication token
 #       FIELD   'email'                 | user email
-# SET   KEY     'user:'+id+':targets'   | set of target ids belonging to user
-# STRNG KEY     'target:'+id+':cc'      | which CC the target is on
 # STRNG KEY     'token:'+id+':user'     | which user the token belongs to
 
-# STORAGE REQUIREMENTS: O(Number of Targets).
+# DEPRECATE - It is up to the user to keep track of which targets are on which CCs
+#           - (Similar target:+id+:cc) needs to 
+# SET   KEY     'user:'+id+':targets'   | set of target ids belonging to user
+# STRNG KEY     'target:'+id+':cc'      | which CC the target is on
 
+
+# STORAGE REQUIREMENTS: O(Number of Targets).
 class User(hashset.HashSet):
     prefix = 'user'
-    fields = {'password'    : str,
-              'token'       : str,
-              'email'       : str,
-              'targets'     : set,
+    fields = {'password'    : str,      # password of the user
+              'token'       : str,      # access token for all requests
+              'email'       : str,      # email of the user
+#              'targets'     : set,      # set of targets that belong to the user
              }
+
     lookups = {'token'}
 
 # TODO: Change passwords to use bcrypt
@@ -215,7 +218,8 @@ class TargetsHandler(BaseHandler):
                   target_id_2 : cc_id } 
 
         '''
-
+        return self.write('OK')
+        '''
         try:
             auth_token = self.request.headers['Authorization']
             user_id = User.lookup('token', auth_token, self.db)
@@ -233,7 +237,7 @@ class TargetsHandler(BaseHandler):
                 self.set_status(401)
         except Exception as e:
             traceback.print_exc()
-            self.set_status(400)
+            self.set_status(400)'''
 
 class DeleteTargetHandler(BaseHandler):
     @cc_access

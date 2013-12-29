@@ -58,6 +58,9 @@ class Targets(hashset.HashSet):
 
     lookups = {'streams'}
 
+class User(hashset.HashSet):
+    prefix = 'user'
+
 # WS Connect:
 # -sadd ws_id to active_ws
 # -(re)configure hash ws:ws_id, as ip and ports may have changed
