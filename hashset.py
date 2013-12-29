@@ -152,14 +152,20 @@ class HashSet(object):
         
     @check_field
     def zadd(self, field, *args, **kwargs):
-        #if field in self.__class__.lookups:
-        #    self._db.hset(field+':'+key, self.__class__.prefix, self.id)
+        if field in self.__class__.lookups:
+            assert len(args) % 2 == 0
+            # assume args is relatively small since this makes a copy
+            for key in args[::2]:
+                self._db.hset(field+':'+key, self.__class__.prefix, self.id)
+            for key in kwargs:
+                self._db.hset(field+':'+key, self.__class__.prefix, self.id)
         return self._db.zadd(self.__class__.prefix+':'+self._id+':'+field, *args, **kwargs)
 
     @check_field
     def zrem(self, field, *values):
-        #if field in self.__class__.lookups:
-        #    self._db.hdel(field+':'+key, self.__class__.prefix)
+        if field in self.__class__.lookups:
+            for key in values:
+                self._db.hdel(field+':'+key, self.__class__.prefix)
         return self._db.zrem(self.__class__.prefix+':'+self._id+':'+field, *values)
 
     @check_field
@@ -205,7 +211,7 @@ class HashSet(object):
                 #if field in self.__class__.lookups:
                 #    self._db.hset(field+':'+value,self.__class__.prefix,self._id)
         elif isinstance(value,dict):
-            self._db.zadd(self.__class__.prefix+':'+self._id+':'+field,**value)
+            self.zadd(field,**value)
         else:
             if field in self.__class__.lookups:
                 if self._db.hexists(field+':'+value, self.__class__.prefix):

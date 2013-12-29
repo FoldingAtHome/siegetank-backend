@@ -76,6 +76,7 @@ class TestHashSet(unittest.TestCase):
         self.assertFalse(person.sismember('kids','jamie'))
         self.assertFalse(Person.lookup('kids','jamie',self.db))
         person.remove()
+        
         '''
     def test_zset_lookup(self):
         person = Person.create(str(uuid.uuid4()),self.db)
