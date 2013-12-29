@@ -34,46 +34,29 @@ import common
 # about 3 million requests per day - translating to about 35 requests 
 # per second. Each request needs to be handled by the CC in 30 ms. 
 
-# [ WS ]
-#
-# SET   KEY     'active_ws'             | set of active ws ids
-# HASH  KEY     'ws:'+id     
-#       FIELD   'ip'                    | ip address
-#       FIELD   'http_port'             | port of ws's webserver
-#       FIELD   'redis_port'            | port of ws's redis server
-# SET   KEY     'ws_ips'                | set of active ws ips??
-
-# PYTH  DICT    'ws_redis_clients'      | {ws_id : redis_client}
-
-# [ STREAMS ]
-#
-# HASH  KEY      'stream:'+id                
-#       FIELD    'ws'                   | ws the stream resides on
-#       FIELD    'target'               | target the stream belongs to
-
-# [ TARGETS ]
-#       
-# SET   KEY     'targets'               | set of all the targets
-# HASH  KEY     'target:'+id
-#       FIELD   'description'           | description of the target
-#       FIELD   'owner'                 | owner of the target
-#       FIELD   'system'                | checksum of file
-#       FIELD   'integrator'            | checksum of file
-#       FIELD   'creation_date'         | in seconds since 1/1/70  
-#       FIELD   'status'                | disabled, beta, release
-# SET   KEY     'target:'+id+':streams' | set of stream ids
-# ZSET  KEY     'queue:'+id             | queue of inactive streams
-
 class WorkServer(hashset.HashSet):
     prefix = 'ws'
-    fields = {'ip'          : str,
-              'http_port'   : int,
-              'redis_port'  : int,
+    fields = {'ip'          : str,      # ip address
+              'http_port'   : int,      # server's http port
+              'redis_port'  : int,      # server's redis port
+              'streams'     : set       # set of streams that live on the server
              }
-    lookups = {'ip'}
+    
+    lookups = {'ip','streams'}
 
+class Targets(hashset.HashSet):
+    prefix = 'target'
+    fields = {'description'     : str,  # description of the target
+              'owner'           : str,  # owner of the target
+              'system_md5'      : str,  # md5 of the system.xml file 
+              'integrator_md5'  : str,  # md5 of the integrator.xml file
+              'creation_date'   : str,  # creation of the target 
+              'phase'           : str,  # disabled, beta, release
+              'streams'         : set,  # list of streams
+              'queue'           : dict  # sorted set of inactive streams
+              }
 
-
+    lookups = {'streams'}
 
 # WS Connect:
 # -sadd ws_id to active_ws

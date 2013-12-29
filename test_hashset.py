@@ -99,6 +99,7 @@ class TestHashSet(unittest.TestCase):
                              'eatout': 4 }
         self.assertTrue(Person.lookup('tasks','skiing',self.db), person2.id)
         self.assertTrue(Person.lookup('tasks','eatout',self.db), person2.id)
+        self.assertTrue(Person.lookup('tasks','sleep',self.db), person.id)
         person.remove()
         person2.remove()
 

@@ -20,7 +20,7 @@ class HashSet(object):
         proper cleanup. Regular types (str,int,float) must map 1-to-1 in lookups,
         set and zsets can map 1 to many. 
 
-        Currently supported field mappings: int,float,string,sets,
+        Currently supported field mappings: int,float,string,sets,zsets(dicts)
 
         For example, suppose we wanted to implement a Person db table:
 
@@ -55,6 +55,9 @@ class HashSet(object):
 
         # reverse lookup - find id of bob given ssn
         Person.lookup('ssn','598-20-6839', rc)
+
+        # reverse lookup - find person who owns 'jane'
+        Person.lookup('kids','jane', rc)
 
         bob.delete()
         # or Person.delete('bob',rc)
