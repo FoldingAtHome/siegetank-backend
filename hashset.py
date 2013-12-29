@@ -3,7 +3,7 @@
 # Copyright 2012 Yutong Zhao <proteneer@gmail.com>
 
 from functools import wraps
-
+import itertools
 
 def check_field(func):
     @wraps(func)
@@ -155,9 +155,7 @@ class HashSet(object):
         if field in self.__class__.lookups:
             assert len(args) % 2 == 0
             # assume args is relatively small since this makes a copy
-            for key in args[::2]:
-                self._db.hset(field+':'+key, self.__class__.prefix, self.id)
-            for key in kwargs:
+            for key in itertools.chain(args[::2],kwargs):
                 self._db.hset(field+':'+key, self.__class__.prefix, self.id)
         return self._db.zadd(self.__class__.prefix+':'+self._id+':'+field, *args, **kwargs)
 
@@ -206,10 +204,6 @@ class HashSet(object):
         # add support for sets
         if isinstance(value,set):
             self.sadd(field,*value)
-            #for element in value:
-            #    self._db.sadd(self.__class__.prefix+':'+self._id+':'+field,element)
-                #if field in self.__class__.lookups:
-                #    self._db.hset(field+':'+value,self.__class__.prefix,self._id)
         elif isinstance(value,dict):
             self.zadd(field,**value)
         else:

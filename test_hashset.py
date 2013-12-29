@@ -75,18 +75,32 @@ class TestHashSet(unittest.TestCase):
         person.srem('kids','jamie')
         self.assertFalse(person.sismember('kids','jamie'))
         self.assertFalse(Person.lookup('kids','jamie',self.db))
+        person2 = Person.create(str(uuid.uuid4()),self.db)
+
+        person2.sadd('kids','bobbie')
+        person2.sadd('kids','jacob')
+
+        self.assertTrue(Person.lookup('kids','bobbie',self.db), person2.id)
+        self.assertTrue(Person.lookup('kids','jacob',self.db), person2.id)
+
         person.remove()
-        
-        '''
+        person2.remove()
+
     def test_zset_lookup(self):
-        person = Person.create(str(uuid.uuid4()),self.db)
+        person = Person.create(str(uuid.uuid4()), self.db)
         person['tasks'] = { 'mow_lawn' : 3,
                             'groceries' : 5,
                             'sleep': 0 }
-        self.assertTrue(Person.lookup('tasks','mow_lawn',self.db),person.id)
-        person.delete()
-        pass
-        '''
+        self.assertTrue(Person.lookup('tasks','mow_lawn',self.db), person.id)
+        self.assertTrue(Person.lookup('tasks','groceries',self.db), person.id)
+        person2 = Person.create(str(uuid.uuid4()), self.db)
+        person2['tasks'] = { 'skiing' : 1,
+                             'dancing' : 2,
+                             'eatout': 4 }
+        self.assertTrue(Person.lookup('tasks','skiing',self.db), person2.id)
+        self.assertTrue(Person.lookup('tasks','eatout',self.db), person2.id)
+        person.remove()
+        person2.remove()
 
     def test_hash_methods(self):
         person = Person.create(str(uuid.uuid4()),self.db)
