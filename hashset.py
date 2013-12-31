@@ -39,11 +39,18 @@ class HashSet(object):
                       'kids'           : set,
                       'age'            : int,
                       'travel_history' : list
+                      'cat'            : set,
                       }
 
             lookups = {'ssn'}
 
             rc = redis.StrictRedis(port=6378)
+
+        class Cat(HashSet):
+
+            prefix = 'cat'
+            fields = {'person' : str}
+
 
         bob = Person.create('bob',rc)
         bob['ssn'] = '598-20-6839'

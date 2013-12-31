@@ -39,10 +39,8 @@ class WorkServer(hashset.HashSet):
     fields = {'ip'          : str,      # ip address
               'http_port'   : int,      # server's http port
               'redis_port'  : int,      # server's redis port
-              'streams'     : set       # set of streams that live on the server
              }
-    
-    lookups = {'ip','streams'}
+    lookups = {'ip'}
 
 class Targets(hashset.HashSet):
     prefix = 'target'
@@ -52,11 +50,8 @@ class Targets(hashset.HashSet):
               'integrator_md5'  : str,  # md5 of the integrator.xml file
               'creation_date'   : str,  # creation of the target 
               'phase'           : str,  # disabled, beta, release
-              'streams'         : set,  # list of streams
-              'queue'           : dict  # sorted set of inactive streams
+              'workservers'     : {WorkServer}, # set of WS owning streams
               }
-
-    lookups = {'streams'}
 
 class User(hashset.HashSet):
     prefix = 'user'
