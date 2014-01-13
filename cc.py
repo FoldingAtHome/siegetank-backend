@@ -34,23 +34,25 @@ import common
 # about 3 million requests per day - translating to about 35 requests 
 # per second. Each request needs to be handled by the CC in 30 ms. 
 
+
 class WorkServer(hashset.HashSet):
     prefix = 'ws'
-    fields = {'ip'          : str,      # ip address
-              'http_port'   : int,      # server's http port
-              'redis_port'  : int,      # server's redis port
-             }
+    fields = {'ip': str,  # ip address
+              'http_port': int,  # server's http port
+              'redis_port': int  # server's redis port
+              }
     lookups = {'ip'}
+
 
 class Targets(hashset.HashSet):
     prefix = 'target'
-    fields = {'description'     : str,  # description of the target
-              'owner'           : str,  # owner of the target
-              'system_md5'      : str,  # md5 of the system.xml file 
-              'integrator_md5'  : str,  # md5 of the integrator.xml file
-              'creation_date'   : str,  # creation of the target 
-              'phase'           : str,  # disabled, beta, release
-              'workservers'     : {WorkServer}, # set of WS owning streams
+    fields = {'description': str,  # description of the target
+              'owner': str,  # owner of the target
+              'system_md5': str,  # md5 of the system.xml file
+              'integrator_md5': str,  # md5 of the integrator.xml file
+              'creation_date': str,  # creation of the target
+              'stage': str,  # disabled, beta, release
+              'workservers': {WorkServer},  # set of WSs that own streams
               }
 
 class User(hashset.HashSet):

@@ -4,23 +4,29 @@ import tornado.web
 import tornado.httputil
 import tornado.httpserver
 import tornado.httpclient
-import redis
 import io
 import tarfile
 import signal
 import uuid
 import os
 import json
-import requests
 import sys
-import subprocess
 import hashlib
 import time
 import traceback
 import shutil
 import configparser
 import common
-import hashset
+import apollo
+
+
+# Architecture
+
+# A WS contains a shard a of a target and a set of associated streams. Each
+# target maintains a queue of streams, implemented as a redis sorted set, where
+# the score of each stream is determined by the number of completed frames.
+
+# A Command Center 
 
 # Capacity
 
@@ -77,9 +83,9 @@ import hashset
 # heartbeats: each key deleted on restart, and by check_heartbeats
 
 # Expiration mechanism:
-# hearbeats is a sorted set. A POST to ws/update extends expire_time in 
-# heartbeats. A checker callback is passed into ioloop.PeriodicCallback(), 
-# which checks for expired streams against the current time. Streams that 
+# hearbeats is a sorted set. A POST to ws/update extends expire_time in
+# heartbeats. A checker callback is passed into ioloop.PeriodicCallback(),
+# which checks for expired streams against the current time. Streams that
 # expire can be obtained by: redis.zrangebyscore('heartbeat',0,current_time)
 
 # PG Downloading streams: siegetank will first send a query to CC. CC assigns
@@ -98,6 +104,7 @@ import hashset
 # POST x.com/streams              - add a new stream
 # DELETE x.com/streams/stream_id  - delete a stream
 # GET x.com/streams/stream_id     - download a stream
+# POST x.com/targets              - add a new target
 
 # CORE Interface
 # POST x.com/core/assign          - get the assigned job
@@ -105,7 +112,7 @@ import hashset
 # POST x.com/core/heartbeat       - send a heartbeat
 
 # In general, we should try and use PUTs whenever possible. Idempotency
-# is an incredibly good tool to deal with failures. Suppose a core 
+# is an incredibly useful way of dealing with failures. Suppose a core
 # either POSTs (non idempotent), or PUTs (idempotent) a frame to a stream.
 
 # One of two failure scenarios can happen:
@@ -124,36 +131,44 @@ import hashset
 
 # TODO: Decide if initial seed states should be unique
 
-class Stream(hashset.HashSet):
+
+class Stream(apollo.Entity):
     prefix = 'stream'
-    fields = {'frames'          : int,
-              'status'          : str,
-              'error_count'     : int,
-              'system_hash'     : str,
-              'integrator_hash' : str,
-              'download_token'  : str,
-              'cc_id'           : str,
-              'steps_per_frame' : int
-             }
-    lookups = {'download_token'}
+    fields = {'frames': int,
+              'status': str,
+              'error_count': int,
+              'system_hash': str,
+              'integrator_hash': str,
+              'cc_id': str,
+              'steps_per_frame': int
+              }
 
-class ActiveStream(hashset.HashSet):
+
+class ActiveStream(apollo.Entity):
     prefix = 'active_stream'
-    fields = {'buffer_frames'   : int,
-              'shared_token'    : str,
-              'donor'           : str,
-              'steps'           : int,
-              'start_time'      : float,
-              'last_frame_md5'  : str,
-             }
-    lookups = {'shared_token'}
+    fields = {'buffer_frames': int,
+              'shared_token': str,
+              'donor': str,
+              'steps': int,
+              'start_time': float,
+              'last_frame_md5': str,
+              }
 
-class CommandCenter(hashset.HashSet):
+
+class Target(apollo.Entity):
+    prefix = 'target'
+    fields = {'queue': apollo.zset(str) }
+
+
+class CommandCenter(apollo.Entity):
     prefix = 'cc'
-    fields = {'ip'              : str,
-              'http_port'       : str
-             }
-    lookups = {'ip'}
+    fields = {'ip': str,
+              'http_port': str
+              }
+
+ActiveStream.add_lookup('shared_token')
+apollo.relate(Target, 'streams_owned', {Stream}, 'target_owner')
+
 
 # General WS config
 # Block ALL ports except port 80
@@ -182,7 +197,7 @@ class FrameHandler(BaseHandler):
             {
                 [required]
                 'status' : ['OK' | 'Error'],
-    
+
                 [required if status == 'OK]
                 'frame' : frame.xtc (b64 encoded)
 
