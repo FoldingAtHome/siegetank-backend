@@ -155,6 +155,32 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(ws.ActiveStream(stream1, self.ws.db))
         self.assertAlmostEqual(self.ws.db.zscore('heartbeats', stream1),
                                time.time()+increment, 2)
+        self.assertEqual(ws.ActiveStream.lookup('auth_token',
+                         token, self.ws.db), stream1)
+
+    def test_start_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        content = json.loads(response.body.decode())
+        self.assertEqual(content['target_files'][fn1], fb1)
+        self.assertEqual(content['target_files'][fn2], fb2)
+        self.assertEqual(content['stream_files'][fn3], fb3)
+        self.assertEqual(content['stream_id'], stream_id)
+        self.assertEqual(content['target_id'], target_id)
 
     # def test_init_stream(self):
     #     active_streams = self.redis_client.exists('active_streams')

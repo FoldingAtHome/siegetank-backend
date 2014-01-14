@@ -66,7 +66,7 @@ import base64
 # CORE Interface #
 ##################
 
-# PUT x.com/core/start            - start a stream (given an auth token)
+# GET x.com/core/start            - start a stream (given an auth token)
 # PUT x.com/core/frame            - add a frame to a stream (idempotent)
 # PUT x.com/core/stop             - stop a stream
 # POST x.com/core/heartbeat       - send a heartbeat
@@ -239,7 +239,7 @@ class FrameHandler(BaseHandler):
             return self.write('Bad Request')
 
 
-class JobHandler(BaseHandler):
+class StartStreamHandler(BaseHandler):
     def get(self):
         ''' The core first goes to the CC to get an authorization token. The CC
             activates a stream, and maps the authorization token to the stream.
@@ -255,11 +255,13 @@ class JobHandler(BaseHandler):
                                      file2_name: file2.b64,
                                      ...
                                      }
-
                     'target_files': {file1_name: file1.b64,
                                      file2_name: file2.b64,
                                      ...
                                      }
+                    'steps_per_frame': int,
+                    'stream_id': str,
+                    'target_id': str
                 }
 
             We need to be extremely careful about checkpoints and frames, as
@@ -277,34 +279,35 @@ class JobHandler(BaseHandler):
             On every subsequent checkpoint, both the frame and the checkpoint
             are sent back to the workserver.
         '''
-        try:
-            shared_token = self.request.headers['Authorization']
-            stream_id = ActiveStream.lookup('shared_token',shared_token,self.db)
-            if stream_id is None:
-                self.set_status(401)
-                return self.write('Unknown token')
-            stream = Stream.instance(stream_id, self.db)
-            # a core should NEVER be able to get a non OK stream
-            assert stream['status'] == 'OK'
-            sys_file   = os.path.join('files',stream['system_hash'])
-            intg_file  = os.path.join('files',stream['integrator_hash'])
-            state_file = os.path.join('streams',stream_id,'state.xml.gz')
-            # Make a tarball in memory and send directly
-            c = io.BytesIO()
-            tarball = tarfile.open(mode='w', fileobj=c)
-            tarball.add(sys_file, arcname='system.xml.gz')
-            tarball.add(intg_file, arcname='integrator.xml.gz')
-            tarball.add(state_file, arcname='state.xml.gz')
-            tarball.close()
-            self.set_header('Content-Type', 'application/octet-stream')
-            self.set_status(200)
-            return self.write(c.getvalue())
-        except Exception as e:
-            print(repr(e))
-            ex_type, ex, tb = sys.exc_info()
-            traceback.print_tb(tb)
-            self.set_status(400)
-            return self.write('Bad Request')
+        shared_token = self.request.headers['Authorization']
+        stream_id = ActiveStream.lookup('auth_token', shared_token, self.db)
+        if stream_id is None:
+            self.set_status(401)
+            return self.write('Unknown token')
+        stream = Stream(stream_id, self.db)
+        target_id = stream.hget('target')
+        target = Target(target_id, self.db)
+        # a core should NEVER be able to get a non OK stream
+        assert stream.hget('status') == 'OK'
+
+        reply = dict()
+
+        reply['stream_files'] = dict()
+        for filename in stream.smembers('files'):
+            file_path = os.path.join('streams', stream_id, filename)
+            with open(file_path, 'r') as handle:
+                reply['stream_files'][filename] = handle.read()
+
+        reply['target_files'] = dict()
+        for filename in target.smembers('files'):
+            file_path = os.path.join('targets', target_id, filename)
+            with open(file_path, 'r') as handle:
+                reply['target_files'][filename] = handle.read()
+
+        reply['stream_id'] = stream_id
+        reply['target_id'] = target_id
+
+        return self.write(json.dumps(reply))
 
 
 class PostStreamHandler(BaseHandler):
@@ -532,6 +535,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             #(r'/frame', FrameHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
+            (r'/core/start', StartStreamHandler),
             #(r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
 
