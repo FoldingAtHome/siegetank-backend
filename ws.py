@@ -66,9 +66,9 @@ import base64
 # CORE Interface #
 ##################
 
-# GET x.com/core/start            - start a stream (given an auth token)
+# PUT x.com/core/start            - start a stream (given an auth token)
 # PUT x.com/core/frame            - add a frame to a stream (idempotent)
-# PUT x.com/core/stop             - stop a job
+# PUT x.com/core/stop             - stop a stream
 # POST x.com/core/heartbeat       - send a heartbeat
 
 # In general, we should try and use PUTs whenever possible. Idempotency
@@ -151,7 +151,7 @@ class FrameHandler(BaseHandler):
 
             Request Header:
 
-                Authorization - shared_token
+                Authorization - core_token
 
             Request Body:
             {
@@ -237,6 +237,7 @@ class FrameHandler(BaseHandler):
             self.set_status(400)
             return self.write('Bad Request')
 
+
 class JobHandler(BaseHandler):
     def get(self):
         ''' The core first goes to the CC to get an authorization token. The CC
@@ -248,12 +249,20 @@ class JobHandler(BaseHandler):
 
             Reply:
 
-                'state' : xml.b64.gz
-                'system' : xml.b64.gz
-                'integrator' : xml.b64.gz
+                {
+                    'stream_files': {file1_name: file1.b64,
+                                     file2_name: file2.b64,
+                                     ...
+                                     }
 
-            We need to be extremely careful about checkpoints and frames, as 
-            it is important we avoid writing duplicate frames on the first 
+                    'target_files': {file1_name: file1.b64,
+                                     file2_name: file2.b64,
+                                     ...
+                                     }
+                }
+
+            We need to be extremely careful about checkpoints and frames, as
+            it is important we avoid writing duplicate frames on the first
             step for the core. We use the follow scheme:
 
                   ------------------------------------------------------------
@@ -261,10 +270,10 @@ class JobHandler(BaseHandler):
                   ---                  --|--                             -----
             frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
                     ---------------------| ------------------------------- ---
-        
+
             When a core fetches a checkpoint, it makes sure to NOT write the
             first frame (equivalent to the frame of fetched state.xml file).
-            On every subsequent checkpoint, both the frame and the checkpoint 
+            On every subsequent checkpoint, both the frame and the checkpoint
             are sent back to the workserver.
         '''
         try:
@@ -372,7 +381,7 @@ class PostStreamHandler(BaseHandler):
 
 class DeleteStreamHandler(BaseHandler):
     def put(self):
-        ''' Method:
+        ''' Accessible by CC only.
 
             Request
             {

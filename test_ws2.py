@@ -7,7 +7,6 @@ import shutil
 import sys
 import uuid
 import json
-import apollo
 from os.path import isfile
 
 
