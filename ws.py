@@ -528,7 +528,7 @@ class CoreFrameHandler(BaseHandler):
         return self.set_status(200)
 
 
-def CoreStopHandler(BaseHandler):
+class CoreStopHandler(BaseHandler):
     def put(self):
         """ Stop a stream from being ran by a core.
 
@@ -538,13 +538,34 @@ def CoreStopHandler(BaseHandler):
 
         Request Body:
             {
-                [required]
-                'status' : ['OK' | 'Error'],
+                [optional]
+                'error': error_message
 
-                [required if status == 'Error']
-                'message' : error_message
+                [optional]
+                'debug_files': {file1_name: file1_bin_b64,
+                                file2_name: file2_bin_b64,
+                                ...
+                                }
             }
+
         """
+        token = self.request.headers['Authorization']
+        stream_id = ActiveStream.lookup('auth_token', token, self.db)
+        if not stream_id:
+            return self.set_status(400)
+        stream = Stream(stream_id, self.db)
+        content = json.loads(self.request.body.decode())
+
+        if 'error' in content:
+            stream.hincrby('error_count', 1)
+            message = content['error']
+            log_path = os.path.join('streams', stream_id, 'log.txt')
+            with open(log_path, 'a') as handle:
+                handle.write(time.strftime("%c")+' | '+message)
+
+        self.set_status(200)
+        self.deactivate_stream(stream_id)
+
 
 class HeartbeatHandler(BaseHandler):
     def initialize(self, increment=30*60):
@@ -633,6 +654,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/streams/delete', DeleteStreamHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
+            (r'/core/stop', CoreStopHandler),
             #(r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
 
@@ -668,16 +690,20 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         return stream_id
 
     # clears the buffer so it must be executed on WS side.
-    def deactivate_stream(self, stream_id, db):
-        ActiveStream.delete(stream_id, db)
-        db.zrem('heartbeats', stream_id)
+    def deactivate_stream(self, stream_id):
+        ActiveStream(stream_id, self.db).delete()
+        self.db.zrem('heartbeats', stream_id)
         buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
         if os.path.exists(buffer_path):
             with open(buffer_path, 'w'):
                 pass
         # push this stream back into queue
-        frames_completed = Stream(stream_id, db).hget('frames')
-        Target.zadd('queue', stream_id, frames_completed)
+        stream = Stream(stream_id, self.db)
+        frames_completed = stream.hget('frames')
+        if frames_completed is None:
+            frames_completed = 0
+        target = Target(stream.hget('target'), self.db)
+        target.zadd('queue', stream_id, frames_completed)
 
     def push_stream_to_cc(stream_id):
         pass

@@ -206,7 +206,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
         frame_buffer = bytes()
         n_frames = 25
-
         active_stream = ws.ActiveStream(stream_id, self.ws.db)
         stream = ws.Stream(stream_id, self.ws.db)
 
@@ -266,6 +265,94 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+    def test_stop_error_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        frame_buffer = bytes()
+        n_frames = 25
+
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+        target = ws.Target(target_id, self.ws.db)
+
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+
+        self.assertTrue(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertTrue(target.zscore('queue', stream_id) is None)
+
+        body = {'error': 'NaN'}
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(stream.hget('error_count'), 1)
+        self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertFalse(target.zscore('queue', stream_id) is None)
+
+    def test_stop_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        frame_buffer = bytes()
+        n_frames = 25
+
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+        target = ws.Target(target_id, self.ws.db)
+
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+
+        self.assertTrue(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertTrue(target.zscore('queue', stream_id) is None)
+
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(stream.hget('error_count'), 0)
+        self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertFalse(target.zscore('queue', stream_id) is None)
+
 
     # def test_init_stream(self):
     #     active_streams = self.redis_client.exists('active_streams')
