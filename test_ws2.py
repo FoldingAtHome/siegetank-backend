@@ -8,6 +8,7 @@ import sys
 import uuid
 import json
 import time
+import base64
 from os.path import isfile
 
 
@@ -175,12 +176,96 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                                                   self.ws.db, 30*60)
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
         content = json.loads(response.body.decode())
         self.assertEqual(content['target_files'][fn1], fb1)
         self.assertEqual(content['target_files'][fn2], fb2)
         self.assertEqual(content['stream_files'][fn3], fb3)
         self.assertEqual(content['stream_id'], stream_id)
         self.assertEqual(content['target_id'], target_id)
+
+    def test_post_frame(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+
+        frame_buffer = bytes()
+        n_frames = 25
+
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # PUT a checkpoint
+        frame_bin = os.urandom(1024)
+        checkpoint_bin = os.urandom(1024)
+        body = {'frame': base64.b64encode(frame_bin).decode(),
+                'checkpoint': base64.b64encode(checkpoint_bin).decode()
+                }
+        response = self.fetch('/core/frame', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(active_stream.hget('buffer_frames'), 0)
+        self.assertEqual(stream.hget('frames'), n_frames+1)
+        self.assertEqual(b'', open(buffer_path, 'rb').read())
+        checkpoint_path = os.path.join('streams', stream_id, fn3)
+        self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
+        frame_buffer += frame_bin
+        frames_path = os.path.join('streams', stream_id, 'frames.xtc')
+        self.assertEqual(frame_buffer, open(frames_path, 'rb').read())
+
+        # PUT a few more frames
+        frame_buffer = bytes()
+        n_frames = 5
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # test idempotency of PUT
+        frame_bin = os.urandom(1024)
+        frame_buffer += frame_bin
+        body = {'frame': base64.b64encode(frame_bin).decode()}
+        response = self.fetch('/core/frame', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+        response = self.fetch('/core/frame', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
     # def test_init_stream(self):
     #     active_streams = self.redis_client.exists('active_streams')

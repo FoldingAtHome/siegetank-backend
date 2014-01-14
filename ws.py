@@ -11,11 +11,11 @@ import uuid
 import os
 import json
 import sys
-import hashlib
 import time
 import traceback
 import shutil
 import configparser
+import hashlib
 import common
 import apollo
 import base64
@@ -23,8 +23,8 @@ import base64
 # Capacity
 
 # Suppose each stream returns a frame once every 5 minutes. A single stream
-# returns 288 frames  per day. The WS is designed to handle about 50 frame
-# POSTS per second. In a single day, a WS can handle about 4,320,000 frames.
+# returns 288 frames per day. The WS is designed to handle about 50 frame
+# PUTs per second. In a single day, a WS can handle about 4,320,000 frames.
 # This is equal to about 86,400 active streams. Note that 4.3 million frames
 # @ 80kb/frame = 328GB worth of data per day. We will fill up 117 TB
 # worth of a data a year - so we will run out of disk space way before that.
@@ -71,6 +71,8 @@ import base64
 # PUT x.com/core/stop             - stop a stream
 # POST x.com/core/heartbeat       - send a heartbeat
 
+##################
+
 # In general, we should try and use PUTs whenever possible. Idempotency
 # is an incredibly useful way of dealing with failures. Suppose a core
 # either POSTs (non idempotent), or PUTs (idempotent) a frame to a stream.
@@ -105,7 +107,7 @@ class ActiveStream(apollo.Entity):
     fields = {'buffer_frames': int,     # number of frames in buffer.xtc
               'auth_token': str,        # used by core to send requests
               'donor': str,             # the donor assigned
-              'steps': int,             # checkpointed frames completed
+              'steps': int,             # number of steps completed
               'start_time': float,      # time started
               'last_frame_md5': str     # md5sum of the last completed frame
               }
@@ -130,6 +132,7 @@ Target.add_lookup('owner')
 apollo.relate(Target, 'streams', {Stream}, 'target')
 apollo.relate(Target, 'active_streams', {ActiveStream})
 
+
 # General WS config
 # Block ALL ports except port 80
 # Redis port is only available to CC's IP on the intranet
@@ -150,23 +153,23 @@ class FrameHandler(BaseHandler):
     def post(self):
         ''' Post a frame to a stream
 
-            Request Header:
+        Request Header:
 
-                Authorization - core_token
+            Authorization - core_token
 
-            Request Body:
-            {
-                [required]
-                'status' : ['OK' | 'Error'],
+        Request Body:
+        {
+            [required]
+            'status' : ['OK' | 'Error'],
 
-                [required if status == 'OK]
-                'frame' : frame.xtc (b64 encoded)
+            [required if status == 'OK]
+            'frame' : frame.xtc (b64 encoded)
 
-                [required if status == 'Error']
-                'message' : error_message
+            [required if status == 'Error']
+            'message' : error_message
 
-                [optional]
-                'checkpoint' : checkpoint.xtc (b64 encoded)
+            [optional]
+            'checkpoint' : checkpoint.xtc (b64 encoded)
             }
 
         '''
@@ -237,77 +240,6 @@ class FrameHandler(BaseHandler):
             traceback.print_tb(tb)
             self.set_status(400)
             return self.write('Bad Request')
-
-
-class StartStreamHandler(BaseHandler):
-    def get(self):
-        ''' The core first goes to the CC to get an authorization token. The CC
-            activates a stream, and maps the authorization token to the stream.
-
-            Request Header:
-
-                Authorization - shared_token
-
-            Reply:
-
-                {
-                    'stream_files': {file1_name: file1.b64,
-                                     file2_name: file2.b64,
-                                     ...
-                                     }
-                    'target_files': {file1_name: file1.b64,
-                                     file2_name: file2.b64,
-                                     ...
-                                     }
-                    'steps_per_frame': int,
-                    'stream_id': str,
-                    'target_id': str
-                }
-
-            We need to be extremely careful about checkpoints and frames, as
-            it is important we avoid writing duplicate frames on the first
-            step for the core. We use the follow scheme:
-
-                  ------------------------------------------------------------
-                  |c       core 1      |c|              core 2           |c|
-                  ---                  --|--                             -----
-            frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
-                    ---------------------| ------------------------------- ---
-
-            When a core fetches a checkpoint, it makes sure to NOT write the
-            first frame (equivalent to the frame of fetched state.xml file).
-            On every subsequent checkpoint, both the frame and the checkpoint
-            are sent back to the workserver.
-        '''
-        shared_token = self.request.headers['Authorization']
-        stream_id = ActiveStream.lookup('auth_token', shared_token, self.db)
-        if stream_id is None:
-            self.set_status(401)
-            return self.write('Unknown token')
-        stream = Stream(stream_id, self.db)
-        target_id = stream.hget('target')
-        target = Target(target_id, self.db)
-        # a core should NEVER be able to get a non OK stream
-        assert stream.hget('status') == 'OK'
-
-        reply = dict()
-
-        reply['stream_files'] = dict()
-        for filename in stream.smembers('files'):
-            file_path = os.path.join('streams', stream_id, filename)
-            with open(file_path, 'r') as handle:
-                reply['stream_files'][filename] = handle.read()
-
-        reply['target_files'] = dict()
-        for filename in target.smembers('files'):
-            file_path = os.path.join('targets', target_id, filename)
-            with open(file_path, 'r') as handle:
-                reply['target_files'][filename] = handle.read()
-
-        reply['stream_id'] = stream_id
-        reply['target_id'] = target_id
-
-        return self.write(json.dumps(reply))
 
 
 class PostStreamHandler(BaseHandler):
@@ -385,14 +317,14 @@ class PostStreamHandler(BaseHandler):
 
 class DeleteStreamHandler(BaseHandler):
     def put(self):
-        ''' Accessible by CC only.
+        """ Accessible by CC only.
 
-            Request
-            {
-                'id': stream_id
-            }
+        Request
+        {
+            'id': stream_id
+        }
 
-        '''
+        """
         stream_id = json.loads(self.request.body.decode())['id']
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
@@ -449,6 +381,170 @@ class DeleteStreamHandler(BaseHandler):
     #         print(repr(e))
 
 
+class CoreStartHandler(BaseHandler):
+    def get(self):
+        ''' The core first goes to the CC to get an authorization token. The CC
+        activates a stream, and maps the authorization token to the stream.
+
+        Request Header:
+
+            Authorization - shared_token
+
+        Reply:
+
+            {
+                'stream_files': {file1_name: file1.b64,
+                                 file2_name: file2.b64,
+                                 ...
+                                 }
+                'target_files': {file1_name: file1.b64,
+                                 file2_name: file2.b64,
+                                 ...
+                                 }
+                'steps_per_frame': int,
+                'stream_id': str,
+                'target_id': str
+            }
+
+        We need to be extremely careful about checkpoints and frames, as
+        it is important we avoid writing duplicate frames on the first
+        step for the core. We use the follow scheme:
+
+              ------------------------------------------------------------
+              |c       core 1      |c|              core 2           |c|
+              ---                  --|--                             -----
+        frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
+                ---------------------| ------------------------------- ---
+
+        When a core fetches a checkpoint, it makes sure to NOT write the
+        first frame (equivalent to the frame of fetched state.xml file).
+        On every subsequent checkpoint, both the frame and the checkpoint
+        are sent back to the workserver.
+
+        '''
+        shared_token = self.request.headers['Authorization']
+        stream_id = ActiveStream.lookup('auth_token', shared_token, self.db)
+        if stream_id is None:
+            self.set_status(401)
+            return self.write('Unknown token')
+        stream = Stream(stream_id, self.db)
+        target_id = stream.hget('target')
+        target = Target(target_id, self.db)
+        # a core should NEVER be able to get a non OK stream
+        assert stream.hget('status') == 'OK'
+
+        reply = dict()
+
+        reply['stream_files'] = dict()
+        for filename in stream.smembers('files'):
+            file_path = os.path.join('streams', stream_id, filename)
+            with open(file_path, 'r') as handle:
+                reply['stream_files'][filename] = handle.read()
+
+        reply['target_files'] = dict()
+        for filename in target.smembers('files'):
+            file_path = os.path.join('targets', target_id, filename)
+            with open(file_path, 'r') as handle:
+                reply['target_files'][filename] = handle.read()
+
+        reply['stream_id'] = stream_id
+        reply['target_id'] = target_id
+
+        return self.write(json.dumps(reply))
+
+
+class CoreFrameHandler(BaseHandler):
+    def put(self):
+        """ Add a new frame. If the core posts to this method, then the WS
+        assumes that the frame is good. NaNs, and other bad things are sent
+        the /core/stop URI
+
+        Request Header:
+
+            Authorization - core_token
+
+        Request Body:
+            {
+                [required]
+                'frame' : frame.xtc (b64 encoded)
+
+                [optional]
+                'checkpoint' : checkpoint.xtc (b64 encoded)
+            }
+
+        Reply:
+
+            200 - OK
+
+        """
+
+        token = self.request.headers['Authorization']
+        stream_id = ActiveStream.lookup('auth_token', token, self.db)
+        if not stream_id:
+            return self.set_status(400)
+        stream = Stream(stream_id, self.db)
+        active_stream = ActiveStream(stream_id, self.db)
+        content = json.loads(self.request.body.decode())
+
+        frame_bytes = base64.b64decode(content['frame'])
+        # see if this frame has been submitted before
+        frame_hash = hashlib.md5(frame_bytes).hexdigest()
+        if active_stream.hget('last_frame_md5') == frame_hash:
+            return self.set_status(200)
+        active_stream.hset('last_frame_md5', frame_hash)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        with open(buffer_path, 'ab') as buffer_file:
+            buffer_file.write(frame_bytes)
+        buffer_frames_count = active_stream.hincrby('buffer_frames', 1)
+        if 'checkpoint' in content:
+            checkpoint_bytes = base64.b64decode(content['checkpoint'])
+            # hard-coded checkpoint name to overwrite old state
+            checkpoint_path = os.path.join('streams', stream_id,
+                                           'state.xml.gz.b64')
+            with open(checkpoint_path, 'wb') as handle:
+                handle.write(checkpoint_bytes)
+            # flush buffer.xtc to frames.xtc
+            frames_path = os.path.join('streams', stream_id, 'frames.xtc')
+            with open(buffer_path, 'rb') as src:
+                with open(frames_path, 'ab') as dest:
+                    while True:
+                        chars = src.read(4096)
+                        if not chars:
+                            break
+                        dest.write(chars)
+            with open(buffer_path, 'wb'):
+                pass
+            stream.hincrby('frames', buffer_frames_count)
+            active_stream.hset('buffer_frames', 0)
+        # elif content['status'] == 'Error':
+        #     stream.hincrby('error_count', 1)
+        #     active_stream.hset('buffer_frames', 0)
+        #     message = content['message']
+        #     log_path = os.path.join('streams', stream_id, 'log.txt')
+        #     with open(log_path, 'a') as handle:
+        #         handle.write(time.strftime("%c")+' | '+message)
+        #     #self.deactivate_stream()
+
+        return self.set_status(200)
+
+
+def CoreStopHandler(BaseHandler):
+    def put(self):
+        """ Stop a stream from being ran by a core.
+
+        Request Header:
+
+        Authorization - core_token
+
+        Request Body:
+            {
+                [required]
+                'status' : ['OK' | 'Error'],
+
+                [required if status == 'Error']
+                'message' : error_message
+            }
+        """
 
 class HeartbeatHandler(BaseHandler):
     def initialize(self, increment=30*60):
@@ -535,7 +631,8 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             #(r'/frame', FrameHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
-            (r'/core/start', StartStreamHandler),
+            (r'/core/start', CoreStartHandler),
+            (r'/core/frame', CoreFrameHandler),
             #(r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
 
