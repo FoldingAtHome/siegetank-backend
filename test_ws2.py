@@ -7,6 +7,7 @@ import shutil
 import sys
 import uuid
 import json
+import time
 from os.path import isfile
 
 
@@ -135,7 +136,26 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(isfile(os.path.join('targets', target_id, fn1)))
         self.assertFalse(isfile(os.path.join('targets', target_id, fn2)))
 
-        self.assertEqual(self.ws.db.keys('*'), [])
+        #self.assertEqual(self.ws.db.keys('*'), [])
+
+    def test_activate_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
+        fb1, fb2, fb3, fb4 = (str(uuid.uuid4()) for i in range(4))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3, fn4: fb4}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream1 = json.loads(response.body.decode())['stream_id']
+        token = str(uuid.uuid4())
+        increment = 30*60
+        stream2 = ws.activate_stream(target_id, token, self.ws.db, 30*60)
+        self.assertEqual(stream1, stream2)
+        self.assertTrue(ws.ActiveStream(stream1, self.ws.db))
+        self.assertAlmostEqual(self.ws.db.zscore('heartbeats', stream1),
+                               time.time()+increment, 2)
 
     # def test_init_stream(self):
     #     active_streams = self.redis_client.exists('active_streams')

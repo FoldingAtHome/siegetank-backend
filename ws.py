@@ -128,6 +128,7 @@ class CommandCenter(apollo.Entity):
 ActiveStream.add_lookup('auth_token')
 Target.add_lookup('owner')
 apollo.relate(Target, 'streams', {Stream}, 'target')
+apollo.relate(Target, 'active_streams', {ActiveStream})
 
 # General WS config
 # Block ALL ports except port 80
@@ -367,7 +368,7 @@ class PostStreamHandler(BaseHandler):
             stream.sadd('files', filename)
 
         target = Target(target_id, self.db)
-        target.zadd('queue', target_id, 0)
+        target.zadd('queue', stream_id, 0)
 
         stream.hset('status', 'OK')
         stream.hset('error_count', 0)
@@ -463,11 +464,29 @@ class HeartbeatHandler(BaseHandler):
             content = json.loads(self.request.body.decode)
             token_id = content['shared_token']
             stream_id = ActiveStream.lookup('shared_token',token_id,self.db)
-            self.db.zadd('heartbeats',stream_id,
-                          time.time()+self._increment)
+            self.db.zadd('heartbeats', stream_id, time.time()+self._increment)
             self.set_status(200)
         except KeyError:
             self.set_status(400)
+
+
+def activate_stream(target_id, token, db, increment):
+    """ Activate and return the highest priority stream belonging to target
+        target_id
+
+    """
+    target = Target(target_id, db)
+    stream_id = target.zrange('queue', 0, 0)[0]
+    if stream_id:
+        assert target.zremrangebyrank('queue', 0, 0) == 1
+        active_stream = ActiveStream.create(stream_id, db)
+        active_stream.hset('buffer_frames', 0)
+        active_stream.hset('auth_token', token)
+        active_stream.hset('steps', 0)
+        active_stream.hset('start_time', time.time())
+        db.zadd('heartbeats', stream_id, time.time() + increment)
+
+    return stream_id
 
 
 class WorkServer(tornado.web.Application, common.RedisMixin):
