@@ -470,23 +470,10 @@ class HeartbeatHandler(BaseHandler):
             self.set_status(400)
 
 
-def activate_stream(target_id, token, db, increment):
-    """ Activate and return the highest priority stream belonging to target
-        target_id
-
-    """
-    target = Target(target_id, db)
-    stream_id = target.zrange('queue', 0, 0)[0]
-    if stream_id:
-        assert target.zremrangebyrank('queue', 0, 0) == 1
-        active_stream = ActiveStream.create(stream_id, db)
-        active_stream.hset('buffer_frames', 0)
-        active_stream.hset('auth_token', token)
-        active_stream.hset('steps', 0)
-        active_stream.hset('start_time', time.time())
-        db.zadd('heartbeats', stream_id, time.time() + increment)
-
-    return stream_id
+#def deactivate_stream(stream_id, db):
+#    ''' Deactivate and add stream back to the queue for processing  '''
+#    ActiveStream(stream_id, db).delete()
+#    self.assertEqual()
 
 
 class WorkServer(tornado.web.Application, common.RedisMixin):
@@ -555,23 +542,41 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         sys.exit(0)
 
     def check_heartbeats(self):
-        ''' Queries heartbeats to find dead streams. Streams that have died are
-        removed from the active_streams key and the hash is removed. 
-        CC is then notified of the dead_streams and pushes them back
-        into the appropriate queue 
-        '''
         dead_streams = self.db.zrangebyscore('heartbeats', 0, time.time())
         if dead_streams:
             for dead_stream in dead_streams:
                 self.deactivate_stream(dead_stream)
 
-    def deactivate_stream(self, dead_stream_id):
-        ActiveStream.delete(dead_stream_id,self.db)
-        buffer_path = os.path.join('streams',dead_stream_id,'buffer.xtc')
+    @staticmethod
+    def activate_stream(target_id, token, db, increment):
+        """ Activate and return the highest priority stream belonging to target
+        target_id. This is called directly by the CC to start a stream.
+
+        """
+        target = Target(target_id, db)
+        stream_id = target.zrange('queue', 0, 0)[0]
+        if stream_id:
+            assert target.zremrangebyrank('queue', 0, 0) == 1
+            active_stream = ActiveStream.create(stream_id, db)
+            active_stream.hset('buffer_frames', 0)
+            active_stream.hset('auth_token', token)
+            active_stream.hset('steps', 0)
+            active_stream.hset('start_time', time.time())
+            db.zadd('heartbeats', stream_id, time.time() + increment)
+
+        return stream_id
+
+    # clears the buffer so it must be executed on WS side.
+    def deactivate_stream(self, stream_id, db):
+        ActiveStream.delete(stream_id, db)
+        db.zrem('heartbeats', stream_id)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
         if os.path.exists(buffer_path):
-            with open(buffer_path,'w') as buffer_file:
+            with open(buffer_path, 'w'):
                 pass
-        # push this stream back into queues
+        # push this stream back into queue
+        frames_completed = Stream(stream_id, db).hget('frames')
+        Target.zadd('queue', stream_id, frames_completed)
 
     def push_stream_to_cc(stream_id):
         pass

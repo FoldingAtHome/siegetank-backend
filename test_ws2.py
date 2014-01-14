@@ -136,8 +136,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(isfile(os.path.join('targets', target_id, fn1)))
         self.assertFalse(isfile(os.path.join('targets', target_id, fn2)))
 
-        #self.assertEqual(self.ws.db.keys('*'), [])
-
     def test_activate_stream(self):
         target_id = str(uuid.uuid4())
         fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
@@ -151,7 +149,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         stream1 = json.loads(response.body.decode())['stream_id']
         token = str(uuid.uuid4())
         increment = 30*60
-        stream2 = ws.activate_stream(target_id, token, self.ws.db, 30*60)
+        stream2 = ws.WorkServer.activate_stream(target_id, token,
+                                                self.ws.db, 30*60)
         self.assertEqual(stream1, stream2)
         self.assertTrue(ws.ActiveStream(stream1, self.ws.db))
         self.assertAlmostEqual(self.ws.db.zscore('heartbeats', stream1),
