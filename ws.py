@@ -115,9 +115,9 @@ class ActiveStream(apollo.Entity):
 
 class Target(apollo.Entity):
     prefix = 'target'
-    fields = {'queue': apollo.zset(str),  # queue of inactive streams
+    fields = {'queue': apollo.zset(str),    # queue of inactive streams
               'files': {str},               # list of filenames,
-              'cc': str                   # which cc the target belongs to
+              'cc': str                     # which cc the target belongs to
               }
 
 
@@ -144,102 +144,6 @@ class BaseHandler(tornado.web.RequestHandler):
     @property
     def deactivate_stream(self):
         return self.application.deactivate_stream
-
-
-class FrameHandler(BaseHandler):
-    def initialize(self, max_error_count=10):
-        self._max_error_count = max_error_count
-
-    def post(self):
-        ''' Post a frame to a stream
-
-        Request Header:
-
-            Authorization - core_token
-
-        Request Body:
-        {
-            [required]
-            'status' : ['OK' | 'Error'],
-
-            [required if status == 'OK]
-            'frame' : frame.xtc (b64 encoded)
-
-            [required if status == 'Error']
-            'message' : error_message
-
-            [optional]
-            'checkpoint' : checkpoint.xtc (b64 encoded)
-            }
-
-        '''
-
-        try:
-            token = self.request.headers['shared_token']
-            stream_id = ActiveStream.lookup('shared_token', token, self.db)
-            if not stream_id:
-                self.set_status(400)
-                return
-            stream = Stream.instance(stream_id, self.db)
-            active_stream = ActiveStream.instance(stream_id, self.db)
-            if stream['status'] != 'OK':
-                self.set_status(400)
-                return self.write('Stream status not OK')
-            if 'error_code' in self.request.headers:
-                self.set_status(400)
-                error_count = stream.hincrby('error_count',1)
-                #if error_count > self._max_error_count:
-                #   set status to bad
-                self.deactivate_stream(stream_id)
-                return self.write('Bad state.. terminating')
-            stream['error_count'] = 0
-            tar_string = io.BytesIO(self.request.body)
-            with tarfile.open(mode='r', fileobj=tar_string) as tarball:
-                # Extract the frame
-                frame_member = tarball.getmember('frame.xtc')
-                frame_binary = tarball.extractfile(frame_member).read()
-                buffer_path = os.path.join('streams',stream_id,'buffer.xtc')
-                with open(buffer_path,'ab') as buffer_file:
-                    buffer_file.write(frame_binary)
-                # Increment buffer frames by 1
-                active_stream.hincrby('buffer_frames',1)
-                # TODO: Check to make sure the frame is valid 
-                # valid in both md5 hash integrity and xtc header integrity
-                # make sure time step has increased?
-
-                # See if checkpoint state is present, if so, the buffer.xtc is
-                # appended to the frames.xtc
-                try:
-                    chkpt_member = tarball.getmember('state.xml.gz')
-                    state        = tarball.extractfile(chkpt_member).read()  
-                    state_path   = os.path.join('streams',
-                                                stream_id,'state.xml.gz')
-                    with open(state_path,'wb') as chkpt_file:
-                        chkpt_file.write(state)
-                    frames_path = os.path.join('streams', stream_id, 
-                                               'frames.xtc')
-                    with open(buffer_path,'rb') as src:
-                        with open(frames_path,'ab') as dest:
-                            while True:
-                                chars = src.read(4096)
-                                if not chars:
-                                    break
-                                dest.write(chars)
-                    # this need not be done atomically since no other client 
-                    # will modify the active_stream key except this ws
-                    stream.hincrby('frames',active_stream['buffer_frames'])
-                    active_stream['buffer_frames'] = 0
-                    # clear the buffer
-                    with open(buffer_path,'w') as buffer_file:
-                        pass
-                except KeyError as e:
-                    pass
-        except KeyError as e:
-            print(repr(e))
-            ex_type, ex, tb = sys.exc_info()
-            traceback.print_tb(tb)
-            self.set_status(400)
-            return self.write('Bad Request')
 
 
 class PostStreamHandler(BaseHandler):
@@ -341,6 +245,8 @@ class DeleteStreamHandler(BaseHandler):
         shutil.rmtree(os.path.join('streams', stream_id))
 
         target = Target(target_id, self.db)
+        # manual cleanup
+        target.zrem('queue', stream_id)
         if target.scard('streams') == 0:
             target.delete()
             shutil.rmtree(os.path.join('targets', target_id))
@@ -516,14 +422,6 @@ class CoreFrameHandler(BaseHandler):
                 pass
             stream.hincrby('frames', buffer_frames_count)
             active_stream.hset('buffer_frames', 0)
-        # elif content['status'] == 'Error':
-        #     stream.hincrby('error_count', 1)
-        #     active_stream.hset('buffer_frames', 0)
-        #     message = content['message']
-        #     log_path = os.path.join('streams', stream_id, 'log.txt')
-        #     with open(log_path, 'a') as handle:
-        #         handle.write(time.strftime("%c")+' | '+message)
-        #     #self.deactivate_stream()
 
         return self.set_status(200)
 
@@ -555,7 +453,6 @@ class CoreStopHandler(BaseHandler):
             return self.set_status(400)
         stream = Stream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
-
         if 'error' in content:
             stream.hincrby('error_count', 1)
             message = content['error']

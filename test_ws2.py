@@ -54,6 +54,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(isfile(os.path.join('streams', stream_id, fn3)))
         self.assertTrue(isfile(os.path.join('streams', stream_id, fn4)))
 
+        target = ws.Target(target_id, self.ws.db)
+        self.assertFalse(target.zscore('queue', stream_id) is None)
         self.assertTrue(ws.Stream.exists(stream_id, self.ws.db))
         self.assertTrue(ws.Target.exists(target_id, self.ws.db))
         self.assertEqual(ws.Stream(stream_id, self.ws.db).hget('target'),
@@ -99,8 +101,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         stream_id1 = json.loads(response.body.decode())['stream_id']
-        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
-                         {stream_id1})
+        target = ws.Target(target_id, self.ws.db)
+        self.assertEqual(target.smembers('streams'), {stream_id1})
 
         fn5, fn6, fn7, fn8 = (str(uuid.uuid4()) for i in range(4))
         fb5, fb6, fb7, fb8 = (str(uuid.uuid4()) for i in range(4))
@@ -111,19 +113,17 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         stream_id2 = json.loads(response.body.decode())['stream_id']
-        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
-                         {stream_id1, stream_id2})
+        self.assertEqual(target.smembers('streams'), {stream_id1, stream_id2})
 
         body = {'id': stream_id1}
         response = self.fetch('/streams/delete',
                               method='PUT',
                               body=json.dumps(body))
         self.assertEqual(response.code, 200)
-        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
-                         {stream_id2})
-
+        self.assertEqual(target.smembers('streams'), {stream_id2})
         self.assertFalse(isfile(os.path.join('streams', stream_id1, fn3)))
         self.assertFalse(isfile(os.path.join('streams', stream_id1, fn4)))
+        self.assertTrue(target.zscore('queue', stream_id1) is None)
 
         body = {'id': stream_id2}
         response = self.fetch('/streams/delete',
@@ -131,9 +131,10 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body))
         self.assertEqual(response.code, 200)
         self.assertFalse(ws.Target.exists(target_id, self.ws.db))
+        self.assertFalse(isfile(os.path.join('streams', stream_id2, fn5)))
+        self.assertFalse(isfile(os.path.join('streams', stream_id2, fn6)))
+        self.assertTrue(target.zscore('queue', stream_id1) is None)
 
-        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn5)))
-        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn6)))
         self.assertFalse(isfile(os.path.join('targets', target_id, fn1)))
         self.assertFalse(isfile(os.path.join('targets', target_id, fn2)))
 
