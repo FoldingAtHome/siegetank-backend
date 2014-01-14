@@ -18,65 +18,20 @@ import shutil
 import configparser
 import common
 import apollo
-
-
-# Architecture
-
-# A WS contains a shard a of a target and a set of associated streams. Each
-# target maintains a queue of streams, implemented as a redis sorted set, where
-# the score of each stream is determined by the number of completed frames.
-
-# A Command Center 
+import base64
 
 # Capacity
 
-# Suppose each stream returns a frame once every 5 minutes. A single stream returns 288 frames
-# per day. The WS is designed to handle about 50 frame POSTS per second. In a single day, a 
-# WS can handle about 4,320,000 frames. This is equal to about 86,400 active streams. Note
-# that 4.3 million frames @ 80kb/frame = 328GB worth of data per day. We will fill up 117 TB
-# worth of a data a year - so we will run out of disk space way before that. 
+# Suppose each stream returns a frame once every 5 minutes. A single stream
+# returns 288 frames  per day. The WS is designed to handle about 50 frame
+# POSTS per second. In a single day, a WS can handle about 4,320,000 frames.
+# This is equal to about 86,400 active streams. Note that 4.3 million frames
+# @ 80kb/frame = 328GB worth of data per day. We will fill up 117 TB
+# worth of a data a year - so we will run out of disk space way before that.
 
-# [ STREAMS ]                           | persist on restart
-
-# SET   KEY     'streams'               | set of streams owned by this ws     
-# HASH  KEY     'stream:'+id            |
-#       FIELD   'frames'                | total number of frames completed       
-#       FIELD   'status'                | 'OK', 'DISABLED'
-#       FIELD   'error_count'           | number of consecutive errors
-#       FIELD   'system_hash'           | hash for system.xml.gz
-#       FIELD   'integrator_hash'       | hash for integrator.xml.gz
-#       FIELD   'download_token'        | used if download desired
-#       FIELD   'cc_id'                 | which cc the stream came from
-#       FIELD   'steps_per_frame'       | (optional)
-
-# [ ACTIVE STREAMS ]                    | deleted on restart
-
-# SET   KEY     'active_streams'        | active streams owned by the ws 
-# HASH  KEY     'active_stream:'+id     | 
-#       FIELD   'buffer_frames'         | number of frames in buffer.xtc
-#       FIELD   'shared_token'          | each update must include this token 
-#       FIELD   'donor'                 | which donor stream belongs to
-#       FIELD   'steps'                 | checkpointed frames completed
-#       FIELD   'start_time'            | time started (server time)
-
-# On expiration, the donor/step stats are sent directly to the stats server on
-# the CC
-
-# [ COMMAND CENTER ]                    | reconfigured on restart
-
-# SET   KEY     'ccs'                   | set of command center ids
-# HASH  KEY     'cc:'+id                | 
-#       FIELD   'ip'                    | ip of the CC
-#       FIELD   'http_port'             | http_port of the CC
-# STRNG KEY     'cc_ip:'+ip+':id'       | id given CC's ip
-# Note: passphrase is explicitly not stored in db
-
-# [ MISC ]
+# [MISC Redis DB]
 
 # ZSET  KEY     'heartbeats'                   | { stream_id : expire_time }
-# STRNG KEY     'download_token:'+id+':stream' | reverse mapping   
-# STRNG KEY     'shared_token:'+id+':stream'   | reverse mapping
-# SET   KEY     'file_hashes'                  | files that exist in /files
 
 # download_token: issued by CC, set to expire after 10 days
 # shared_token: issued by CC, deleted by heartbeat
@@ -98,17 +53,22 @@ import apollo
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
-# URIs and methods
+################
+# PG Interface #
+################
 
-# PG Interface
 # POST x.com/streams              - add a new stream
 # DELETE x.com/streams/stream_id  - delete a stream
 # GET x.com/streams/stream_id     - download a stream
 # POST x.com/targets              - add a new target
 
-# CORE Interface
-# POST x.com/core/assign          - get the assigned job
-# PUT x.com/core/frames           - add a frame to a stream (idempotent)
+##################
+# CORE Interface #
+##################
+
+# GET x.com/core/start            - start a stream (given an auth token)
+# PUT x.com/core/frame            - add a frame to a stream (idempotent)
+# PUT x.com/core/stop             - stop a job
 # POST x.com/core/heartbeat       - send a heartbeat
 
 # In general, we should try and use PUTs whenever possible. Idempotency
@@ -117,58 +77,57 @@ import apollo
 
 # One of two failure scenarios can happen:
 
-#              FAILS 
+#              FAILS
 #   Core --Send Request--> Client --Send Reply--> Core
 
 #                                      FAILS
 #   Core --Send Request--> Client --Send Reply--> Core
 
 # Note that the Core does NOT know which scenario happened. All it knows
-# is that it did not get a reply. In the second scenarior, POSTing the same 
+# is that it did not get a reply. In the second scenario, POSTing the same
 # frame twice would be bad, since the stream would end up with a duplicate
-# stream. However, PUTing the same frame twice (by means of checking the 
-# md5sum) would still result in only a single frame being appended.
-
-# TODO: Decide if initial seed states should be unique
+# stream. However, PUTing the same frame twice (by means of checking the
+# md5sum of last frame) would be the same as PUTing it once.
 
 
 class Stream(apollo.Entity):
     prefix = 'stream'
-    fields = {'frames': int,
-              'status': str,
-              'error_count': int,
-              'system_hash': str,
-              'integrator_hash': str,
-              'cc_id': str,
-              'steps_per_frame': int
+    fields = {'frames': int,            # total number of frames completed
+              'status': str,            # 'OK', 'DISABLED'
+              'error_count': int,       # number of consecutive errors
+              'steps_per_frame': int,   # number of steps per frame
+              'files': {str},           # set of filenames: fn1 fn2 fn3
               }
 
 
 class ActiveStream(apollo.Entity):
     prefix = 'active_stream'
-    fields = {'buffer_frames': int,
-              'shared_token': str,
-              'donor': str,
-              'steps': int,
-              'start_time': float,
-              'last_frame_md5': str,
+    fields = {'buffer_frames': int,     # number of frames in buffer.xtc
+              'auth_token': str,        # used by core to send requests
+              'donor': str,             # the donor assigned
+              'steps': int,             # checkpointed frames completed
+              'start_time': float,      # time started
+              'last_frame_md5': str     # md5sum of the last completed frame
               }
 
 
 class Target(apollo.Entity):
     prefix = 'target'
-    fields = {'queue': apollo.zset(str) }
+    fields = {'queue': apollo.zset(str),  # queue of inactive streams
+              'files': {str},               # list of filenames,
+              'cc': str                   # which cc the target belongs to
+              }
 
 
 class CommandCenter(apollo.Entity):
     prefix = 'cc'
-    fields = {'ip': str,
-              'http_port': str
+    fields = {'ip': str,        # ip of the command center
+              'http_port': str  # http port
               }
 
-ActiveStream.add_lookup('shared_token')
-apollo.relate(Target, 'streams_owned', {Stream}, 'target_owner')
-
+ActiveStream.add_lookup('auth_token')
+Target.add_lookup('owner')
+apollo.relate(Target, 'streams', {Stream}, 'target')
 
 # General WS config
 # Block ALL ports except port 80
@@ -181,6 +140,7 @@ class BaseHandler(tornado.web.RequestHandler):
     @property
     def deactivate_stream(self):
         return self.application.deactivate_stream
+
 
 class FrameHandler(BaseHandler):
     def initialize(self, max_error_count=10):
@@ -209,9 +169,10 @@ class FrameHandler(BaseHandler):
             }
 
         '''
+
         try:
             token = self.request.headers['shared_token']
-            stream_id = ActiveStream.lookup('shared_token',token,self.db)
+            stream_id = ActiveStream.lookup('shared_token', token, self.db)
             if not stream_id:
                 self.set_status(400)
                 return
@@ -280,7 +241,7 @@ class JobHandler(BaseHandler):
     def get(self):
         ''' The core first goes to the CC to get an authorization token. The CC
             activates a stream, and maps the authorization token to the stream.
-            
+
             Request Header:
 
                 Authorization - shared_token
@@ -335,177 +296,128 @@ class JobHandler(BaseHandler):
             self.set_status(400)
             return self.write('Bad Request')
 
-class StreamHandler(BaseHandler):
-    def post(self):       
-        ''' PRIVATE - Add new stream(s) to WS. The POST method on this URI
-            can only be accessed by known CCs (ip restricted)
 
-            While JSON would be nice, file transfers are handled differently
-            in order to avoid the base64 overhead. The encoding should use a
-            multi-part/form-data. This is inspired by Amazon AWS S3's method
-            of POSTing objects. 
+class PostStreamHandler(BaseHandler):
+    def post(self):
+        ''' Accessible by CC only.
 
-            The required files are: system, state, and integrator. The CC can
-            query the redis db 'file_hashes' to see if some of files exist. CC
-            can choose send in either 'system_hash', or 'system_bin'. The CC
-            queries the WS's own list of hashes to make sure. 
-
-            The WS checks to see if this request is valid, and generates a 
-            unique stream_id if so, and returns the id back to the CC.
-
-            Ex1. Three binaries
-            files = {
-                'state_bin' : state_bin,
-                'system_bin' : system_bin,
-                'integrator_bin' : integrator_bin
-            }
-            Ex2. System hash and integrator hash, (note State must be bin)
-            files = {
-                'state_bin' : state_bin,
-                'system_hash' : system_hash,
-                'integrator_bin' : integrator_bin
-            }
-            prep = requests.Request('POST','http://url',files=files).prepare()
-            resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
+            Add a new stream to WS. The POST method on this URI
+            can only be accessed by known CCs (IP restricted)
 
             Request:
-
                 {
-                    'files' : {
-                        'system' : system.xml.gz.b64,
-                        'integrator' : integrator.xml.gz.b64,
-                        'state' : state.xml.gz.b64,
-                    }
+                    'target_id': target_id
 
-                    'hashes' : {
-                        'system' : system.xml.md5,
-                        'integrator' : system.xml.md5,
-                        'state' : system.xml.md5,
-                    }
+                    'target_files': {file1_name: file1.b64,
+                                     file2_name: file2.b64,
+                                     ...
+                                     }
+
+                    'stream_files': {file3_name: file3.b64,
+                                     file4_name: file4.b64,
+                                     ...
+                                     }
                 }
 
             Response:
-
                 {
                     'stream_id' : hash
                 }
 
-            '''
-        if not CommandCenter.lookup('ip',self.request.remote_ip,self.db):
-            self.set_status(401)
-            return self.write('not authorized')
-        # Assume request is bad by default
-        self.set_status(400)
-        try:
-            # Step 1. Check if request is valid.
-            state_bin = self.request.files['state_bin'][0]['body']
-            required_strings = ['system','integrator']
+            Notes: Binaries in files must be base64 encoded.
 
-            file_hashes = {}
-            file_buffer = {}
-            for s in required_strings:
-                if s+'_bin' in self.request.files:
-                    binary = self.request.files[s+'_bin'][0]['body']
-                    bin_hash = hashlib.md5(binary).hexdigest()
-                    if not self.db.sismember('file_hashes', bin_hash):
-                        self.db.sadd('file_hashes', bin_hash)
-                        file_buffer[bin_hash] = binary
-                    else:
-                        pass
-                elif s+'_hash' in self.request.files: 
-                    bin_hash = self.request.files[s+'_hash'][0]['body'].decode()
-                    if not self.db.sismember('file_hashes', bin_hash):
-                        return self.write('Gave me a hash for a file not \
-                                           in files directory')
-                else:
-                    return self.write('missing content: '+s+'_bin/hash')
-                file_hashes[s+'_hash'] = bin_hash
-     
-            # Step 2. Valid Request, generate uuid and write to disk
-            stream_id = str(uuid.uuid4())
-            stream_folder = os.path.join('streams',stream_id)
-            if not os.path.exists(stream_folder):
-                os.makedirs(stream_folder)
-            # Write the initial state
-            path = os.path.join(stream_folder,'state.xml.gz')
-            open(path,'wb').write(state_bin)
-            for f_hash,f_bin in file_buffer.items():
-                open(os.path.join('files',f_hash),'wb').write(f_bin)
-            redis_pipe = self.db.pipeline()
-            Stream.create(stream_id,self.db)
-            stream = Stream.instance(stream_id, self.db)
-            stream['frames'] = 0
-            stream['status'] = 'OK'
-            for k,v in file_hashes.items():
-                stream[k] = v
-            self.set_status(200)
-            return self.write(stream_id)
-        except KeyError as e:
-            ex_type, ex, tb = sys.exc_info()
-            traceback.print_tb(tb)
-            self.set_status(400)
-            return self.write('Bad Request')
-
-    def get(self):
-        ''' PRIVATE - Download a stream. 
-            The CC first creates a token given to the Core for identification.
-            The token and WS's IP is then sent back to the ST interface
-            Parameters:
-            download_token: download_token automatically maps to the right
-                            stream_id
-            RESPONDS with the appropriate frames.
-
-            TODO: Record the file size
         '''
+        #if not CommandCenter.lookup('ip', self.request.remote_ip, self.db):
+        #    return self.set_status(401)
         self.set_status(400)
-        try:
-            token = self.request.headers['download_token']
-            stream_id = Stream.lookup('download_token',token,self.db)
-            if stream_id:
-                filename = os.path.join('streams',stream_id,'frames.xtc')
-                buf_size = 4096
-                self.set_header('Content-Type', 'application/octet-stream')
-                self.set_header('Content-Disposition', 
-                                'attachment; filename=' + filename)
-                with open(filename, 'r') as f:
-                    while True:
-                        data = f.read(buf_size)
-                        if not data:
-                            break
-                        self.write(data)
-                self.finish()
-            else:
-                self.set_status(400)
-        except Exception as e:
-            print(repr(e))
+        content = json.loads(self.request.body.decode())
+        target_id = content['target_id']
+        stream_files = content['stream_files']
 
+        if not Target.exists(target_id, self.db):
+            print(content)
+            target_files = content['target_files']
+            target_dir = os.path.join('targets', target_id)
+            if not os.path.exists(target_dir):
+                os.makedirs(target_dir)
+            target = Target.create(target_id, self.db)
+            for filename, binary in target_files.items():
+                target_file = os.path.join(target_dir, filename)
+                with open(target_file, 'w') as handle:
+                    handle.write(binary)
+                target.sadd('files', filename)
+
+        stream_id = str(uuid.uuid4())
+        stream_dir = os.path.join('streams', stream_id)
+        if not os.path.exists(stream_dir):
+            os.makedirs(stream_dir)
+
+        stream = Stream.create(stream_id, self.db)
+        for filename, binary in stream_files.items():
+            print('writing:', os.path.join(stream_dir, filename))
+            with open(os.path.join(stream_dir, filename), 'w') as handle:
+                handle.write(binary)
+            stream.sadd('files', filename)
+
+        target = Target(target_id, self.db)
+        target.zadd('queue', target_id, 0)
+
+        stream.hset('status', 'OK')
+        stream.hset('error_count', 0)
+        stream.hset('target', target)
+
+        response = {'stream_id': stream_id}
+
+        self.set_status(200)
+        self.write(json.dumps(response))
+
+
+def ModifyStreamHandler(self, stream_id):
     def delete(self, stream_id):
-        self.set_status(400)
-        ''' Delete a stream
+        ''' Accessible by CC only. '''
+        if not Stream.exists(stream_id, self.db):
+            self.set_status(400)
+        Stream(stream_id, self.db).delete()
+        active_stream = ActiveStream(stream_id, self.db)
+        if active_stream:
+            active_stream.delete()
+        shutil.rmtree(os.path.join('streams', stream_id))
+        self.set_status(200)
+
+    # def get(self):
+    #     ''' PRIVATE - Download a stream.
+    #         The CC first creates a token given to the Core for identification
+    #         The token and WS's IP is then sent back to the ST interface
+    #         Parameters:
+    #         download_token: download_token automatically maps to the right
+    #                         stream_id
+    #         RESPONDS with the appropriate frames.
+
+    #         TODO: Record the file size
+    #     '''
+    #     self.set_status(400)
+    #     try:
+    #         token = self.request.headers['download_token']
+    #         stream_id = Stream.lookup('download_token',token,self.db)
+    #         if stream_id:
+    #             filename = os.path.join('streams',stream_id,'frames.xtc')
+    #             buf_size = 4096
+    #             self.set_header('Content-Type', 'application/octet-stream')
+    #             self.set_header('Content-Disposition',
+    #                             'attachment; filename=' + filename)
+    #             with open(filename, 'r') as f:
+    #                 while True:
+    #                     data = f.read(buf_size)
+    #                     if not data:
+    #                         break
+    #                     self.write(data)
+    #             self.finish()
+    #         else:
+    #             self.set_status(400)
+    #     except Exception as e:
+    #         print(repr(e))
 
 
-
-        '''
-        if not self.db.exists('cc_ip:'+self.request.remote_ip+':id'):
-            self.set_status(401)
-            return self.write('not authorized')
-        try:
-            if 'stream_id' in self.request.headers:
-                stream_id = self.request.headers['stream_id']
-                stream = Stream.instance(stream_Fid, self.db)
-                if stream:
-                    self.deactivate_stream(stream_id)
-                    stream.remove()
-                    shutil.rmtree(os.path.join('streams',stream_id))
-                    self.set_status(200)
-                    return
-                else:
-                    return self.write('stream not found')
-            else:
-                return self.write('Missing data')
-        except Exception as e:
-            print(e)
 
 class HeartbeatHandler(BaseHandler):
     def initialize(self, increment=30*60):
@@ -521,7 +433,7 @@ class HeartbeatHandler(BaseHandler):
         ''' Cores POST to this handler to notify the WS that it is still 
             alive. WS executes a zadd initially as well'''
         try:
-            content = json.loads(self.request.body)
+            content = json.loads(self.request.body.decode)
             token_id = content['shared_token']
             stream_id = ActiveStream.lookup('shared_token',token_id,self.db)
             self.db.zadd('heartbeats',stream_id,
@@ -529,6 +441,7 @@ class HeartbeatHandler(BaseHandler):
             self.set_status(200)
         except KeyError:
             self.set_status(400)
+
 
 class WorkServer(tornado.web.Application, common.RedisMixin):
     def _cleanup(self):
@@ -545,43 +458,51 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
         # inform the CC gracefully that the WS is dying (ie.expire everything)
 
-    def __init__(self,ws_name,redis_port,redis_pass=None,ccs=None,increment=600):
-        self.db = common.init_redis(redis_port,redis_pass)
-        if not os.path.exists('files'):
-            os.makedirs('files')
+    def __init__(self,
+                 ws_name,
+                 redis_port,
+                 redis_pass=None,
+                 ccs=None,
+                 increment=600):
+
+        self.db = common.init_redis(redis_port, redis_pass)
         if not os.path.exists('streams'):
             os.makedirs('streams')
-        self._cleanup()
+        if not os.path.exists('targets'):
+            os.makedirs('targets')
+
+        #self._cleanup()
 
         # ccs is a list of tuples, where
         # 0th-index is name
         # 1st-index is ip
         # 2nd-index is port
-        if ccs:
-            for cc in ccs:
-                cc_name = cc[0]
-                cc_ip   = cc[1]
-                cc_port = cc[2]
-                cc_instance = CommandCenter.create(cc_name,self.db)
-                cc_instance['ip'] = cc_ip
-                cc_instance['http_port'] = cc_port
-        else:
-            print('WARNING: No CCs were specified for this WS')
+        # if ccs:
+        #     for cc in ccs:
+        #         cc_name = cc[0]
+        #         cc_ip = cc[1]
+        #         cc_port = cc[2]
+        #         cc_instance = CommandCenter.create(cc_name,self.db)
+        #         cc_instance['ip'] = cc_ip
+        #         cc_instance['http_port'] = cc_port
+        # else:
+        #     print('WARNING: No CCs were specified for this WS')
 
-        check_stream_freq_in_ms = 60000
-        pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats, 
-                check_stream_freq_in_ms,tornado.ioloop.IOLoop.instance())
-        pcb.start()
+        # check_stream_freq_in_ms = 60000
+        # pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
+        #         check_stream_freq_in_ms,tornado.ioloop.IOLoop.instance())
+        # pcb.start()
+
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         super(WorkServer, self).__init__([
-            (r'/frame', FrameHandler),
-            (r'/stream', StreamHandler),
-            (r'/heartbeat', HeartbeatHandler, dict(increment=increment))
+            #(r'/frame', FrameHandler),
+            (r'/streams', PostStreamHandler),
+            #(r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
 
     def shutdown(self, signal_number=None, stack_frame=None):
-        self.shutdown_redis()       
+        self.shutdown_redis()
         print('shutting down tornado...')
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
