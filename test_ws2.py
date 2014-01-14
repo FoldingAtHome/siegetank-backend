@@ -10,6 +10,7 @@ import json
 import apollo
 from os.path import isfile
 
+
 class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
@@ -22,6 +23,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
     @classmethod
     def tearDownClass(self):
+        self.ws.db.flushdb()
         self.ws.shutdown_redis()
         folders = ['streams', 'targets']
         for folder in folders:
@@ -78,13 +80,63 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(isfile(os.path.join('streams', stream_id2, fn5)))
         self.assertEqual(ws.Stream(stream_id2, self.ws.db).hget('target'),
                          target_id)
-        self.assertSetEqual(
-            ws.Target(target_id, self.ws.db).smembers('streams'),
-            {stream_id, stream_id2})
+        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
+                         {stream_id, stream_id2})
         self.assertEqual(ws.Target(target_id, self.ws.db).smembers('files'),
                          {fn1, fn2})
         self.assertEqual(ws.Stream(stream_id2, self.ws.db).smembers('files'),
                          {fn5})
+
+    def test_delete_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
+        fb1, fb2, fb3, fb4 = (str(uuid.uuid4()) for i in range(4))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3, fn4: fb4}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream_id1 = json.loads(response.body.decode())['stream_id']
+        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
+                         {stream_id1})
+
+        fn5, fn6, fn7, fn8 = (str(uuid.uuid4()) for i in range(4))
+        fb5, fb6, fb7, fb8 = (str(uuid.uuid4()) for i in range(4))
+        body = {'target_id': target_id,
+                'target_files': {fn5: fb5, fn6: fb6},
+                'stream_files': {fn7: fb7, fn8: fb8}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream_id2 = json.loads(response.body.decode())['stream_id']
+        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
+                         {stream_id1, stream_id2})
+
+        body = {'id': stream_id1}
+        response = self.fetch('/streams/delete',
+                              method='PUT',
+                              body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
+                         {stream_id2})
+
+        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn3)))
+        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn4)))
+
+        body = {'id': stream_id2}
+        response = self.fetch('/streams/delete',
+                              method='PUT',
+                              body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.assertFalse(ws.Target.exists(target_id, self.ws.db))
+
+        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn5)))
+        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn6)))
+        self.assertFalse(isfile(os.path.join('targets', target_id, fn1)))
+        self.assertFalse(isfile(os.path.join('targets', target_id, fn2)))
+
+        self.assertEqual(self.ws.db.keys('*'), [])
 
     # def test_init_stream(self):
     #     active_streams = self.redis_client.exists('active_streams')

@@ -58,7 +58,7 @@ import base64
 ################
 
 # POST x.com/streams              - add a new stream
-# DELETE x.com/streams/stream_id  - delete a stream
+# PUT x.com/streams/delete        - delete a stream
 # GET x.com/streams/stream_id     - download a stream
 # POST x.com/targets              - add a new target
 
@@ -335,7 +335,6 @@ class PostStreamHandler(BaseHandler):
         stream_files = content['stream_files']
 
         if not Target.exists(target_id, self.db):
-            print(content)
             target_files = content['target_files']
             target_dir = os.path.join('targets', target_id)
             if not os.path.exists(target_dir):
@@ -354,7 +353,6 @@ class PostStreamHandler(BaseHandler):
 
         stream = Stream.create(stream_id, self.db)
         for filename, binary in stream_files.items():
-            print('writing:', os.path.join(stream_dir, filename))
             with open(os.path.join(stream_dir, filename), 'w') as handle:
                 handle.write(binary)
             stream.sadd('files', filename)
@@ -372,16 +370,36 @@ class PostStreamHandler(BaseHandler):
         self.write(json.dumps(response))
 
 
-def ModifyStreamHandler(self, stream_id):
-    def delete(self, stream_id):
-        ''' Accessible by CC only. '''
+class DeleteStreamHandler(BaseHandler):
+    def put(self):
+        ''' Method:
+
+            Request
+            {
+                'id': stream_id
+            }
+
+        '''
+        stream_id = json.loads(self.request.body.decode())['id']
         if not Stream.exists(stream_id, self.db):
-            self.set_status(400)
-        Stream(stream_id, self.db).delete()
-        active_stream = ActiveStream(stream_id, self.db)
-        if active_stream:
-            active_stream.delete()
+            return self.set_status(400)
+        stream = Stream(stream_id, self.db)
+        target_id = stream.hget('target')
+        stream.delete()
+
+        try:
+            active_stream = ActiveStream(stream_id, self.db)
+            if active_stream:
+                active_stream.delete()
+        except KeyError:
+            pass
         shutil.rmtree(os.path.join('streams', stream_id))
+
+        target = Target(target_id, self.db)
+        if target.scard('streams') == 0:
+            target.delete()
+            shutil.rmtree(os.path.join('targets', target_id))
+
         self.set_status(200)
 
     # def get(self):
@@ -498,6 +516,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         super(WorkServer, self).__init__([
             #(r'/frame', FrameHandler),
             (r'/streams', PostStreamHandler),
+            (r'/streams/delete', DeleteStreamHandler),
             #(r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
 
