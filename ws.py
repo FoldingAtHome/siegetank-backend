@@ -289,7 +289,7 @@ class DeleteStreamHandler(BaseHandler):
 
 class CoreStartHandler(BaseHandler):
     def get(self):
-        ''' The core first goes to the CC to get an authorization token. The CC
+        """ The core first goes to the CC to get an authorization token. The CC
         activates a stream, and maps the authorization token to the stream.
 
         Request Header:
@@ -322,12 +322,12 @@ class CoreStartHandler(BaseHandler):
         frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
                 ---------------------| ------------------------------- ---
 
-        When a core fetches a checkpoint, it makes sure to NOT write the
+        When a core fetches a state.xml, it makes sure to NOT write the
         first frame (equivalent to the frame of fetched state.xml file).
         On every subsequent checkpoint, both the frame and the checkpoint
         are sent back to the workserver.
 
-        '''
+        """
         shared_token = self.request.headers['Authorization']
         stream_id = ActiveStream.lookup('auth_token', shared_token, self.db)
         if stream_id is None:

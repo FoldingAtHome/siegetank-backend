@@ -1,0 +1,17 @@
+{
+    "name": "firebat",
+    "redis_port": 4738,
+    "redis_pass": "test_pass",
+    "internal_http_port": 8959,
+    "external_http_port": 8959,
+    "ccs" : {
+        "firebat": {
+            "ip": "127.0.0.1",
+            "auth": "PROTOSS_IS_FOR_NOOBS"     
+        },
+        "goliath": {
+            "ip": "127.0.0.2",
+            "auth": "I_DRINK_ZERG_TEARS"
+        }
+    }
+}
