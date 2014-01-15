@@ -68,13 +68,14 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
             'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
             'steps_per_frame': 50000,
             'engine': 'openmm',
-            'engine_versions': ['6.0']
+            'engine_versions': ['6.0'],
             }
 
         reply = self.fetch('/targets/create', method='POST',
                            body=json.dumps(body))
-        target_id = json.loads(reply.body.decode())['target_id']
+        print(reply.body.decode())
         self.assertEqual(reply.code, 200)
+        target_id = json.loads(reply.body.decode())['target_id']
 
         system_path = os.path.join('targets', target_id, 'system.xml.gz.b64')
         self.assertEqual(open(system_path, 'rb').read().decode(), fb1)
@@ -82,6 +83,11 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(open(intg_path, 'rb').read().decode(), fb2)
         self.assertTrue(cc.Target.exists(target_id, self.cc.db))
         target = cc.Target(target_id, self.cc.db)
+        self.assertEqual(target.hget('description'), description)
+        self.assertEqual(target.hget('steps_per_frame'), 50000)
+        self.assertEqual(target.hget('stage'), 'disabled')
+        self.assertEqual(target.hget('engine'), 'openmm')
+        self.assertEqual(target.smembers('engine_versions'), {'6.0'})
         self.assertEqual(target.smembers('files'), {'system.xml.gz.b64',
                                                     'integrator.xml.gz.b64'})
 

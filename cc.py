@@ -210,6 +210,7 @@ class PostTargetHandler(BaseHandler):
         target.hset('steps_per_frame', steps_per_frame)
         target.hset('creation_date', time.time())
         target.hset('engine', engine)
+        target.hset('stage', 'disabled')
         for allowed_version in content['engine_versions']:
             target.sadd('engine_versions', allowed_version)
         if 'allowed_ws' in content:
