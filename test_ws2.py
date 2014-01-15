@@ -17,9 +17,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     def setUpClass(self):
         redis_port = str(3828)
         self.increment = 3
-        cc = ('test_cc', '127.0.0.1', '999', 'PROTOSS_IS_FOR_NOOB')
         self.ws = ws.WorkServer(
-            'test_server', redis_port, None, [cc], self.increment)
+            'test_server', redis_port, None, None, self.increment)
         super(TestStreamMethods, self).setUpClass()
 
     @classmethod

@@ -11,9 +11,9 @@ import uuid
 import random
 import requests
 import redis
-import ConfigParser
 import signal
 import sys
+import apollo
 
 import common
 
@@ -35,16 +35,18 @@ import common
 # per second. Each request needs to be handled by the CC in 30 ms. 
 
 
-class WorkServer(hashset.HashSet):
+class WorkServer(apollo.Entity):
     prefix = 'ws'
     fields = {'ip': str,  # ip address
-              'http_port': int,  # server's http port
-              'redis_port': int  # server's redis port
+              'http_port': int,   # ws http port
+              'redis_port': int,  # ws redis port
+              'redis_pass': str,  # ws password1
               }
-    lookups = {'ip'}
+
+WorkServerDB = {}  # 'name' : redis_client
 
 
-class Targets(hashset.HashSet):
+class Targets(apollo.Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
               'owner': str,  # owner of the target
@@ -55,16 +57,11 @@ class Targets(hashset.HashSet):
               'workservers': {WorkServer},  # set of WSs that own streams
               }
 
-class User(hashset.HashSet):
+
+class User(apollo.Entity):
     prefix = 'user'
 
-# WS Connect:
-# -sadd ws_id to active_ws
-# -(re)configure hash ws:ws_id, as ip and ports may have changed
-# -ws_redis_clients[ws_id] = redis.Redis('ip','redis_port')
-# -for stream in 'ws:'+ws_id+':streams' 
-#       frame_count = ws_redis_clients[ws_id].hget('stream:'+stream)
-#       cc_redis.zadd('queue:'+cc.hget('stream:'+id,target), 'frame_count')
+
 
 # WS Clean Disconnect:
 # -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
@@ -90,83 +87,41 @@ class User(hashset.HashSet):
 # WS Interface
 # POST x.com/streams/stop
 
-def remove_ws(ws_id):
-    streams = cc_redis.smembers('ws:'+ws_id+':streams')
-    for stream in streams:
-        target_id = cc_redis.get('stream:'+stream+':target')
-        cc_redis.zrem('queue:'+target_id, stream)
-    ws_redis_clients.pop(ws_id, None)
 
-def test_ws(ws_id):
-    ''' If WS is up, returns True.
-        If WS is down, remove_ws() is called. Returns False.
-    '''
-    # test redis
-    try:
-        ws_redis_clients(ws_id).ping()
-    except:
-        remove_ws(ws_id)
+class BaseHandler(tornado.web.RequestHandler):
+    @property
+    def db(self):
+        return self.application.db
 
-def get_idle_ws():
-    n_available_ws = cc_redis.card('workservers')
-    while n_available_ws > 0:
-        ws_id = cc_redis.srandmember('workservers')
 
-        ws = test_ws(ws_id) 
-
-        n_available_ws = cc_redis.card(ws_id)
-
-    if n_available_ws == 0:
-        return None
-
-    return ws_id, ws_ip, redis_client
-        # test and see if this WS is still alive
-
-def activate_stream(stream_id, token_id, increment, ws_rc):
-    ''' Activates the stream on the WS via ws_rc '''
-    pass
-
-class WSHandler(tornado.web.RequestHandler):
-    def post(self):
-        ''' PGI: Called by WS for registration '''
-        content = json.loads(self.request.body)
+class RegisterWSHandler(BaseHandler):
+    def put(self):
+        ''' Called by WS for registration '''
+        content = json.loads(self.request.body.decode())
+        auth = content['auth']
+        if auth != self.application.cc_pass:
+            return self.set_status(401)
+        content = json.loads(self.request.body.decode())
         ip = self.request.remote_ip
-        try:
-            test_key = content['cc_key']
-            if test_key != CC_WS_KEY:
-                self.set_status(401)
-                return self.write('Bad CC_WS_KEY')
+        name = content['name']
+        http_port = content['http_port']
+        redis_port = content['redis_port']
+        redis_pass = content['redis_pass']
+        client = redis.Redis(host=ip, port=redis_port, password=redis_pass,
+                             decode_responses=True)
+        client.ping()
+        if not WorkServer.exists(name, self.db):
+            ws = WorkServer.create(name, self.db)
+        else:
+            ws = WorkServer(name, self.db)
+        ws.hset('ip', ip)
+        ws.hset('http_port', http_port)
+        ws.hset('redis_port', redis_port)
+        ws.hset('redis_pass', redis_pass)
 
-            ws_id = content['ws_id']
-            cc_redis.add('active_ws',ws_id)
+        WorkServerDB[name] = redis
+        self.set_status(200)
 
-            require_strings = ['ip','redis_port','http_port']
-            for string in require_strings:
-                item = content[string]
-                cc_redis.hset('ws:'+ws_id, string, item)
-
-            ws_redis_clients[ws_id] = redis.Redis(host=content['ip'], 
-                                                  port=int(content['redis_port']))
-
-            # extract list of streams owned by this ws (may be empty)
-            # add these streams into 
-            # this can be directly fetched by accessing the client using smembers! (as the streams ids 
-            # are knownn! )
-
-            # see if this ws existed in the past
-            existing_streams = cc_redis.smembers('ws:'+ws_id+':streams')
-            if existing_streams:
-                for stream_id in existing_streams:
-                    if cc_redis.hget('stream:'+stream,'state') == 0:
-                        target_id = cc_redis.hget('stream:'+stream_id+':target')
-                        cc_redis.zadd('target_id',target_id,frame_count)
-
-        except Exception as e:
-            print str(e)
-            self.set_status(400)
-            return self.write('bad request')
-
-        self.write('REGISTERED')
 
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
@@ -215,7 +170,6 @@ class TargetHandler(tornado.web.RequestHandler):
             cc_redis.sadd('targets',target_id)
 
         except Exception as e:
-            print str(e)
             return self.write('bad request')
 
         self.set_status(200)
@@ -252,7 +206,6 @@ class StreamHandler(tornado.web.RequestHandler):
         try:
             target_id = content['target_id']
         except Exception as e:
-            print str(e)
             return self.write('bad request')
 
         # shove stream to random workserver
@@ -268,12 +221,12 @@ class StreamHandler(tornado.web.RequestHandler):
             However, if stream's error_count is > 10 then it cannot be ENABLED
 
             '''
+        pass
 
-        print self.request.body
 
     def delete(self):
         ''' PGI: Delete a particular stream - (Request Forwarded to WS) '''
-        print self.request.body
+        pass
 
 class JobHandler(tornado.web.RequestHandler):
     def get(self):
@@ -310,68 +263,29 @@ CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
 cc_redis = redis.Redis(host='localhost', port=6379)
 ws_redis_clients = {}
 
+
 class CommandCenter(tornado.web.Application, common.RedisMixin):
-    def __init__(self,cc_name,redis_port):
-        print 'CC INITIALIZED'
+    def __init__(self, cc_name, redis_port, cc_pass):
+        print('Starting up Command Center ', cc_name)
+        self.cc_pass = cc_pass
         self.name = cc_name
-        self.db = self.init_redis(redis_port)
+        self.db = common.init_redis(redis_port)
         self.ws_dbs = {}
         if not os.path.exists('files'):
-            os.makedirs('files') 
-        signal.signal(signal.SIGINT, self.shutdown)   
+            os.makedirs('files')
+        signal.signal(signal.SIGINT, self.shutdown)
         super(CommandCenter, self).__init__([
-            (r'/target', TargetHandler),
-            (r'/stream', StreamHandler),
-            (r'/job', JobHandler),
-            (r'/add_ws', WSHandler)
-        ]) 
+            #(r'/target', TargetHandler),
+            #(r'/stream', StreamHandler),
+            #(r'/job', JobHandler),
+            (r'/register_ws', RegisterWSHandler)
+            ])
 
     def shutdown(self, signal_number, stack_frame):
-        self.shutdown_redis()       
-        print 'shutting down tornado...'
+        self.shutdown_redis()
+        print('shutting down command center...')
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
-
-    #def registerWS(self,name,ip,http_port,redis_port,redis_pass):
-    #    print 'called register WS'
-    #    print name
-    #    print ip
-    #    print http_port
-    #    print redis_port
-    #    print redis_pass
-    #    pass
-
-class RegisterWSHandler(tornado.web.RequestHandler):
-    def initialize(self, cc, cc_auth_pass):
-        self.cc = cc
-        self.auth_pass = cc_auth_pass
-
-    def post(self):
-        try:
-            ip         = self.request.remote_ip
-            data       = json.loads(self.request.body)
-            auth_pass  = data['auth_pass']
-            if auth_pass != self.auth_pass:
-                raise ValueError('Bad token')
-            ws_name    = data['name']
-            http_port  = data['http_port']
-            redis_port = data['redis_port']
-            redis_pass = data['redis_pass']
-            self.cc.db.sadd('active_ws',ws_name)
-            self.cc.db.hset('ws:'+ws_name,':ip',ip)
-            self.cc.db.hset('ws:'+ws_name,':http_port',http_port)
-            self.cc.db.hset('ws:'+ws_name,':redis_port',redis_port)
-            self.cc.db.hset('ws:'+ws_name,':redis_pass',redis_pass)
-            ws_db = redis.Redis(host=ip,port=int(redis_port),
-                password=redis_pass)
-            # see if the ws's db is alive
-            ws_db.ping()
-            self.cc.ws_dbs[ws_name] = ws_db
-
-        except Exception as e:
-            raise e
-            self.set_status(401)
-            return
 
 def start():
     config_file = 'cc_conf'

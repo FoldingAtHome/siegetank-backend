@@ -528,23 +528,21 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 body = {
                     'name': ws_name,
                     'redis_port': redis_port,
-                    'redis_pass': redis_pass
+                    'redis_pass': redis_pass,
+                    'auth': ccs[cc_name]['auth']
                 }
                 rep = client.fetch(ccs[cc_name]['ip']+'/register_ws',
                                    method='POST', body=json.dumps(body))
                 assert rep.code == 200
 
-
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         super(WorkServer, self).__init__([
-            #(r'/frame', FrameHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
             (r'/core/stop', CoreStopHandler),
-            #(r'/heartbeat', HeartbeatHandler, dict(increment=increment))
         ])
 
     def shutdown(self, signal_number=None, stack_frame=None):
