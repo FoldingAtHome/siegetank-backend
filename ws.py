@@ -521,27 +521,19 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         if not os.path.exists('targets'):
             os.makedirs('targets')
 
-        #self._cleanup()
+        client = tornado.httpclient.AsyncHTTPClient()
 
-        # ccs is a list of tuples, where
-        # 0th-index is name
-        # 1st-index is ip
-        # 2nd-index is port
-        # if ccs:
-        #     for cc in ccs:
-        #         cc_name = cc[0]
-        #         cc_ip = cc[1]
-        #         cc_port = cc[2]
-        #         cc_instance = CommandCenter.create(cc_name,self.db)
-        #         cc_instance['ip'] = cc_ip
-        #         cc_instance['http_port'] = cc_port
-        # else:
-        #     print('WARNING: No CCs were specified for this WS')
+        if ccs:
+            for cc_name in ccs:
+                body = {
+                    'name': ws_name,
+                    'redis_port': redis_port,
+                    'redis_pass': redis_pass
+                }
+                rep = client.fetch(ccs[cc_name]['ip']+'/register_ws',
+                                   method='POST', body=json.dumps(body))
+                assert rep.code == 200
 
-        # check_stream_freq_in_ms = 60000
-        # pcb = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
-        #         check_stream_freq_in_ms,tornado.ioloop.IOLoop.instance())
-        # pcb.start()
 
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
