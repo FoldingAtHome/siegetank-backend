@@ -69,7 +69,16 @@ import base64
 # GET x.com/core/start            - start a stream (given an auth token)
 # PUT x.com/core/frame            - add a frame to a stream (idempotent)
 # PUT x.com/core/stop             - stop a stream
+# PUT x.com/core/checkpoint       - send a checkpoint file corresponding
+#                                 - to the last frame received
 # POST x.com/core/heartbeat       - send a heartbeat
+
+# checkpointing technique
+# if x.com/core/checkpoint is sent, message is:
+# POST {frame_md5: 10gj3n60twemp9g8,
+#       checkpoint: checkpoint.xml.gz.b64,
+#      }
+# this is how we can verify
 
 ##################
 

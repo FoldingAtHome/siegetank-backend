@@ -6,16 +6,17 @@ import unittest
 import sys
 import common
 import json
+import base64
 
 
-class TestWSRegistration(tornado.testing.AsyncHTTPTestCase):
+class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
         redis_port = str(3828)
         self.increment = 3
         self.cc_auth = '5lik2j3l4'
         self.cc = cc.CommandCenter('test_cc', redis_port, self.cc_auth)
-        super(TestWSRegistration, self).setUpClass()
+        super(TestCCBasics, self).setUpClass()
 
     @classmethod
     def tearDownClass(self):
@@ -25,7 +26,7 @@ class TestWSRegistration(tornado.testing.AsyncHTTPTestCase):
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
-        super(TestWSRegistration, self).tearDownClass()
+        super(TestCCBasics, self).tearDownClass()
 
     def test_register_cc(self):
 
@@ -54,6 +55,35 @@ class TestWSRegistration(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(ws.hget('redis_pass'), ws_redis_pass)
 
         test_db.shutdown()
+
+    def test_post_target(self):
+
+        fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
+                              for i in range(4))
+
+        description = "Diwakar and John's top secret project"
+
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0']
+            }
+
+        reply = self.fetch('/targets/create', method='POST',
+                           body=json.dumps(body))
+        target_id = json.loads(reply.body.decode())['target_id']
+        self.assertEqual(reply.code, 200)
+
+        system_path = os.path.join('targets', target_id, 'system.xml.gz.b64')
+        self.assertEqual(open(system_path, 'rb').read().decode(), fb1)
+        intg_path = os.path.join('targets', target_id, 'integrator.xml.gz.b64')
+        self.assertEqual(open(intg_path, 'rb').read().decode(), fb2)
+        self.assertTrue(cc.Target.exists(target_id, self.cc.db))
+        target = cc.Target(target_id, self.cc.db)
+        self.assertEqual(target.smembers('files'), {'system.xml.gz.b64',
+                                                    'integrator.xml.gz.b64'})
 
     def get_app(self):
         return self.cc

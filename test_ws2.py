@@ -309,6 +309,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stream.hget('error_count'), 1)
         self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
         self.assertFalse(target.zscore('queue', stream_id) is None)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(b'', open(buffer_path, 'rb').read())
 
     def test_stop_stream(self):
         target_id = str(uuid.uuid4())
@@ -352,6 +354,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stream.hget('error_count'), 0)
         self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
         self.assertFalse(target.zscore('queue', stream_id) is None)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(b'', open(buffer_path, 'rb').read())
 
 
     # def test_init_stream(self):

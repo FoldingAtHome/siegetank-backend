@@ -9,11 +9,11 @@ import json
 import os
 import uuid
 import random
-import requests
 import redis
 import signal
 import sys
 import apollo
+import time
 
 import common
 
@@ -38,35 +38,46 @@ import common
 class WorkServer(apollo.Entity):
     prefix = 'ws'
     fields = {'ip': str,  # ip address
-              'http_port': int,   # ws http port
+              'http_port': int,  # ws http port
               'redis_port': int,  # ws redis port
-              'redis_pass': str,  # ws password1
+              'redis_pass': str,  # ws password
               }
 
 WorkServerDB = {}  # 'name' : redis_client
 
 
-class Targets(apollo.Entity):
+class Target(apollo.Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
-              'owner': str,  # owner of the target
-              'files': str,  # md5 of the system.xml file
-              'creation_date': str,  # creation of the target
+              'owner': str,  # owner of the target,
+              'steps_per_frame': int,  # number of steps per frame
+              'files': {str},  # list of files needed by this target
+              'creation_date': float,  # in linux time.time()
               'stage': str,  # disabled, beta, release
-              'workservers': {WorkServer},  # set of WSs that own streams
+              'allowed_ws': {str},  # ws to allow striation on
+              'engine': str,  # openmm or gromacs
+              'engine_versions': {str},  # allowed core_versions
               }
 
+apollo.relate(Target, 'workservers', {WorkServer})
 
 ################
 # PG Interface #
 ################
 
-# POST x.com/targets/add?
-# PUT x.com/targets/delete
-# POST x.com/streams/add
-# PUT x.com/streams/delete 
-# GET x.com/targets/all     - retrieve a list of all targets
-# GET x.com/targets/        - retrieve info about a specific target
+# POST x.com/targets/add  - add a target
+# PUT x.com/target/update_stage -  change the stage of the target
+# PUT x.com/targets/delete  - delete a target and all associated streams
+# POST x.com/streams/add  - add a stream to a given target
+# PUT x.com/streams/delete  - delete a stream
+# GET x.com/targets/all  - retrieve a list of all targets
+# GET x.com/targets/  - retrieve info about a specific target
+
+##################
+# Core Interface #
+##################
+
+# POST x.com/jobs/job - get a stream to work on
 
 # WS Clean Disconnect:
 # -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
@@ -127,71 +138,98 @@ class RegisterWSHandler(BaseHandler):
         self.set_status(200)
 
 
-class TargetHandler(tornado.web.RequestHandler):
+class PostTargetHandler(BaseHandler):
     def post(self):
         ''' POST a new target to the server
+            Request:
+                {
 
-            Request {
+                    [required]
+                    "description": description,
+                    "files": {"file1_name": file1_bin_b64,
+                              "file2_name": file2_bin_b64,
+                              ...
+                              }
+                    "steps_per_frame": 100000,
+                    "engine": "openmm",
+                    "engine_versions": ["6.0", "5.5", "5.2"]
 
-                [required]
-                "description": description,
-                "files": {"file1_name": file1_bin_b64,
-                          "file2_name": file2_bin_b64
-                          ...
-                          }
+                    [optional]
+                    # if present, a list of workservers to striate on.
+                    "allowed_ws": ["mengsk", "arcturus"]
+                    "stage": beta,
 
-                [optional]
-                # list of workservers to striate on
-                "workservers": [ws_name1, ws_name2]
-            }
+                }
 
-
-
+            Reply:
+                {
+                    "target_id": target_id,
+                }
 
         '''
-
-
         self.set_status(400)
-        content = json.loads(self.request.body)
-        try:
-            system = content['system']
-            integrator = content['integrator']
-            
-            if len(system) == 0 or len(integrator) == 0:
-                return self.write('bad request')
+        content = json.loads(self.request.body.decode())
+        files = content['files']
 
-            system_sha = hashlib.sha256(system).hexdigest()
-            path = './files/'+system_sha
-            if not os.path.isfile(path):
-                open(path,'w').write(system)
- 
-            integrator_sha = hashlib.sha256(integrator).hexdigest()
-            path = './files/'+integrator_sha
-            if not os.path.isfile(path):
-                open(path,'w').write(integrator)
-            description = content['description']
-            creation_time = cc_redis.time()[0]
-            target_id = hashlib.sha256(str(uuid.uuid4())).hexdigest()
-            owner = 'yutong'
+        if content['engine'] != 'openmm':
+            return self.write(json.dumps({'error': 'engine must be openmm'}))
+        if content['engine_versions'] != ['6.0']:
+            return self.write(json.dumps({'error': 'version must be 6.0'}))
 
-            # store target details into redis
-            cc_redis.hset('target:'+target_id,'system',system_sha)
-            cc_redis.hset('target:'+target_id,'integrator',integrator_sha)
-            cc_redis.hset('target:'+target_id,'description',description)
-            cc_redis.hset('target:'+target_id,'date',creation_time)
-            cc_redis.hset('target:'+target_id,'owner',owner)
+        #----------------#
+        # verify request #
+        #----------------#
+        engine = content['engine']
+        if content['engine'] == 'openmm':
+            required_files = {'system.xml.gz.b64', 'integrator.xml.gz.b64'}
+            given_files = set()
+            for filename, filebin in files.items():
+                given_files.add(filename)
+            if given_files != required_files:
+                return self.write(json.dumps({'error': 'missing file'}))
+        else:
+            return self.write(json.dumps({'error': 'unsupported engine'}))
 
-            # add target_id to the owner's list of targets
-            cc_redis.sadd(owner+':targets',target_id)
+        if 'allowed_ws' in content:
+            for ws_name in content['allowed_ws']:
+                if not WorkServer.exists(ws_name, self.db):
+                    err_msg = {'error': ws_name+' is not connected to this cc'}
+                    return self.write(json.dumps(err_msg))
+        description = content['description']
+        steps_per_frame = content['steps_per_frame']
 
-            # add target_id to list of targets managed by this WS
-            cc_redis.sadd('targets',target_id)
+        if steps_per_frame < 5000:
+            return self.write(json.dumps({'error': 'steps_per_frame < 5000'}))
 
-        except Exception as e:
-            return self.write('bad request')
+        #------------#
+        # write data #
+        #------------#
+        target_id = str(uuid.uuid4())
+        target = Target.create(target_id, self.db)
+        target.hset('description', description)
+        target.hset('steps_per_frame', steps_per_frame)
+        target.hset('creation_date', time.time())
+        target.hset('engine', engine)
+        for allowed_version in content['engine_versions']:
+            target.sadd('engine_versions', allowed_version)
+        if 'allowed_ws' in content:
+            for ws_name in content['allowed_ws']:
+                target.sadd('allowed_ws', ws_name)
+
+        target_dir = os.path.join('targets', target_id)
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+
+        for filename, filebin in files.items():
+            file_path = os.path.join(target_dir, filename)
+            target.sadd('files', filename)
+            with open(file_path, 'wb') as handle:
+                handle.write(filebin.encode())
 
         self.set_status(200)
-        return self.write('OK')
+        response = {'target_id': target_id}
+
+        return self.write(json.dumps(response))
 
     def get(self):
         ''' PGI - Fetch details on a target'''
@@ -296,7 +334,8 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             #(r'/target', TargetHandler),
             #(r'/stream', StreamHandler),
             #(r'/job', JobHandler),
-            (r'/register_ws', RegisterWSHandler)
+            (r'/register_ws', RegisterWSHandler),
+            (r'/targets/create', PostTargetHandler)
             ])
 
     def shutdown(self, signal_number, stack_frame):
