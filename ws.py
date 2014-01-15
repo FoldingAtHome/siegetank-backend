@@ -53,9 +53,9 @@ import base64
 # [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
-################
-# PG Interface #
-################
+###################
+# CC/PG Interface #
+###################
 
 # POST x.com/streams              - add a new stream
 # PUT x.com/streams/delete        - delete a stream

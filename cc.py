@@ -50,18 +50,23 @@ class Targets(apollo.Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
               'owner': str,  # owner of the target
-              'system_md5': str,  # md5 of the system.xml file
-              'integrator_md5': str,  # md5 of the integrator.xml file
+              'files': str,  # md5 of the system.xml file
               'creation_date': str,  # creation of the target
               'stage': str,  # disabled, beta, release
               'workservers': {WorkServer},  # set of WSs that own streams
               }
 
 
-class User(apollo.Entity):
-    prefix = 'user'
+################
+# PG Interface #
+################
 
-
+# POST x.com/targets/add?
+# PUT x.com/targets/delete
+# POST x.com/streams/add
+# PUT x.com/streams/delete 
+# GET x.com/targets/all     - retrieve a list of all targets
+# GET x.com/targets/        - retrieve info about a specific target
 
 # WS Clean Disconnect:
 # -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
@@ -118,14 +123,27 @@ class RegisterWSHandler(BaseHandler):
         ws.hset('http_port', http_port)
         ws.hset('redis_port', redis_port)
         ws.hset('redis_pass', redis_pass)
-
         WorkServerDB[name] = redis
         self.set_status(200)
 
 
 class TargetHandler(tornado.web.RequestHandler):
     def post(self):
-        ''' PGI - Post a new target
+        ''' POST a new target to the server
+
+            Request {
+
+                [required]
+                "description": description,
+                "files": {"file1_name": file1_bin_b64,
+                          "file2_name": file2_bin_b64
+                          ...
+                          }
+
+                [optional]
+                # list of workservers to striate on
+                "workservers": [ws_name1, ws_name2]
+            }
 
 
 
