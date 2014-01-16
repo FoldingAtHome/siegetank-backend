@@ -193,7 +193,7 @@ class PostStreamHandler(BaseHandler):
         print('fetching from: https://'+str(ws_ip)+':'+str(ws_http_port)
               +'/streams')
 
-        #TODO: HTTPS
+        #TODO: HTTPS? Validate Certs?
 
         rep = yield client.fetch('http://'+str(ws_ip)+':'+str(ws_http_port)
                             +'/streams', method='POST', body=json.dumps(body))
@@ -201,9 +201,6 @@ class PostStreamHandler(BaseHandler):
         # client = tornado.httpclient.HTTPClient()
         # rep = client.fetch('https://'+str(ws_ip)+':'+str(ws_http_port)
         #                    +'/streams', method='POST', validate_cert=False)
-
-        print('DEBUG_REPLY:::::::::::::::::', rep)
-
         self.set_status(rep.code)
         return self.write(rep.body)
 

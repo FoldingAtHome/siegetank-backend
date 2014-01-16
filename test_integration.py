@@ -49,7 +49,7 @@ class Test(tornado.testing.AsyncTestCase):
         self.cc.listen(self.cc_hport, io_loop=self.io_loop)
         self.ws.listen(self.ws_hport, io_loop=self.io_loop)
 
-    def test_post_target3(self):
+    def test_post_target_and_streams(self):
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
                               for i in range(4))
@@ -63,23 +63,16 @@ class Test(tornado.testing.AsyncTestCase):
             }
         uri = 'http://127.0.0.1:'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body))
-        response = self.wait()
-        print(response.code)
-        self.assertEqual(response.code, 200)
-
-        target_id = json.loads(response.body.decode())['target_id']
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        target_id = json.loads(reply.body.decode())['target_id']
         body = {'target_id': target_id,
                 'files': {"state.xml.gz.b64": fb3}
                 }
         uri = 'http://127.0.0.1:'+str(self.cc_hport)+'/streams'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body))
-        response = self.wait()
-        print('zar')
-        print(response.code)
-        print(response.body)
-        # response = yield client.fetch(uri, ))
-        # print(response.code, response.body)
-        # self.assertEqual(response.code, 200)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
 
     @classmethod
     def tearDown(cls):
