@@ -1,24 +1,38 @@
-import tornado.escape
-import tornado.ioloop
-import tornado.web
-import tornado.httputil
-import tornado.httpserver
-import tornado.httpclient
-import io
-import tarfile
+# Tornado-powered workserver backend.
+#
+# Authors: Yutong Zhao <proteneer@gmail.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may
+# not use this file except in compliance with the License. You may obtain
+# a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+
 import signal
 import uuid
 import os
 import json
 import sys
 import time
-import traceback
 import shutil
-import configparser
 import hashlib
 import common
 import apollo
 import base64
+
+import tornado.escape
+import tornado.ioloop
+import tornado.web
+import tornado.httputil
+import tornado.httpserver
+import tornado.httpclient
+import tornado.options
 
 # Capacity
 
@@ -489,17 +503,11 @@ class HeartbeatHandler(BaseHandler):
         try:
             content = json.loads(self.request.body.decode)
             token_id = content['shared_token']
-            stream_id = ActiveStream.lookup('shared_token',token_id,self.db)
+            stream_id = ActiveStream.lookup('shared_token', token_id, self.db)
             self.db.zadd('heartbeats', stream_id, time.time()+self._increment)
             self.set_status(200)
         except KeyError:
             self.set_status(400)
-
-
-#def deactivate_stream(stream_id, db):
-#    ''' Deactivate and add stream back to the queue for processing  '''
-#    ActiveStream(stream_id, db).delete()
-#    self.assertEqual()
 
 
 class WorkServer(tornado.web.Application, common.RedisMixin):
@@ -521,6 +529,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                  ws_name,
                  redis_port,
                  redis_pass=None,
+                 ws_ext_http_port=None,
                  ccs=None,
                  increment=600):
 
@@ -529,14 +538,13 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             os.makedirs('streams')
         if not os.path.exists('targets'):
             os.makedirs('targets')
-
         client = tornado.httpclient.AsyncHTTPClient()
 
         if ccs:
             for cc_name in ccs:
-
                 body = {
                     'name': ws_name,
+                    'http_port': ws_ext_http_port,
                     'redis_port': redis_port,
                     'redis_pass': redis_pass,
                     'auth': ccs[cc_name]['auth']
@@ -545,8 +553,8 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 uri = 'https://'+ccs[cc_name]['ip']+ccs[cc_name]['http_port']\
                       +'/register_ws'
                 rep = client.fetch(uri, method='POST', body=json.dumps(body))
-
-                assert rep.code == 200
+                if rep.code != 200:
+                    print('Warning: not connect to CC '+cc_name)
 
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
@@ -608,20 +616,32 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
     def push_stream_to_cc(stream_id):
         pass
 
-def verifyRegistration(resp):
-    if resp.code != 200:
-        raise ValueError('Did not register successfully with all CCs')
+
+def start():
+    config_file = 'ws_config.json'
+    settings = json.loads(open(config_file).read())
+
+    ws_name = settings['name']
+    ws_redis_port = settings['redis_port']
+    ws_redis_pass = settings['redis_pass']
+    int_http_port = settings['int_http_port']
+    ext_http_port = settings['ext_http_port']
+    ccs = settings['ccs']
+
+    ws_instance = WorkServer(ws_name, ws_redis_port,
+                             ws_redis_pass, ext_http_port, ccs)
+
+    ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
+        'certfile': 'ws.crt', 'keyfile': 'ws.key'})
+
+    ws_server.listen(int_http_port)
+
 
 def start():
     config_file = 'ws_conf'
     Config = ConfigParser.ConfigParser() 
     Config.read(config_file)
 
-    ws_name       = Config.get('WS','name')
-    ws_redis_port = Config.getint('WS','redis_port')
-    ws_redis_pass = Config.get('WS','redis_pass')
-    int_http_port = Config.getint('WS','int_http_port')
-    ext_http_port = Config.getint('WS','ext_http_port')
 
     cc_str        = Config.get('WS','cc_names').split(',')
     ccs = []
