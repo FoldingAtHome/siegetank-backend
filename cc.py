@@ -1,4 +1,5 @@
 import tornado.escape
+import tornado.gen
 import tornado.ioloop
 import tornado.web
 import tornado.httpserver
@@ -125,22 +126,12 @@ class RegisterWSHandler(BaseHandler):
         http_port = content['http_port']
         redis_port = content['redis_port']
         redis_pass = content['redis_pass']
-        client = redis.Redis(host=ip, port=redis_port, password=redis_pass,
-                             decode_responses=True)
-        client.ping()
-        if not WorkServer.exists(name, self.db):
-            ws = WorkServer.create(name, self.db)
-        else:
-            ws = WorkServer(name, self.db)
-        ws.hset('ip', ip)
-        ws.hset('http_port', http_port)
-        ws.hset('redis_port', redis_port)
-        ws.hset('redis_pass', redis_pass)
-        WorkServerDB[name] = redis
+        self.application.add_ws(name, ip, http_port, redis_port, redis_pass)
         self.set_status(200)
 
 
 class PostStreamHandler(BaseHandler):
+    @tornado.gen.coroutine
     def post(self):
         ''' POST a new stream to the server
             Request:
@@ -163,7 +154,6 @@ class PostStreamHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
         target = Target(target_id, self.db)
-
         files = content['files']
         for filename in files:
             if target.hget('engine') == 'openmm':
@@ -171,13 +161,13 @@ class PostStreamHandler(BaseHandler):
                     return self.write(json.dumps({'error': 'bad_filename'}))
 
         # TODO: ensure the WS we're POSTing to is up
-        try:
-            workservers = target.smembers('allowed_ws')
-        except Exception:
+        workservers = target.smembers('allowed_ws')
+        if not workservers:
             workservers = WorkServer.members(self.db)
 
         # randomly pick from available workservers
-        picked_ws = WorkServer(random.choice(workservers), self.db)
+        ws_id = random.sample(workservers, 1)[0]
+        picked_ws = WorkServer(ws_id, self.db)
 
         ws_ip = picked_ws.hget('ip')
         ws_http_port = picked_ws.hget('http_port')
@@ -191,16 +181,28 @@ class PostStreamHandler(BaseHandler):
         for filename, filebin in files.items():
             body['stream_files'][filename] = filebin
 
-        if ws.Target.exists(target_id, WorkServerDB[picked_ws.id]):
+        if not ws.Target.exists(target_id, WorkServerDB[picked_ws.id]):
             target_files = target.smembers('files')
+            body['target_files'] = {}
             for filename in target_files:
                 file_path = os.path.join('targets', target_id, filename)
                 with open(file_path, 'rb') as handle:
                     body['target_files'][filename] = handle.read().decode()
 
         client = tornado.httpclient.AsyncHTTPClient()
-        rep = yield client.fetch('https://'+ws_ip+':'+ws_http_port+'/streams',
-                                 method='POST', validate_cert=False)
+        print('fetching from: https://'+str(ws_ip)+':'+str(ws_http_port)
+              +'/streams')
+
+        #TODO: HTTPS
+
+        rep = yield client.fetch('http://'+str(ws_ip)+':'+str(ws_http_port)
+                            +'/streams', method='POST', body=json.dumps(body))
+
+        # client = tornado.httpclient.HTTPClient()
+        # rep = client.fetch('https://'+str(ws_ip)+':'+str(ws_http_port)
+        #                    +'/streams', method='POST', validate_cert=False)
+
+        print('DEBUG_REPLY:::::::::::::::::', rep)
 
         self.set_status(rep.code)
         return self.write(rep.body)
@@ -404,8 +406,26 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             #(r'/stream', StreamHandler),
             #(r'/job', JobHandler),
             (r'/register_ws', RegisterWSHandler),
-            (r'/targets', PostTargetHandler)
+            (r'/targets', PostTargetHandler),
+            (r'/streams', PostStreamHandler)
             ])
+
+
+    def add_ws(self, name, ip, http_port, redis_port, redis_pass):
+        client = redis.Redis(host=ip, port=redis_port, password=redis_pass,
+                             decode_responses=True)
+        client.ping()
+
+        if not WorkServer.exists(name, self.db):
+            ws = WorkServer.create(name, self.db)
+        else:
+            ws = WorkServer(name, self.db)
+
+        ws.hset('ip', ip)
+        ws.hset('http_port', http_port)
+        ws.hset('redis_port', redis_port)
+        ws.hset('redis_pass', redis_pass)
+        WorkServerDB[name] = client
 
     def shutdown(self, signal_number, stack_frame):
         self.shutdown_redis()
