@@ -390,11 +390,11 @@ ws_redis_clients = {}
 
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
-    def __init__(self, cc_name, redis_port, cc_pass):
+    def __init__(self, cc_name, redis_port, cc_pass=None):
         print('Starting up Command Center ', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
-        self.db = common.init_redis(redis_port)
+        self.db = common.init_redis(redis_port, cc_pass)
         self.ws_dbs = {}
         if not os.path.exists('files'):
             os.makedirs('files')
