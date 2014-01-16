@@ -71,7 +71,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
             'engine_versions': ['6.0'],
             }
 
-        reply = self.fetch('/targets/create', method='POST',
+        reply = self.fetch('/targets', method='POST',
                            body=json.dumps(body))
         print(reply.body.decode())
         self.assertEqual(reply.code, 200)

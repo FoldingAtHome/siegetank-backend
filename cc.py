@@ -2,9 +2,8 @@ import tornado.escape
 import tornado.ioloop
 import tornado.web
 import tornado.httpserver
+import tornado.httpclient
 
-import datetime
-import hashlib
 import json
 import os
 import uuid
@@ -14,6 +13,9 @@ import signal
 import sys
 import apollo
 import time
+import random
+import ws
+
 
 import common
 
@@ -65,10 +67,10 @@ apollo.relate(Target, 'workservers', {WorkServer})
 # PG Interface #
 ################
 
-# POST x.com/targets/add  - add a target
+# POST x.com/targets  - add a target
 # PUT x.com/target/update_stage -  change the stage of the target
 # PUT x.com/targets/delete  - delete a target and all associated streams
-# POST x.com/streams/add  - add a stream to a given target
+# POST x.com/streams  - add a stream to a given target
 # PUT x.com/streams/delete  - delete a stream
 # GET x.com/targets/all  - retrieve a list of all targets
 # GET x.com/targets/  - retrieve info about a specific target
@@ -136,6 +138,72 @@ class RegisterWSHandler(BaseHandler):
         ws.hset('redis_pass', redis_pass)
         WorkServerDB[name] = redis
         self.set_status(200)
+
+
+class PostStreamHandler(BaseHandler):
+    def post(self):
+        ''' POST a new stream to the server
+            Request:
+                {
+                    [required]
+                    "target_id": target_id,
+                    "files": {"file1_name": file1_bin_b64,
+                              "file2_name": file2_bin_b64,
+                              ...
+                              }
+                }
+
+            Reply:
+                {
+                    "stream_id": stream_id
+                }
+
+        '''
+        self.set_status(400)
+        content = json.loads(self.request.body.decode())
+        target_id = content['target_id']
+        target = Target(target_id, self.db)
+
+        files = content['files']
+        for filename in files:
+            if target.hget('engine') == 'openmm':
+                if filename != 'state.xml.gz.b64':
+                    return self.write(json.dumps({'error': 'bad_filename'}))
+
+        # TODO: ensure the WS we're POSTing to is up
+        try:
+            workservers = target.smembers('allowed_ws')
+        except Exception:
+            workservers = WorkServer.members(self.db)
+
+        # randomly pick from available workservers
+        picked_ws = WorkServer(random.choice(workservers), self.db)
+
+        ws_ip = picked_ws.hget('ip')
+        ws_http_port = picked_ws.hget('http_port')
+
+        body = {
+            'target_id': target_id,
+        }
+
+        body['stream_files'] = {}
+
+        for filename, filebin in files.items():
+            body['stream_files'][filename] = filebin
+
+        if ws.Target.exists(target_id, WorkServerDB[picked_ws.id]):
+            target_files = target.smembers('files')
+            for filename in target_files:
+                file_path = os.path.join('targets', target_id, filename)
+                with open(file_path, 'rb') as handle:
+                    body['target_files'][filename] = handle.read().decode()
+
+        client = tornado.httpclient.AsyncHTTPClient()
+        rep = yield client.fetch('https://'+ws_ip+':'+ws_http_port+'/streams',
+                                 method='POST', validate_cert=False)
+
+        self.set_status(rep.code)
+        return self.write(rep.body)
 
 
 class PostTargetHandler(BaseHandler):
@@ -232,27 +300,27 @@ class PostTargetHandler(BaseHandler):
 
         return self.write(json.dumps(response))
 
-    def get(self):
-        ''' PGI - Fetch details on a target'''
-        user = 'yutong'
-        response = []
-        targets = cc_redis.smembers(user+':targets')
-        for target_id in targets:
-            prop = {}
+    # def get(self):
+    #     ''' PGI - Fetch details on a target'''
+    #     user = 'yutong'
+    #     response = []
+    #     targets = cc_redis.smembers(user+':targets')
+    #     for target_id in targets:
+    #         prop = {}
 
-            stamp = datetime.datetime.fromtimestamp(float(cc_redis.hget(target_id,'date')))
-            prop['date'] = stamp.strftime('%m/%d/%Y, %H:%M:%S')
-            prop['description'] = cc_redis.hget(target_id,'description')
-            prop['frames'] = random.randint(0,200)
-            response.append(prop)
+    #         stamp = datetime.datetime.fromtimestamp(float(cc_redis.hget(target_id,'date')))
+    #         prop['date'] = stamp.strftime('%m/%d/%Y, %H:%M:%S')
+    #         prop['description'] = cc_redis.hget(target_id,'description')
+    #         prop['frames'] = random.randint(0,200)
+    #         response.append(prop)
 
-        return self.write(json.dumps(response,indent=4, separators=(',', ': ')))
+    #     return self.write(json.dumps(response,indent=4, separators=(',', ': ')))
 
-    def delete(self):
-        # delete all streams
+    # def delete(self):
+    #     # delete all streams
 
-        # delete the project
-        return
+    #     # delete the project
+    #     return
 
 class StreamHandler(tornado.web.RequestHandler):
     def post(self):
@@ -336,7 +404,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             #(r'/stream', StreamHandler),
             #(r'/job', JobHandler),
             (r'/register_ws', RegisterWSHandler),
-            (r'/targets/create', PostTargetHandler)
+            (r'/targets', PostTargetHandler)
             ])
 
     def shutdown(self, signal_number, stack_frame):

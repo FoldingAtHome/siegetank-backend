@@ -534,14 +534,18 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
         if ccs:
             for cc_name in ccs:
+
                 body = {
                     'name': ws_name,
                     'redis_port': redis_port,
                     'redis_pass': redis_pass,
                     'auth': ccs[cc_name]['auth']
                 }
-                rep = client.fetch(ccs[cc_name]['ip']+'/register_ws',
-                                   method='POST', body=json.dumps(body))
+
+                uri = 'https://'+ccs[cc_name]['ip']+ccs[cc_name]['http_port']\
+                      +'/register_ws'
+                rep = client.fetch(uri, method='POST', body=json.dumps(body))
+
                 assert rep.code == 200
 
         signal.signal(signal.SIGINT, self.shutdown)
