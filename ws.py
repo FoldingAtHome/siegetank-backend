@@ -533,6 +533,10 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                  ccs=None,
                  increment=600):
 
+        """ Initialize the WorkServer.
+
+        """
+
         self.db = common.init_redis(redis_port, redis_pass)
         if not os.path.exists('streams'):
             os.makedirs('streams')
@@ -550,7 +554,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                     'auth': ccs[cc_name]['auth']
                 }
 
-                uri = 'https://'+ccs[cc_name]['ip']+ccs[cc_name]['http_port']\
+                uri = 'https://'+ccs[cc_name]['ip']+':'+ccs[cc_name]['http_port']\
                       +'/register_ws'
                 rep = client.fetch(uri, method='POST', body=json.dumps(body))
                 if rep.code != 200:
@@ -632,7 +636,7 @@ def start():
                              ws_redis_pass, ext_http_port, ccs)
 
     ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
-        'certfile': 'ws.crt', 'keyfile': 'ws.key'})
+        'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
 
     ws_server.listen(int_http_port)
 

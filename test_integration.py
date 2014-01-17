@@ -44,10 +44,12 @@ class Test(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(Test, self).setUp()
-        self.cc.add_ws('mengsk', '127.0.0.1',
+        self.cc.add_ws('mengsk', 'mengsk.stanford.edu', '127.0.0.1',
                        self.ws_hport, self.ws_rport, None)
-        self.cc.listen(self.cc_hport, io_loop=self.io_loop)
-        self.ws.listen(self.ws_hport, io_loop=self.io_loop)
+        self.cc.listen(self.cc_hport, io_loop=self.io_loop, ssl_options={
+            'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
+        self.ws.listen(self.ws_hport, io_loop=self.io_loop, ssl_options={
+        'certfile': 'certs/cc.crt', 'keyfile': 'certs/cc.key'})
 
     def test_post_target_and_streams(self):
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)

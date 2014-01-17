@@ -1,12 +1,14 @@
 {
     "name": "firebat",
+    "domain": "firebat.stanford.edu",
+    "ip": "127.0.0.1",
     "redis_port": 4738,
     "redis_pass": "test_pass",
     "internal_http_port": 8959,
     "external_http_port": 8959,
     "ccs" : {
         "flash": {
-            "ip": "127.0.0.1",
+            "url": "flash.stanford.edu",
             "auth": "PROTOSS_IS_FOR_NOOBS"     
         },
         "boxer": {

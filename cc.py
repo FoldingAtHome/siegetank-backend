@@ -21,7 +21,7 @@ import ws
 import common
 
 # The command center manages several work servers in addition to managing 
-# the stats system for each work server. 
+# the stats system for each work server.
 
 # CC uses Antirez's redis extensively as NoSQL store mainly because of 
 # its blazing fast speed. Binary blobs such as states, systems, and 
@@ -40,7 +40,8 @@ import common
 
 class WorkServer(apollo.Entity):
     prefix = 'ws'
-    fields = {'ip': str,  # ip address
+    fields = {'url': str,  # http request url
+              'ip': str,  # ip address
               'http_port': int,  # ws http port
               'redis_port': int,  # ws redis port
               'redis_pass': str,  # ws password
@@ -115,7 +116,15 @@ class BaseHandler(tornado.web.RequestHandler):
 
 class RegisterWSHandler(BaseHandler):
     def put(self):
-        ''' Called by WS for registration '''
+        ''' Called by WS for registration
+        Request:
+            {
+                [required]
+                "name": unique_name_of_the_cc
+                "url": url_for_requests
+                "ip": 
+            }
+        '''
         content = json.loads(self.request.body.decode())
         auth = content['auth']
         if auth != self.application.cc_pass:
@@ -126,7 +135,7 @@ class RegisterWSHandler(BaseHandler):
         http_port = content['http_port']
         redis_port = content['redis_port']
         redis_pass = content['redis_pass']
-        self.application.add_ws(name, ip, http_port, redis_port, redis_pass)
+        self.application.add_ws(name, url, ip, http_port, redis_port, redis_pass)
         self.set_status(200)
 
 
@@ -407,8 +416,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             (r'/streams', PostStreamHandler)
             ])
 
-
-    def add_ws(self, name, ip, http_port, redis_port, redis_pass):
+    def add_ws(self, name, url, ip, http_port, redis_port, redis_pass):
         client = redis.Redis(host=ip, port=redis_port, password=redis_pass,
                              decode_responses=True)
         client.ping()
@@ -429,6 +437,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         print('shutting down command center...')
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
+
 
 def start():
     config_file = 'cc_conf'
