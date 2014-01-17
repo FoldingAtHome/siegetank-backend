@@ -44,8 +44,11 @@ def init_redis(redis_port, redis_pass=None):
 
     return redis_client
 
+
 class RedisMixin():
 
     def shutdown_redis(self):
         print('shutting down redis...')
         self.db.shutdown()
+        del self.db
+        #self.db.reset()

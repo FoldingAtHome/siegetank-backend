@@ -47,8 +47,6 @@ class WorkServer(apollo.Entity):
               'redis_pass': str,  # ws password
               }
 
-WorkServerDB = {}  # 'name' : redis_client
-
 
 class Target(apollo.Entity):
     prefix = 'target'
@@ -205,7 +203,7 @@ class PostStreamHandler(BaseHandler):
         for filename, filebin in files.items():
             body['stream_files'][filename] = filebin
 
-        if not ws.Target.exists(target_id, WorkServerDB[picked_ws.id]):
+        if not ws.Target.exists(target_id, self.application.WorkServerDB[picked_ws.id]):
             target_files = target.smembers('files')
             body['target_files'] = {}
             for filename in target_files:
@@ -223,6 +221,8 @@ class PostStreamHandler(BaseHandler):
         # client = tornado.httpclient.HTTPClient()
         # rep = client.fetch('https://'+str(ws_ip)+':'+str(ws_http_port)
         #                    +'/streams', method='POST', validate_cert=False)
+        client.close()
+
         self.set_status(rep.code)
         return self.write(rep.body)
 
@@ -374,45 +374,10 @@ class StreamHandler(tornado.web.RequestHandler):
         ''' PGI: Delete a particular stream - (Request Forwarded to WS) '''
         pass
 
-class JobHandler(tornado.web.RequestHandler):
-    def get(self):
-        ''' DI: Fetch a job from a random WS for the core
-            Returns system.xml, integrator.xml, token, ws:ip
-
-            notes: when popping off priority queue, need to make sure that the WS 
-            is still ALIVE. 
-
-            '''
-
-        # for a random target
-        target_id = random.choice()
-
-        # pick a random ws from the list of targets
-        client = random.choice(ws_clients)
-        pipe = client.pipeline()
-        pipe.zrevrange('target:'+target_id+':queue',0,0)
-        pipe.zremrangebyrank('target:'+target_id+':queue',-1,-1)
-        result = pipe.execute()
-        head = result[0]
-
-        if head:
-            stream_id = head[0]
-            client.set('expire:'+stream_id,0)
-            client.expire('expire:'+stream_id,5)
-            return self.write('Popped stream_id:' + stream_id)
-        else:
-            return self.write('No jobs available!')
-
-
-CC_WS_KEY = 'PROTOSS_IS_FOR_NOOBS'
-
-cc_redis = redis.Redis(host='localhost', port=6379)
-ws_redis_clients = {}
-
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
     def __init__(self, cc_name, redis_port, cc_pass=None):
-        print('Starting up Command Center ', cc_name)
+        print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
         self.db = common.init_redis(redis_port, cc_pass)
@@ -420,14 +385,14 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         if not os.path.exists('files'):
             os.makedirs('files')
         signal.signal(signal.SIGINT, self.shutdown)
+        signal.signal(signal.SIGTERM, self.shutdown)
         super(CommandCenter, self).__init__([
-            #(r'/target', TargetHandler),
-            #(r'/stream', StreamHandler),
-            #(r'/job', JobHandler),
             (r'/register_ws', RegisterWSHandler),
             (r'/targets', PostTargetHandler),
             (r'/streams', PostStreamHandler)
             ])
+
+        self.WorkServerDB = {}
 
     def add_ws(self, name, url, http_port, redis_port, redis_pass=None):
         client = redis.Redis(host=url, port=redis_port, password=redis_pass,
@@ -443,14 +408,19 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         ws.hset('http_port', http_port)
         ws.hset('redis_port', redis_port)
         ws.hset('redis_pass', redis_pass)
-        WorkServerDB[name] = client
+        self.WorkServerDB[name] = client
 
-    def shutdown(self, signal_number, stack_frame):
-        self.shutdown_redis()
+    def cleanup_ws_dbs(self):
+        for db in self.WorkServerDB:
+            del db
+
+    def shutdown(self, signal_number=None, stack_frame=None):
         print('shutting down command center...')
+        for db in self.WorkServerDB:
+            del db
+        self.shutdown_redis()
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
-
 
 def start():
     config_file = 'cc_conf'

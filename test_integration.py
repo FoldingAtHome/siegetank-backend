@@ -16,20 +16,6 @@ import base64
 import os
 import json
 
-
-class Handler1(tornado.web.RequestHandler):
-    def get(self):
-        self.write("One")
-
-
-class Handler2(tornado.web.RequestHandler):
-    @tornado.gen.coroutine
-    def get(self):
-        client = tornado.httpclient.AsyncHTTPClient()
-        response = yield client.fetch('http://localhost:8000/one')
-        self.write("%s plus Two" % response.body)
-
-
 class Test(tornado.testing.AsyncTestCase):
 
     @classmethod
@@ -77,14 +63,19 @@ class Test(tornado.testing.AsyncTestCase):
                      validate_cert=cc._is_domain(url))
         reply = self.wait()
         self.assertEqual(reply.code, 200)
+        client.close()
 
     @classmethod
-    def tearDown(cls):
+    def tearDownClass(cls):
         super(Test, cls).tearDownClass()
+        #cls.cc.cleanup_ws_dbs()
         cls.cc.db.flushdb()
-        cls.cc.shutdown_redis()
         cls.ws.db.flushdb()
-        cls.ws.shutdown_redis()
+        #cls.cc.shutdown_redis()
+        cls.cc.shutdown()
+        cls.ws.shutdown()
+        #cls.ws.shutdown_redis()
+
         folders = ['streams', 'targets']
         for folder in folders:
             if os.path.exists(folder):

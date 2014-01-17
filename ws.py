@@ -554,11 +554,13 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                     'auth': ccs[cc_name]['auth']
                 }
 
-                uri = 'https://'+ccs[cc_name]['ip']+':'+ccs[cc_name]['http_port']\
-                      +'/register_ws'
+                uri = 'https://'+ccs[cc_name]['ip']+':'+\
+                      +ccs[cc_name]['http_port'] + '/register_ws'
                 rep = client.fetch(uri, method='POST', body=json.dumps(body))
                 if rep.code != 200:
                     print('Warning: not connect to CC '+cc_name)
+
+        client.close()
 
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
@@ -570,9 +572,10 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/core/stop', CoreStopHandler),
         ])
 
+
     def shutdown(self, signal_number=None, stack_frame=None):
+        print('shutting down work server...')
         self.shutdown_redis()
-        print('shutting down tornado...')
         tornado.ioloop.IOLoop.instance().stop()
         sys.exit(0)
 
