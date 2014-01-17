@@ -572,13 +572,6 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/core/stop', CoreStopHandler),
         ])
 
-
-    def shutdown(self, signal_number=None, stack_frame=None):
-        print('shutting down work server...')
-        self.shutdown_redis()
-        tornado.ioloop.IOLoop.instance().stop()
-        sys.exit(0)
-
     def check_heartbeats(self):
         dead_streams = self.db.zrangebyscore('heartbeats', 0, time.time())
         if dead_streams:

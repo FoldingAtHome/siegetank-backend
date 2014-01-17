@@ -15,14 +15,15 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         redis_port = str(3828)
         self.increment = 3
         self.cc_auth = '5lik2j3l4'
-        self.cc = cc.CommandCenter('test_cc', redis_port, self.cc_auth)
+        self.cc = cc.CommandCenter('test_cc', redis_port, self.cc_auth,
+                                   targets_folder='cc_targets')
         super(TestCCBasics, self).setUpClass()
 
     @classmethod
     def tearDownClass(self):
         self.cc.db.flushdb()
         self.cc.shutdown_redis()
-        folders = ['targets']
+        folders = [self.cc.targets_folder]
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
@@ -58,7 +59,6 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         test_db.shutdown()
 
     def test_post_target(self):
-
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
                               for i in range(4))
 
@@ -78,9 +78,9 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
 
-        system_path = os.path.join('targets', target_id, 'system.xml.gz.b64')
+        system_path = os.path.join(self.cc.targets_folder, target_id, 'system.xml.gz.b64')
         self.assertEqual(open(system_path, 'rb').read().decode(), fb1)
-        intg_path = os.path.join('targets', target_id, 'integrator.xml.gz.b64')
+        intg_path = os.path.join(self.cc.targets_folder, target_id, 'integrator.xml.gz.b64')
         self.assertEqual(open(intg_path, 'rb').read().decode(), fb2)
         self.assertTrue(cc.Target.exists(target_id, self.cc.db))
         target = cc.Target(target_id, self.cc.db)

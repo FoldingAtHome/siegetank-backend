@@ -26,7 +26,8 @@ class Test(tornado.testing.AsyncTestCase):
         cls.ws_hport = 9028
         cls.cc_hport = 8342
         cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport)
-        cls.cc = cc.CommandCenter('goliath', redis_port=cls.cc_rport)
+        cls.cc = cc.CommandCenter('goliath', redis_port=cls.cc_rport,
+                                  targets_folder='cc_targets')
 
     def setUp(self):
         super(Test, self).setUp()
@@ -68,13 +69,10 @@ class Test(tornado.testing.AsyncTestCase):
     @classmethod
     def tearDownClass(cls):
         super(Test, cls).tearDownClass()
-        #cls.cc.cleanup_ws_dbs()
         cls.cc.db.flushdb()
         cls.ws.db.flushdb()
-        #cls.cc.shutdown_redis()
-        cls.cc.shutdown()
-        cls.ws.shutdown()
-        #cls.ws.shutdown_redis()
+        cls.cc.shutdown(kill=False)
+        cls.ws.shutdown(kill=False)
 
         folders = ['streams', 'targets']
         for folder in folders:

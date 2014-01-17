@@ -50,5 +50,13 @@ class RedisMixin():
     def shutdown_redis(self):
         print('shutting down redis...')
         self.db.shutdown()
-        del self.db
+        self.db.connection_pool.disconnect()
+        #del self.db
         #self.db.reset()
+
+    def shutdown(self, signal_number=None, stack_frame=None, kill=True):
+        print('shutting down server...')
+        self.shutdown_redis()
+        if kill:
+            tornado.ioloop.IOLoop.instance().stop()
+            sys.exit(0)

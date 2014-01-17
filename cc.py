@@ -67,43 +67,20 @@ apollo.relate(Target, 'workservers', {WorkServer})
 # PG Interface #
 ################
 
-# POST x.com/targets  - add a target
-# PUT x.com/target/update_stage -  change the stage of the target
-# PUT x.com/targets/delete  - delete a target and all associated streams
-# POST x.com/streams  - add a stream to a given target
-# PUT x.com/streams/delete  - delete a stream
-# GET x.com/targets/all  - retrieve a list of all targets
-# GET x.com/targets/  - retrieve info about a specific target
+# POST x.com/targets - add a target
+# PUT x.com/target/update_stage - change the stage of the target
+# PUT x.com/targets/delete - delete a target and all associated streams
+# GET x.com/targets - retrieve a list of all targets
+# GET x.com/targets/target_id - retrieve info about a specific target
+
+# POST x.com/streams - add a stream to a given target
+# PUT x.com/streams/delete - delete a stream
 
 ##################
 # Core Interface #
 ##################
 
 # POST x.com/jobs/job - get a stream to work on
-
-# WS Clean Disconnect:
-# -for each stream in 'ws:'+ws_id+':streams', find its target and remove the stream from priority queue
-# -srem ws_id from active_ws
-# -remove HASH KEY 'ws:'+ws_id
-
-# CC Initialization (assumes RDB or AOF file is present)
-# -figure out which ws are still active by looking through saved active_ws, and 'ws:'+id
-# -for each stream in streams, see if the ws_id it belongs to is alive using hash 'ws:'+ws_id
-
-# PG Interface
-# PUT x.com/targets 
-# DELETE x.com/targets/:target_id
-# GET x.com/targets/:target_id
-#   Returns a list of streams and the CC it's on. 
-
-# Core Interface
-# POST x.com/assign
-#   assign a stream on a particular WS to the core
-#   If successful:
-#       Return an HTTP Code 302 - with URL
-
-# WS Interface
-# POST x.com/streams/stop
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -203,11 +180,13 @@ class PostStreamHandler(BaseHandler):
         for filename, filebin in files.items():
             body['stream_files'][filename] = filebin
 
-        if not ws.Target.exists(target_id, self.application.WorkServerDB[picked_ws.id]):
+        if not ws.Target.exists(target_id,
+                                self.application.WorkServerDB[picked_ws.id]):
             target_files = target.smembers('files')
             body['target_files'] = {}
             for filename in target_files:
-                file_path = os.path.join('targets', target_id, filename)
+                file_path = os.path.join(self.application.targets_folder,
+                                         target_id, filename)
                 with open(file_path, 'rb') as handle:
                     body['target_files'][filename] = handle.read().decode()
 
@@ -306,7 +285,7 @@ class PostTargetHandler(BaseHandler):
             for ws_name in content['allowed_ws']:
                 target.sadd('allowed_ws', ws_name)
 
-        target_dir = os.path.join('targets', target_id)
+        target_dir = os.path.join(self.application.targets_folder, target_id)
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)
 
@@ -376,12 +355,13 @@ class StreamHandler(tornado.web.RequestHandler):
 
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
-    def __init__(self, cc_name, redis_port, cc_pass=None):
+    def __init__(self, cc_name, redis_port, cc_pass=None, targets_folder='targets'):
         print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
         self.db = common.init_redis(redis_port, cc_pass)
         self.ws_dbs = {}
+        self.targets_folder = targets_folder
         if not os.path.exists('files'):
             os.makedirs('files')
         signal.signal(signal.SIGINT, self.shutdown)
@@ -414,13 +394,10 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         for db in self.WorkServerDB:
             del db
 
-    def shutdown(self, signal_number=None, stack_frame=None):
-        print('shutting down command center...')
-        for db in self.WorkServerDB:
-            del db
-        self.shutdown_redis()
-        tornado.ioloop.IOLoop.instance().stop()
-        sys.exit(0)
+    def shutdown(self, **kwargs):
+        super(CommandCenter, self).shutdown(**kwargs)
+        for db_name, db_client in self.WorkServerDB.items():
+            db_client.connection_pool.disconnect()
 
 def start():
     config_file = 'cc_conf'
