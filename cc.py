@@ -16,6 +16,7 @@ import apollo
 import time
 import random
 import ws
+import ipaddress
 
 
 import common
@@ -30,18 +31,17 @@ import common
 # For more information on redis memory usage, visit:
 # http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
 
-# On average, we expect the load of the CC to be significantly lower 
-# than that of the WS. If each stream takes about 4 hours until 
-# termination, then each stream makes about 6 requests per day. 
-# A single CC is expected to handle 500,000 streams. This is 
-# about 3 million requests per day - translating to about 35 requests 
-# per second. Each request needs to be handled by the CC in 30 ms. 
+# On average, we expect the load of the CC to be significantly lower
+# than that of the WS. If each stream takes about 4 hours until
+# termination, then each stream makes about 6 requests per day.
+# A single CC is expected to handle 500,000 streams. This is
+# about 3 million requests per day - translating to about 35 requests
+# per second. Each request needs to be handled by the CC in 30 ms.
 
 
 class WorkServer(apollo.Entity):
     prefix = 'ws'
-    fields = {'url': str,  # http request url
-              'ip': str,  # ip address
+    fields = {'url': str,  # http request url (verify based on if IP or not)
               'http_port': int,  # ws http port
               'redis_port': int,  # ws redis port
               'redis_pass': str,  # ws password
@@ -119,10 +119,16 @@ class RegisterWSHandler(BaseHandler):
         ''' Called by WS for registration
         Request:
             {
-                [required]
-                "name": unique_name_of_the_cc
-                "url": url_for_requests
-                "ip": 
+                'name': unique_name_of_the_cc
+                'url': url for requests (IP or DNS)
+                'http_port': http port
+                'redis_pass': redis password
+                'redis_port': redis port
+            }
+
+        Response:
+            {
+                200 - OK
             }
         '''
         content = json.loads(self.request.body.decode())
@@ -130,13 +136,22 @@ class RegisterWSHandler(BaseHandler):
         if auth != self.application.cc_pass:
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
-        ip = self.request.remote_ip
         name = content['name']
+        url = content['url']
         http_port = content['http_port']
         redis_port = content['redis_port']
         redis_pass = content['redis_pass']
-        self.application.add_ws(name, url, ip, http_port, redis_port, redis_pass)
+        self.application.add_ws(name, url, http_port, redis_port, redis_pass)
         self.set_status(200)
+
+
+def _is_domain(url):
+    ''' returns True if url is a domain '''
+    try:
+        ipaddress.ip_address(url)
+        return False
+    except Exception:
+        return True
 
 
 class PostStreamHandler(BaseHandler):
@@ -178,7 +193,7 @@ class PostStreamHandler(BaseHandler):
         ws_id = random.sample(workservers, 1)[0]
         picked_ws = WorkServer(ws_id, self.db)
 
-        ws_ip = picked_ws.hget('ip')
+        ws_url = picked_ws.hget('url')
         ws_http_port = picked_ws.hget('http_port')
 
         body = {
@@ -199,13 +214,11 @@ class PostStreamHandler(BaseHandler):
                     body['target_files'][filename] = handle.read().decode()
 
         client = tornado.httpclient.AsyncHTTPClient()
-        print('fetching from: https://'+str(ws_ip)+':'+str(ws_http_port)
-              +'/streams')
-
-        #TODO: HTTPS? Validate Certs?
-
-        rep = yield client.fetch('http://'+str(ws_ip)+':'+str(ws_http_port)
-                            +'/streams', method='POST', body=json.dumps(body))
+        rep = yield client.fetch('https://'+str(ws_url)+':'+str(ws_http_port)
+                                 +'/streams',
+                                 method='POST',
+                                 body=json.dumps(body),
+                                 validate_cert=_is_domain(ws_url))
 
         # client = tornado.httpclient.HTTPClient()
         # rep = client.fetch('https://'+str(ws_ip)+':'+str(ws_http_port)
@@ -416,8 +429,8 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             (r'/streams', PostStreamHandler)
             ])
 
-    def add_ws(self, name, url, ip, http_port, redis_port, redis_pass):
-        client = redis.Redis(host=ip, port=redis_port, password=redis_pass,
+    def add_ws(self, name, url, http_port, redis_port, redis_pass=None):
+        client = redis.Redis(host=url, port=redis_port, password=redis_pass,
                              decode_responses=True)
         client.ping()
 
@@ -426,7 +439,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         else:
             ws = WorkServer(name, self.db)
 
-        ws.hset('ip', ip)
+        ws.hset('url', url)
         ws.hset('http_port', http_port)
         ws.hset('redis_port', redis_port)
         ws.hset('redis_pass', redis_pass)

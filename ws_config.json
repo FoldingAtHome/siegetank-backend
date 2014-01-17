@@ -1,7 +1,6 @@
 {
     "name": "firebat",
-    "domain": "firebat.stanford.edu",
-    "ip": "127.0.0.1",
+    "url": "firebat.stanford.edu",
     "redis_port": 4738,
     "redis_pass": "test_pass",
     "internal_http_port": 8959,

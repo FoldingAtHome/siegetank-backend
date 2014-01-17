@@ -1,96 +1,99 @@
+import tornado.testing
 import cc
-import ws
-import hashlib
-import redis
-import tornado.ioloop
-from tornado.testing import AsyncHTTPTestCase
-import unittest
-import subprocess
-import json
-import time
-import uuid
-import base64
 import os
-import random
-import struct
-import requests
 import shutil
-import cStringIO
-import tarfile
+import unittest
 import sys
+import common
+import json
+import base64
 
-class TestWSRegistration(AsyncHTTPTestCase):
+
+class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
-        self.cc         = cc.CommandCenter('eisley','2398')
-        self.auth_token = hashlib.md5(str(uuid.uuid4())).hexdigest()
-        self.registrar  = tornado.web.Application([
-            (r"/register_ws",cc.RegisterWSHandler,
-            dict(cc=self.cc, cc_auth_pass=self.auth_token))])
-        super(AsyncHTTPTestCase, self).setUpClass()
+        redis_port = str(3828)
+        self.increment = 3
+        self.cc_auth = '5lik2j3l4'
+        self.cc = cc.CommandCenter('test_cc', redis_port, self.cc_auth)
+        super(TestCCBasics, self).setUpClass()
 
     @classmethod
     def tearDownClass(self):
+        self.cc.db.flushdb()
         self.cc.shutdown_redis()
-        super(AsyncHTTPTestCase, self).tearDownClass()
+        folders = ['targets']
+        for folder in folders:
+            if os.path.exists(folder):
+                shutil.rmtree(folder)
+        super(TestCCBasics, self).tearDownClass()
 
-    def get_app(self):
-        return self.registrar
+    def test_register_cc(self):
 
-    def test_registration(self):
-        ws_name = 'firebat'
-        ws_http_port = '80'
-        ws_redis_port = '27390'
-        ws_redis_pass = hashlib.md5(str(uuid.uuid4())).hexdigest()
-        workserver = ws.WorkServer(ws_name,ws_redis_port,ws_redis_pass)
-        test_body = json.dumps({
-            'name'       : ws_name, 
-            'http_port'  : ws_http_port, 
-            'redis_port' : ws_redis_port, 
-            'redis_pass' : ws_redis_pass, 
-            'auth_pass'  : self.auth_token
-            })
-        resp = self.fetch('/register_ws',method='POST',body=test_body)
-        self.assertEqual(resp.code,200)
-        self.assertTrue(self.cc.db.sismember('active_ws','firebat'))
-        self.assertTrue(
-            self.cc.db.hget('ws:'+ws_name,':http_port') == ws_http_port and
-            self.cc.db.hget('ws:'+ws_name,':redis_port') == ws_redis_port and
-            self.cc.db.hget('ws:'+ws_name,':redis_pass') == ws_redis_pass)
-        test_r_message = 'A MESSAGE'
-        self.cc.ws_dbs[ws_name].set('Test',test_r_message   )
-        self.assertEqual(workserver.db.get('Test'),test_r_message)
-        workserver.shutdown_redis()
-        return ws_name
+        ws_name = 'ramanujan'
+        ext_http_port = 5829
+        ws_redis_port = 1234
+        ws_redis_pass = 'blackmill'
 
-class TestCCMethods(AsyncHTTPTestCase):
-    @classmethod
-    def post(self):
-        self.cc         = cc.CommandCenter('hoth','2438')
-        self.auth_token = hashlib.md5(str(uuid.uuid4())).hexdigest()
-        self.registrar  = tornado.web.Application([
-        super(AsyncHTTPTestCase, self).setUpClass()
+        test_db = common.init_redis(ws_redis_port, ws_redis_pass)
+        test_db.ping()
 
-    @classmethod
-    def tearDownClass(self):
-        self.cc.shutdown_redis()
-        super(AsyncHTTPTestCase, self).tearDownClass()
+        body = {'name': ws_name,
+                'url': '127.0.0.1',
+                'http_port': ext_http_port,
+                'redis_port': ws_redis_port,
+                'redis_pass': ws_redis_pass,
+                'auth': self.cc_auth
+                }
+
+        reply = self.fetch('/register_ws', method='PUT', body=json.dumps(body))
+        self.assertEqual(reply.code, 200)
+
+        ws = cc.WorkServer(ws_name, self.cc.db)
+        self.assertEqual(ws.hget('url'), '127.0.0.1')
+        self.assertEqual(ws.hget('http_port'), ext_http_port)
+        self.assertEqual(ws.hget('redis_port'), ws_redis_port)
+        self.assertEqual(ws.hget('redis_pass'), ws_redis_pass)
+
+        test_db.shutdown()
+
+    def test_post_target(self):
+
+        fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
+                              for i in range(4))
+
+        description = "Diwakar and John's top secret project"
+
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
+            }
+
+        reply = self.fetch('/targets', method='POST',
+                           body=json.dumps(body))
+        print(reply.body.decode())
+        self.assertEqual(reply.code, 200)
+        target_id = json.loads(reply.body.decode())['target_id']
+
+        system_path = os.path.join('targets', target_id, 'system.xml.gz.b64')
+        self.assertEqual(open(system_path, 'rb').read().decode(), fb1)
+        intg_path = os.path.join('targets', target_id, 'integrator.xml.gz.b64')
+        self.assertEqual(open(intg_path, 'rb').read().decode(), fb2)
+        self.assertTrue(cc.Target.exists(target_id, self.cc.db))
+        target = cc.Target(target_id, self.cc.db)
+        self.assertEqual(target.hget('description'), description)
+        self.assertEqual(target.hget('steps_per_frame'), 50000)
+        self.assertEqual(target.hget('stage'), 'disabled')
+        self.assertEqual(target.hget('engine'), 'openmm')
+        self.assertEqual(target.smembers('engine_versions'), {'6.0'})
+        self.assertEqual(target.smembers('files'), {'system.xml.gz.b64',
+                                                    'integrator.xml.gz.b64'})
 
     def get_app(self):
         return self.cc
-
-    def test_post_target(self):
-        async_client = tornado.tornado.httpclient.AsyncHTTPClient()
-        resp = self.fetch(
-
-class TestStream(AsyncHTTPTestCase):
-    ''' Test and see if we can send a stream to the CC, which then gets
-        routed to the WS. '''
-    @classmethod
-    def setUpClass(self):
-        self.cc     = cc.CommandCenter()
-
-
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

@@ -44,12 +44,11 @@ class Test(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(Test, self).setUp()
-        self.cc.add_ws('mengsk', 'mengsk.stanford.edu', '127.0.0.1',
-                       self.ws_hport, self.ws_rport, None)
+        self.cc.add_ws('mengsk', '127.0.0.1', self.ws_hport, self.ws_rport)
         self.cc.listen(self.cc_hport, io_loop=self.io_loop, ssl_options={
             'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
         self.ws.listen(self.ws_hport, io_loop=self.io_loop, ssl_options={
-        'certfile': 'certs/cc.crt', 'keyfile': 'certs/cc.key'})
+            'certfile': 'certs/cc.crt', 'keyfile': 'certs/cc.key'})
 
     def test_post_target_and_streams(self):
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
@@ -63,16 +62,19 @@ class Test(tornado.testing.AsyncTestCase):
             'engine': 'openmm',
             'engine_versions': ['6.0'],
             }
-        uri = 'http://127.0.0.1:'+str(self.cc_hport)+'/targets'
-        client.fetch(uri, self.stop, method='POST', body=json.dumps(body))
+        url = '127.0.0.1'
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=cc._is_domain(url))
         reply = self.wait()
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
         body = {'target_id': target_id,
                 'files': {"state.xml.gz.b64": fb3}
                 }
-        uri = 'http://127.0.0.1:'+str(self.cc_hport)+'/streams'
-        client.fetch(uri, self.stop, method='POST', body=json.dumps(body))
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=cc._is_domain(url))
         reply = self.wait()
         self.assertEqual(reply.code, 200)
 

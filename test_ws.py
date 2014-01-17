@@ -1,487 +1,407 @@
+import tornado.testing
 import ws
-import hashlib
-import redis
-import tornado.ioloop
-from tornado.testing import AsyncHTTPTestCase
+
 import unittest
-import subprocess
+import os
+import shutil
+import sys
+import uuid
 import json
 import time
-import uuid
 import base64
-import os
-import random
-import struct
-import requests
-import shutil
-import io
-import tarfile
-import signal
-import sys
-import common
+from os.path import isfile
 
-def _tar_strings(strings, names):
-    ''' Returns a io'd tar file of strings with names in names '''
-    assert len(strings) == len(names)
 
-    tar_outfile = io.BytesIO()
-    with tarfile.open(mode='w', fileobj=tar_outfile) as tarball:
-        for string, name in zip(strings,names):
-            frame_binary = string
-            # binary string
-            frame_string = io.BytesIO()
-            frame_string.write(frame_binary)
-            frame_string.seek(0)
-            info = tarfile.TarInfo(name=name)
-            info.size=len(frame_binary)
-            # tarfile as a string
-            tarball.addfile(tarinfo=info, fileobj=frame_string)
-    return tar_outfile
-
-class WSInitTestCase(AsyncHTTPTestCase):
+class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
         redis_port = str(3828)
         self.increment = 3
-        cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
-        self.ws = ws.WorkServer(
-            'test_server',redis_port,None,[cc],self.increment)
-        self.redis_client = self.ws.db
-        self._folders = ['streams','files']
-        super(AsyncHTTPTestCase, self).setUpClass()
+        self.ws = ws.WorkServer('test_server', redis_port, None,
+                                23847, None, self.increment)
+        super(TestStreamMethods, self).setUpClass()
 
     @classmethod
     def tearDownClass(self):
+        self.ws.db.flushdb()
         self.ws.shutdown_redis()
-        for folder in self._folders:
+        folders = ['streams', 'targets']
+        for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
-        super(AsyncHTTPTestCase, self).tearDownClass()
+        super(TestStreamMethods, self).tearDownClass()
 
     def get_app(self):
         return self.ws
-
-    def test_init_stream(self):
-        active_streams = self.redis_client.exists('active_streams')
-        active_stream_ids = self.redis_client.keys('active_stream:*')
-        shared_tokens = self.redis_client.keys('shared_token:*')
-
-        self.assertFalse(active_streams)
-        self.assertFalse(active_stream_ids)
-        self.assertFalse(shared_tokens)
-
-        self.assertTrue(self.redis_client.sismember('ccs','test_cc'))
-        self.assertEqual(self.redis_client.hget('cc:test_cc','ip'),
-                         '127.0.0.1')
-        self.assertEqual(self.redis_client.hget('cc:test_cc','http_port'),
-                         '999')
-
-class WSHandlerTestCase(AsyncHTTPTestCase):
-    @classmethod
-    def setUpClass(self):
-        redis_port = str(3827)
-        self.increment = 3
-        cc = ('test_cc','127.0.0.1','999','PROTOSS_IS_FOR_NOOB')
-        self.ws = ws.WorkServer(
-            'test_server',redis_port,None,[cc],self.increment)
-        self.redis_client = self.ws.db
-        self._folders = ['streams','files']
-        super(AsyncHTTPTestCase, self).setUpClass()
-
-    @classmethod
-    def tearDownClass(self):
-        ''' Destroy the server '''
-        self.ws.shutdown_redis()
-        for folder in self._folders:
-            if os.path.exists(folder):
-                shutil.rmtree(folder)
-        super(AsyncHTTPTestCase, self).tearDownClass()
-
-    def get_app(self):
-        return self.ws
-
-    '''
-    def test_add_stream(self):
-        # Add a stream
-        system_bin      = str(uuid.uuid4()).encode()
-        state_bin       = str(uuid.uuid4()).encode()
-        integrator_bin  = str(uuid.uuid4()).encode()
-        files = {
-            'state_bin' : state_bin,
-            'system_bin' : system_bin,
-            'integrator_bin' : integrator_bin
-        }
-        prep = requests.Request('POST','http://myurl',files=files).prepare()
-        resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
-        self.assertEqual(resp.code, 200)
-        stream_id = resp.body.decode()
-        return stream_id, system_bin, state_bin, integrator_bin
-
-    def test_assign_stream(self):
-        stream_id, system_bin, state_bin, integrator_bin = \
-            self.test_add_stream()
-        token_id = str(uuid.uuid4())
-
-        print('TOKEN ID:', token_id,type(token_id))
-
-        active_stream = ws.ActiveStream.create(stream_id,self.redis_client)
-        active_stream['shared_token'] = token_id
-        active_stream['donor'] = 'proteneer'
-        active_stream['start_time'] = float(self.redis_client.time()[0])
-        active_stream['steps'] = 0
-
-        # set a really long timer to make sure this doesn't die half way
-        ws_time = common.sum_time(self.redis_client.time())
-        self.redis_client.zadd('heartbeats',stream_id,ws_time+600)
-        return stream_id, token_id, system_bin, state_bin, integrator_bin
-
-    def test_get_frame(self):
-        res = self.test_assign_stream()
-        stream_id      = res[0]
-        token_id       = res[1]
-        system_bin     = res[2]
-        state_bin      = res[3]
-        integrator_bin = res[4]
-
-        headers  = {'shared_token' : token_id}
-        # Test GET a job
-        response = self.fetch('/frame', headers=headers, method='GET') 
-        with tarfile.open(mode='r', fileobj=
-                          io.StringIO(response.body)) as tarball:
-            for member in tarball.getmembers():
-                if member.name == 'system.xml.gz':
-                    self.assertEqual(tarball.extractfile(member).read(),
-                                     system_bin)
-                if member.name == 'state.xml.gz':
-                    self.assertEqual(tarball.extractfile(member).read(),
-                                     state_bin)
-                if member.name == 'integrator.xml.gz':
-                    self.assertEqual(tarball.extractfile(member).read(),
-                                     integrator_bin)
-   
-    def test_post_frame(self):
-        res            = self.test_assign_stream()
-        stream_id      = res[0]
-        token_id       = res[1]
-        headers        = {'shared_token' : token_id}
-
-        # Test POST a single frame
-        frame_binary1 = os.urandom(1024)
-        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 200)
-        self.assertEqual(self.redis_client.hget('stream:'+stream_id,
-                                                'frames'),str(0))
-        self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
-                                                'buffer_frames'),str(1))
-        with open(os.path.join('streams',stream_id,'buffer.xtc'), 'rb') as f:
-            self.assertEqual(f.read(),frame_binary1)
-        # Test sending a single frame with a state file
-        frame_binary2 = os.urandom(1024)
-        state_binary = os.urandom(2048)
-        tar_out = _tar_strings([frame_binary2, state_binary],
-                               ['frame.xtc','state.xml.gz'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 200)
-        self.assertEqual(self.redis_client.hget('stream:'+stream_id,
-                                                'frames'),str(2))
-        self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
-                                                'buffer_frames'),str(0))
-        stream_dir = os.path.join('streams',stream_id)
-        if os.path.exists(os.path.join(stream_dir,'buffer.xtc')):
-            with open(os.path.join('streams',stream_id,'buffer.xtc'), 
-                                   'rb') as f:
-                if len(f.read()):
-                    raise Exception('Bad buffer, not empty')
-        with open(os.path.join(stream_dir,'frames.xtc'), 'rb') as f:
-            self.assertEqual(f.read(),frame_binary1+frame_binary2)
-        if not os.path.exists(os.path.join(stream_dir,'state.xml.gz')):
-            raise Exception('Checkpoint state file missing!')
-
-    def test_post_bad_frame(self):
-        # Test POSTing an error 
-        res = self.test_assign_stream()
-        stream_id = res[0]
-        token_id  = res[1]
-        headers   = {'shared_token' : token_id,
-                     'error_code'   : 'BadState'}
-        resp = self.fetch('/frame', headers=headers, method='POST', body='')
-        self.assertEqual(resp.code, 400)
-        # Make sure we can no longer POST to this stream
-        headers = {'shared_token' : token_id}
-        frame_binary1 = os.urandom(1024)
-        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
-        resp = self.fetch('/frame', headers=headers, 
-                          method='POST', body=tar_out.getvalue())
-        rc = self.redis_client
-        self.assertFalse(rc.exists('shared_token:'+token_id+':active_stream'))
-        self.assertFalse(rc.sismember('active_streams',stream_id))
-        self.assertFalse(rc.exists('active_stream:'+stream_id))
-        self.assertEqual(rc.hget('stream:'+stream_id,'error_count'),str(1))
-    
-    def test_disable_stream(self):
-        res = self.test_assign_stream()
-        stream_id = res[0]
-        token_id  = res[1]
-        headers   = {'shared_token' : token_id}
-
-        # Test we can't POST if stream is disabled
-        self.redis_client.hset('stream:'+stream_id,'status','DISABLED')
-        frame_binary1 = os.urandom(1024)
-        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 400)
-        self.redis_client.hset('stream:'+stream_id,'status','OK')
-        frame_binary1 = os.urandom(1024)
-        tar_out = _tar_strings([frame_binary1],['frame.xtc'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 200)
-
-    def test_heartbeat(self):
-        token_id = str(uuid.uuid4())
-        stream_id = str(uuid.uuid4())
-        self.redis_client.set('shared_token:'+token_id+':active_stream', stream_id)
-
-        # test sending request to uri: /heartbeat extends the expiration time
-        for iteration in range(10):
-            response = self.fetch('/heartbeat', method='POST',
-                                body=json.dumps({'shared_token' : token_id}))
-            hb = self.redis_client.zscore('heartbeats',stream_id)
-            ws_start_time = common.sum_time(self.redis_client.time())
-            self.assertAlmostEqual(ws_start_time+self.increment, hb, places=1)
-        # test expirations
-        response = self.fetch('/heartbeat', method='POST',
-                    body=json.dumps({'shared_token' : token_id}))
-        self.redis_client.sadd('active_streams',stream_id)
-        self.redis_client.hset('active_stream:'+stream_id, 
-                               'shared_token', token_id)
-        self.assertTrue(
-            self.redis_client.sismember('active_streams',stream_id) and
-            self.redis_client.exists('active_stream:'+stream_id) and 
-            self.redis_client.exists('shared_token:'+token_id+':active_stream'))
-        time.sleep(self.increment+1)
-        self.ws.check_heartbeats() 
-        self.assertFalse(
-            self.redis_client.sismember('active_streams',stream_id) and
-            self.redis_client.exists('active_stream:'+stream_id) and 
-            self.redis_client.exists('shared_token:'+token_id+':active_stream'))
-    '''
-
 
     def test_post_stream(self):
-        system_bin     = 'system.xml.gz'.encode()
-        state_bin      = 'state.xml.gz'.encode()
-        integrator_bin = 'integrator.xml.gz'.encode()
-        system_hash = hashlib.md5(system_bin).hexdigest()
-        integrator_hash = hashlib.md5(integrator_bin).hexdigest()
+        target_id = str(uuid.uuid4())
+        fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
+        fb1, fb2, fb3, fb4 = (str(uuid.uuid4()) for i in range(4))
 
-        # Test send binaries of system.xml and integrator
-        files = {
-            'state_bin' : state_bin,
-            'system_bin' : system_bin,
-            'integrator_bin' : integrator_bin
-        }
-        prep = requests.Request('POST','http://myurl',files=files).prepare()
-        resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
-        self.assertEqual(resp.code, 200)
-        stream_id1 = resp.body.decode()
-        self.assertTrue(
-            self.redis_client.sismember('file_hashes',system_hash) and 
-            self.redis_client.sismember('file_hashes',integrator_hash) and
-            os.path.exists(os.path.join('files',system_hash)) and
-            os.path.exists(os.path.join('files',integrator_hash)) and 
-            os.path.exists(os.path.join('streams',
-                                         stream_id1,'state.xml.gz')))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3, fn4: fb4}
+                }
 
-        # Test send hashes of existing files
-        files = { 
-            'state_bin' : state_bin,
-            'system_hash' : system_hash,
-            'integrator_hash' : integrator_hash
-        }
-        prep = requests.Request('POST','http://url',files=files).prepare()
-        resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
-        stream_id2 = resp.body.decode()
-        self.assertEqual(resp.code, 200)
-        server_streams = self.redis_client.smembers('streams')
-        self.assertTrue(stream_id1 in server_streams)
-        self.assertTrue(stream_id2 in server_streams)
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream_id = json.loads(response.body.decode())['stream_id']
 
-        # Test send one hash one bin
-        files = { 
-            'state_bin' : state_bin,
-            'system_hash' : system_hash,
-            'integrator_bin' : integrator_bin
-        }
-        prep = requests.Request('POST','http://myurl',files=files).prepare()
-        resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
-        stream_id3 = resp.body.decode()
-        self.assertEqual(resp.code, 200)
-        server_streams = self.redis_client.smembers('streams')
-        self.assertTrue(stream_id1 in server_streams)
-        self.assertTrue(stream_id2 in server_streams)
-        self.assertTrue(stream_id3 in server_streams)
+        self.assertTrue(isfile(os.path.join('targets', target_id, fn1)))
+        self.assertTrue(isfile(os.path.join('targets', target_id, fn2)))
+        self.assertTrue(isfile(os.path.join('streams', stream_id, fn3)))
+        self.assertTrue(isfile(os.path.join('streams', stream_id, fn4)))
 
-        # Verify integrity of file
-        self.assertTrue(
-            self.redis_client.sismember('file_hashes',system_hash) and 
-            self.redis_client.sismember('file_hashes',integrator_hash))
+        target = ws.Target(target_id, self.ws.db)
+        self.assertFalse(target.zscore('queue', stream_id) is None)
+        self.assertTrue(ws.Stream.exists(stream_id, self.ws.db))
+        self.assertTrue(ws.Target.exists(target_id, self.ws.db))
+        self.assertEqual(ws.Stream(stream_id, self.ws.db).hget('target'),
+                         target_id)
+        self.assertSetEqual(
+            ws.Target(target_id, self.ws.db).smembers('streams'), {stream_id})
+        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('files'),
+                         {fn1, fn2})
+        self.assertEqual(ws.Stream(stream_id, self.ws.db).smembers('files'),
+                         {fn3, fn4})
 
-        system_bin_read = open(os.path.join('files',system_hash),'rb').read()
-        integ_bin_read = open(os.path.join('files',integrator_hash),'rb').read()
-        self.assertEqual(system_bin_read, system_bin)
-        self.assertEqual(integ_bin_read, integrator_bin)
+        # post a second stream
 
-        stream_ids = [stream_id1, stream_id2, stream_id3]
-        # verify redis entries
-        for stream in stream_ids:
-            frame_count = self.redis_client.hget('stream:'+stream, 'frames')
-            status = self.redis_client.hget('stream:'+stream, 'status')
-            test_system_hash = self.redis_client.hget('stream:'+stream,
-                                                 'system_hash')
-            test_integrator_hash = self.redis_client.hget('stream:'+stream,
-                                                 'integrator_hash')
-            self.assertEqual(status,'OK')
-            self.assertEqual(frame_count,'0')
-            self.assertEqual(system_hash, test_system_hash)
-            self.assertEqual(integrator_hash, test_integrator_hash)
+        fn5, fb5 = (str(uuid.uuid4()) for i in range(2))
 
-        for stream in stream_ids:
-            state_bin_read = open(os.path.join('streams',stream,
-                                  'state.xml.gz'),'rb').read()
-            self.assertEqual(state_bin_read, state_bin)
-        
-        for stream in stream_ids:
-            shutil.rmtree(os.path.join('streams',stream))
-        os.remove(os.path.join('files',system_hash))
-        os.remove(os.path.join('files',integrator_hash))
+        body = {'target_id': target_id,
+                'stream_files': {fn5: fb5}
+                }
 
-    def test_post_bad_stream(self):
-        system_bin     = 'system.xml.gz'
-        state_bin      = 'state.xml.gz'
-        integrator_bin = 'integrator.xml.gz'
-        system_hash = hashlib.md5(system_bin).hexdigest()
-        integrator_hash = hashlib.md5(integrator_bin).hexdigest()
-        # Missing integrator
-        files = { 
-            'state_bin' : state_bin,
-            'system_hash' : system_hash,
-        }
-        prep = requests.Request('POST','http://myurl',files=files).prepare()
-        resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream_id2 = json.loads(response.body.decode())['stream_id']
 
-        self.assertEqual(resp.code, 400)
-
-        # Missing state
-        files = { 
-            'system_hash' : system_hash,
-            'integrator_bin' : integrator_bin
-        }
-        prep = requests.Request('POST','http://myurl',files=files).prepare()
-        resp = self.fetch('/stream', method='POST', headers=prep.headers,
-                          body=prep.body)
-        self.assertEqual(resp.code, 400)
-
-    '''
-
-    def assertEqualHash(self, string1, string2):
-        self.assertEqual(hashlib.md5(string1).hexdigest(),
-                         hashlib.md5(string2).hexdigest())
-    
-    def test_post_frames_get_stream(self):
-        res            = self.test_assign_stream()
-        stream_id      = res[0]
-        token_id       = res[1]
-        headers        = {'shared_token' : token_id}
-        # GET a checkpoint.xml
-        resp = self.fetch('/frame', headers=headers, method='GET')
-        self.assertEqual(resp.code, 200)
-        # POST 124 frames and 2 checkpoints, 
-        # NOTE: ONE-INDEXED, frame[0] not used for anything
-        frame_binaries = [os.urandom(1024) for i in range(125)]
-        chkpt_binary   = [os.urandom(2048) for i in range(2)]
-        # send frames 1-49, note that 0th frame is not used
-        for frame_binary in frame_binaries[1:50]:
-            tar_out = _tar_strings([frame_binary], ['frame.xtc'])
-            resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-            self.assertEqual(resp.code, 200)
-        # send a frame with a checkpoint
-        tar_out = _tar_strings([frame_binaries[50],chkpt_binary[0]], 
-                               ['frame.xtc', 'state.xml.gz'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 200)
-        # send frames 51-99
-        for frame_binary in frame_binaries[51:100]:
-            tar_out = _tar_strings([frame_binary], ['frame.xtc'])
-            resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-            self.assertEqual(resp.code, 200)
-        # send a frame with a checkpoint
-        tar_out = _tar_strings([frame_binaries[100],chkpt_binary[1]], 
-                               ['frame.xtc', 'state.xml.gz'])
-        resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-        self.assertEqual(resp.code, 200)
-        # send the remaining frames
-        for frame_binary in frame_binaries[101:]:
-            tar_out = _tar_strings([frame_binary], ['frame.xtc'])
-            resp = self.fetch('/frame', headers=headers, 
-                    method='POST', body=tar_out.getvalue())
-            self.assertEqual(resp.code, 200)
-        true_frames = ''.join(frame_binaries[1:101])
-        buffer_frames = ''.join(frame_binaries[101:])
-        self.assertEqual(self.redis_client.hget('stream:'+stream_id, 
-                        'frames'), str(100))
-        self.assertEqual(self.redis_client.hget('active_stream:'+stream_id,
-                        'buffer_frames'), str(24))
-        # make sure the frames.xtc and buffer.xtc
-        with open(os.path.join('streams',stream_id,'frames.xtc')) as frames:
-            self.assertEqualHash(true_frames, frames.read())
-        with open(os.path.join('streams',stream_id,'buffer.xtc')) as buffers:
-            self.assertEqualHash(buffer_frames, buffers.read())
-
-        # finally we download the stream
-        dtoken = str(uuid.uuid4())
-        self.redis_client.set('download_token:'+dtoken+':stream', stream_id)
-        headers = {
-            'download_token' : dtoken
-        }
-        resp = self.fetch('/stream', headers=headers, method='GET')
-        self.assertEqualHash(true_frames, resp.body)
+        self.assertTrue(stream_id != stream_id2)
+        self.assertTrue(isfile(os.path.join('streams', stream_id2, fn5)))
+        self.assertEqual(ws.Stream(stream_id2, self.ws.db).hget('target'),
+                         target_id)
+        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
+                         {stream_id, stream_id2})
+        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('files'),
+                         {fn1, fn2})
+        self.assertEqual(ws.Stream(stream_id2, self.ws.db).smembers('files'),
+                         {fn5})
 
     def test_delete_stream(self):
-        # create and assign a stream
-        res = self.test_assign_stream()
-        stream_id = res[0]
-        token_id  = res[1]
-        headers = { 'stream_id' : stream_id }
-        resp = self.fetch('/stream', headers=headers, method='DELETE')
-        self.assertEqual(resp.code, 200)
-        rc = self.redis_client
-        # check memory
-        self.assertFalse(rc.sismember('active_streams',stream_id))
-        self.assertFalse(rc.exists('active_stream:'+stream_id))
-        self.assertFalse(rc.sismember('streams',stream_id))
-        self.assertFalse(rc.exists('stream:'+stream_id))
-        self.assertFalse(rc.exists('download_token:'+stream_id+':stream'))
-        self.assertFalse(rc.exists('shared_token:'+stream_id+':active_stream'))
-        # check disk
-        stream_path = os.path.join('streams',stream_id)
+        target_id = str(uuid.uuid4())
+        fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
+        fb1, fb2, fb3, fb4 = (str(uuid.uuid4()) for i in range(4))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3, fn4: fb4}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream_id1 = json.loads(response.body.decode())['stream_id']
+        target = ws.Target(target_id, self.ws.db)
+        self.assertEqual(target.smembers('streams'), {stream_id1})
 
-        self.assertFalse(os.path.exists(stream_path))
+        fn5, fn6, fn7, fn8 = (str(uuid.uuid4()) for i in range(4))
+        fb5, fb6, fb7, fb8 = (str(uuid.uuid4()) for i in range(4))
+        body = {'target_id': target_id,
+                'target_files': {fn5: fb5, fn6: fb6},
+                'stream_files': {fn7: fb7, fn8: fb8}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream_id2 = json.loads(response.body.decode())['stream_id']
+        self.assertEqual(target.smembers('streams'), {stream_id1, stream_id2})
 
-    '''
+        body = {'id': stream_id1}
+        response = self.fetch('/streams/delete',
+                              method='PUT',
+                              body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(target.smembers('streams'), {stream_id2})
+        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn3)))
+        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn4)))
+        self.assertTrue(target.zscore('queue', stream_id1) is None)
+
+        body = {'id': stream_id2}
+        response = self.fetch('/streams/delete',
+                              method='PUT',
+                              body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.assertFalse(ws.Target.exists(target_id, self.ws.db))
+        self.assertFalse(isfile(os.path.join('streams', stream_id2, fn5)))
+        self.assertFalse(isfile(os.path.join('streams', stream_id2, fn6)))
+        self.assertTrue(target.zscore('queue', stream_id1) is None)
+
+        self.assertFalse(isfile(os.path.join('targets', target_id, fn1)))
+        self.assertFalse(isfile(os.path.join('targets', target_id, fn2)))
+
+    def test_activate_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
+        fb1, fb2, fb3, fb4 = (str(uuid.uuid4()) for i in range(4))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3, fn4: fb4}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream1 = json.loads(response.body.decode())['stream_id']
+        token = str(uuid.uuid4())
+        increment = 30*60
+        stream2 = ws.WorkServer.activate_stream(target_id, token,
+                                                self.ws.db, 30*60)
+        self.assertEqual(stream1, stream2)
+        self.assertTrue(ws.ActiveStream(stream1, self.ws.db))
+        self.assertAlmostEqual(self.ws.db.zscore('heartbeats', stream1),
+                               time.time()+increment, 2)
+        self.assertEqual(ws.ActiveStream.lookup('auth_token',
+                         token, self.ws.db), stream1)
+
+    def test_start_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        content = json.loads(response.body.decode())
+        self.assertEqual(content['target_files'][fn1], fb1)
+        self.assertEqual(content['target_files'][fn2], fb2)
+        self.assertEqual(content['stream_files'][fn3], fb3)
+        self.assertEqual(content['stream_id'], stream_id)
+        self.assertEqual(content['target_id'], target_id)
+
+    def test_post_frame(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+
+        frame_buffer = bytes()
+        n_frames = 25
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # PUT a checkpoint
+        frame_bin = os.urandom(1024)
+        checkpoint_bin = os.urandom(1024)
+        body = {'frame': base64.b64encode(frame_bin).decode(),
+                'checkpoint': base64.b64encode(checkpoint_bin).decode()
+                }
+        response = self.fetch('/core/frame', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(active_stream.hget('buffer_frames'), 0)
+        self.assertEqual(stream.hget('frames'), n_frames+1)
+        self.assertEqual(b'', open(buffer_path, 'rb').read())
+        checkpoint_path = os.path.join('streams', stream_id, fn3)
+        self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
+        frame_buffer += frame_bin
+        frames_path = os.path.join('streams', stream_id, 'frames.xtc')
+        self.assertEqual(frame_buffer, open(frames_path, 'rb').read())
+
+        # PUT a few more frames
+        frame_buffer = bytes()
+        n_frames = 5
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # test idempotency of PUT
+        frame_bin = os.urandom(1024)
+        frame_buffer += frame_bin
+        body = {'frame': base64.b64encode(frame_bin).decode()}
+        response = self.fetch('/core/frame', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+        response = self.fetch('/core/frame', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+    def test_stop_error_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        frame_buffer = bytes()
+        n_frames = 25
+
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+        target = ws.Target(target_id, self.ws.db)
+
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+
+        self.assertTrue(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertTrue(target.zscore('queue', stream_id) is None)
+
+        body = {'error': 'NaN'}
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(stream.hget('error_count'), 1)
+        self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertFalse(target.zscore('queue', stream_id) is None)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(b'', open(buffer_path, 'rb').read())
+
+    def test_stop_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token,
+                                                  self.ws.db, 30*60)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        frame_buffer = bytes()
+        n_frames = 25
+
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+        target = ws.Target(target_id, self.ws.db)
+
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+
+        self.assertTrue(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertTrue(target.zscore('queue', stream_id) is None)
+
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(stream.hget('error_count'), 0)
+        self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
+        self.assertFalse(target.zscore('queue', stream_id) is None)
+        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        self.assertEqual(b'', open(buffer_path, 'rb').read())
+
+
+    #  def test_heartbeat(self):
+    #     token_id = str(uuid.uuid4())
+    #     stream_id = str(uuid.uuid4())
+    #     self.redis_client.set('shared_token:'+token_id+':active_stream', stream_id)
+
+    #     # test sending request to uri: /heartbeat extends the expiration time
+    #     for iteration in range(10):
+    #         response = self.fetch('/heartbeat', method='POST',
+    #                             body=json.dumps({'shared_token' : token_id}))
+    #         hb = self.redis_client.zscore('heartbeats',stream_id)
+    #         ws_start_time = common.sum_time(self.redis_client.time())
+    #         self.assertAlmostEqual(ws_start_time+self.increment, hb, places=1)
+    #     # test expirations
+    #     response = self.fetch('/heartbeat', method='POST',
+    #                 body=json.dumps({'shared_token' : token_id}))
+    #     self.redis_client.sadd('active_streams',stream_id)
+    #     self.redis_client.hset('active_stream:'+stream_id, 
+    #                            'shared_token', token_id)
+    #     self.assertTrue(
+    #         self.redis_client.sismember('active_streams',stream_id) and
+    #         self.redis_client.exists('active_stream:'+stream_id) and 
+    #         self.redis_client.exists('shared_token:'+token_id+':active_stream'))
+    #     time.sleep(self.increment+1)
+    #     self.ws.check_heartbeats() 
+    #     self.assertFalse(
+    #         self.redis_client.sismember('active_streams',stream_id) and
+    #         self.redis_client.exists('active_stream:'+stream_id) and 
+    #         self.redis_client.exists('shared_token:'+token_id+':active_stream'))
+    # 
+
+    # def test_init_stream(self):
+    #     active_streams = self.redis_client.exists('active_streams')
+    #     active_stream_ids = self.redis_client.keys('active_stream:*')
+    #     shared_tokens = self.redis_client.keys('shared_token:*')
+
+    #     self.assertFalse(active_streams)
+    #     self.assertFalse(active_stream_ids)
+    #     self.assertFalse(shared_tokens)
+
+    #     self.assertTrue(self.redis_client.sismember('ccs','test_cc'))
+    #     self.assertEqual(self.redis_client.hget('cc:test_cc','ip'),
+    #                      '127.0.0.1')
+    #     self.assertEqual(self.redis_client.hget('cc:test_cc','http_port'),
+    #                      '999')
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
