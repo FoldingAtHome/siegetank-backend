@@ -65,6 +65,9 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         client.close()
 
+    def tearDown(self):
+        self.io_loop.stop()
+
     @classmethod
     def tearDownClass(cls):
         super(Test, cls).tearDownClass()
@@ -72,7 +75,6 @@ class Test(tornado.testing.AsyncTestCase):
         cls.ws.db.flushdb()
         cls.cc.shutdown(kill=False)
         cls.ws.shutdown(kill=False)
-
         folders = ['streams', 'targets', cls.cc.targets_folder]
         for folder in folders:
             if os.path.exists(folder):

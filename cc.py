@@ -18,8 +18,10 @@ import random
 import ws
 import ipaddress
 
-
+import warnings
 import common
+
+
 
 # The command center manages several work servers in addition to managing 
 # the stats system for each work server.
@@ -61,7 +63,7 @@ class Target(apollo.Entity):
               'engine_versions': {str},  # allowed core_versions
               }
 
-apollo.relate(Target, 'workservers', {WorkServer})
+apollo.relate(Target, 'striated_ws', {WorkServer})
 
 #################
 #   Interface   #
@@ -168,12 +170,13 @@ class PostStreamHandler(BaseHandler):
                     return self.write(json.dumps({'error': 'bad_filename'}))
 
         # TODO: ensure the WS we're POSTing to is up
-        workservers = target.smembers('allowed_ws')
-        if not workservers:
-            workservers = WorkServer.members(self.db)
+        allowed_workservers = target.smembers('allowed_ws')
+        if not allowed_workservers:
+            allowed_workservers = WorkServer.members(self.db)
 
         # randomly pick from available workservers
-        ws_id = random.sample(workservers, 1)[0]
+        ws_id = random.sample(allowed_workservers, 1)[0]
+        target.sadd('striated_ws', ws_id)
         picked_ws = WorkServer(ws_id, self.db)
 
         ws_url = picked_ws.hget('url')
@@ -214,6 +217,41 @@ class PostStreamHandler(BaseHandler):
         return self.write(rep.body)
 
 
+class GetTargetHandler(BaseHandler):
+    def get(self, target_id):
+        ''' Retrieve details regarding this target
+
+            Reply:
+            {
+                'description': description,
+                'owner': owner,
+                'steps_per_frame': steps_per_frame,
+                'creation_date': creation_date,
+                'stage': disabled, beta, release
+                'allowed_ws': workservers allowed
+                'striated_ws': workservers used
+                'engine': engine_type (usually openmm)
+                'engine_versions': engine_versions
+            }
+
+        '''
+        self.set_status(400)
+        target = Target(target_id, self.db)
+        body = {
+            'description': target.hget('description'),
+            'owner': target.hget('owner'),
+            'steps_per_frame': target.hget('steps_per_frame'),
+            'creation_date': target.hget('creation_date'),
+            'stage': target.hget('stage'),
+            'allowed_ws': list(target.smembers('allowed_ws')),
+            'striated_ws': list(target.smembers('striated_ws')),
+            'engine': target.hget('engine'),
+            'engine_versions': list(target.smembers('engine_versions'))
+            }
+        self.set_status(200)
+        self.write(json.dumps(body))
+
+
 class TargetHandler(BaseHandler):
     def get(self):
         ''' Return a list of targets on the CC depending on context
@@ -230,7 +268,6 @@ class TargetHandler(BaseHandler):
         self.set_status(400)
         streams = Target.members(self.db)
         self.write(json.dumps(list(streams)))
-
 
     def post(self):
         ''' POST a new target to the server
@@ -304,6 +341,7 @@ class TargetHandler(BaseHandler):
         target.hset('creation_date', time.time())
         target.hset('engine', engine)
         target.hset('stage', 'disabled')
+        target.hset('owner', 'NotImplemented')
         for allowed_version in content['engine_versions']:
             target.sadd('engine_versions', allowed_version)
         if 'allowed_ws' in content:
@@ -393,6 +431,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         super(CommandCenter, self).__init__([
+            (r'/targets/info/(.*)', GetTargetHandler),
             (r'/register_ws', RegisterWSHandler),
             (r'/targets', TargetHandler),
             (r'/streams', PostStreamHandler)

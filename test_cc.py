@@ -95,14 +95,12 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
 
     def test_get_targets(self):
 
+        # post a bunch of targets
         target_ids = []
-
         for i in range(4):
             fb1 = base64.b64encode(os.urandom(1024)).decode()
             fb2 = base64.b64encode(os.urandom(1024)).decode()
-
             description = "Diwakar and John's top secret project"
-
             body = {
                 'description': description,
                 'files': {'system.xml.gz.b64': fb1,
@@ -116,12 +114,14 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                                body=json.dumps(body))
             self.assertEqual(reply.code, 200)
             target_ids.append(json.loads(reply.body.decode())['target_id'])
-
         reply = self.fetch('/targets')
-
         r_targets = json.loads(reply.body.decode())
-
         self.assertEqual(set(r_targets), set(target_ids))
+
+        # get a specific target
+        reply = self.fetch('/targets/info/'+target_ids[0])
+        self.assertEqual(reply.code, 200)
+        print(reply.body.decode())
 
     def get_app(self):
         return self.cc
