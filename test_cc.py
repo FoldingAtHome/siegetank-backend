@@ -77,9 +77,11 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
 
-        system_path = os.path.join(self.cc.targets_folder, target_id, 'system.xml.gz.b64')
+        system_path = os.path.join(self.cc.targets_folder, target_id,
+                                   'system.xml.gz.b64')
         self.assertEqual(open(system_path, 'rb').read().decode(), fb1)
-        intg_path = os.path.join(self.cc.targets_folder, target_id, 'integrator.xml.gz.b64')
+        intg_path = os.path.join(self.cc.targets_folder, target_id,
+                                 'integrator.xml.gz.b64')
         self.assertEqual(open(intg_path, 'rb').read().decode(), fb2)
         self.assertTrue(cc.Target.exists(target_id, self.cc.db))
         target = cc.Target(target_id, self.cc.db)

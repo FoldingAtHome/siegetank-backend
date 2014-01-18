@@ -63,20 +63,26 @@ class Target(apollo.Entity):
 
 apollo.relate(Target, 'workservers', {WorkServer})
 
-################
-# PG Interface #
-################
+#################
+#   Interface   #
+#################
 
-# POST x.com/targets - add a target
-# GET x.com/targets - retrieve a list of all targets
-# GET x.com/targets/:target_id - get info about a particular target
-# PUT x.com/targets/change_stage - change stage from beta->adv->full
-# PUT x.com/targets/delete - delete a target and all associated streams
+# [A] Requires authentication
+# [P] Publicly accessible (possibly limited info)
 
-# POST x.com/streams - add a stream
-# GET x.com/streams/:stream_id - get information about a particular stream
-# PUT x.com/streams/delete - delete a stream
-# PUT x.com/streams/stop - stop a stream
+# [A] POST x.com/targets - add a target
+# [P] GET x.com/targets - retrieve a list of all targets
+#                       - if Authenticated, retrieves User's targets
+#                       - if Public, retrieves list of all targets on server
+# [P] GET x.com/targets/info/:target_id - get info about target
+# [A] PUT x.com/targets/stage/:target_id - change stage from beta->adv->full
+# [A] PUT x.com/targets/delete/:target_id - delete target and its streams
+# [A] PUT x.com/targets/stop/:target_id - stop target and its streams
+
+# [A] POST x.com/streams - add a stream
+# [P] GET x.com/streams/info/:stream_id - get information about stream
+# [A] PUT x.com/streams/delete/:stream_id - delete a stream
+# [A] PUT x.com/streams/stop/:stream_id - stop a stream
 
 ##################
 # Core Interface #
@@ -374,7 +380,8 @@ class StreamHandler(tornado.web.RequestHandler):
 
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
-    def __init__(self, cc_name, redis_port, cc_pass=None, targets_folder='targets'):
+    def __init__(self, cc_name, redis_port,
+                 cc_pass=None, targets_folder='targets'):
         print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
