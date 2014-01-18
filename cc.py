@@ -68,19 +68,21 @@ apollo.relate(Target, 'workservers', {WorkServer})
 ################
 
 # POST x.com/targets - add a target
-# PUT x.com/target/update_stage - change the stage of the target
-# PUT x.com/targets/delete - delete a target and all associated streams
 # GET x.com/targets - retrieve a list of all targets
-# GET x.com/targets/target_id - retrieve info about a specific target
+# GET x.com/targets/:target_id - get info about a particular target
+# PUT x.com/targets/change_stage - change stage from beta->adv->full
+# PUT x.com/targets/delete - delete a target and all associated streams
 
-# POST x.com/streams - add a stream to a given target
+# POST x.com/streams - add a stream
+# GET x.com/streams/:stream_id - get information about a particular stream
 # PUT x.com/streams/delete - delete a stream
+# PUT x.com/streams/stop - stop a stream
 
 ##################
 # Core Interface #
 ##################
 
-# POST x.com/jobs/job - get a stream to work on
+# POST x.com/core/assign - get a stream to work on
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -206,7 +208,24 @@ class PostStreamHandler(BaseHandler):
         return self.write(rep.body)
 
 
-class PostTargetHandler(BaseHandler):
+class TargetHandler(BaseHandler):
+    def get(self):
+        ''' Return a list of targets on the CC depending on context
+
+            Reply:
+                {
+                    'targets': ['target_id1', 'target_id2', '...']
+                }
+
+            If Authorized by a F@h user, it will only return list of targets
+            owned by the user.
+
+        '''
+        self.set_status(400)
+        streams = Target.members(self.db)
+        self.write(json.dumps(list(streams)))
+
+
     def post(self):
         ''' POST a new target to the server
             Request:
@@ -368,7 +387,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         signal.signal(signal.SIGTERM, self.shutdown)
         super(CommandCenter, self).__init__([
             (r'/register_ws', RegisterWSHandler),
-            (r'/targets', PostTargetHandler),
+            (r'/targets', TargetHandler),
             (r'/streams', PostStreamHandler)
             ])
 

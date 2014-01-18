@@ -1,7 +1,6 @@
 import unittest
 import os
 import shutil
-import sys
 
 import tornado
 import tornado.web
@@ -13,8 +12,8 @@ import ws
 import cc
 
 import base64
-import os
 import json
+
 
 class Test(tornado.testing.AsyncTestCase):
 
@@ -74,7 +73,7 @@ class Test(tornado.testing.AsyncTestCase):
         cls.cc.shutdown(kill=False)
         cls.ws.shutdown(kill=False)
 
-        folders = ['streams', 'targets']
+        folders = ['streams', 'targets', cls.cc.targets_folder]
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)

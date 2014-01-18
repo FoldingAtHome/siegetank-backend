@@ -74,7 +74,6 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
 
         reply = self.fetch('/targets', method='POST',
                            body=json.dumps(body))
-        print(reply.body.decode())
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
 
@@ -91,6 +90,36 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(target.smembers('engine_versions'), {'6.0'})
         self.assertEqual(target.smembers('files'), {'system.xml.gz.b64',
                                                     'integrator.xml.gz.b64'})
+
+    def test_get_targets(self):
+
+        target_ids = []
+
+        for i in range(4):
+            fb1 = base64.b64encode(os.urandom(1024)).decode()
+            fb2 = base64.b64encode(os.urandom(1024)).decode()
+
+            description = "Diwakar and John's top secret project"
+
+            body = {
+                'description': description,
+                'files': {'system.xml.gz.b64': fb1,
+                          'integrator.xml.gz.b64': fb2},
+                'steps_per_frame': 50000,
+                'engine': 'openmm',
+                'engine_versions': ['6.0'],
+                }
+
+            reply = self.fetch('/targets', method='POST',
+                               body=json.dumps(body))
+            self.assertEqual(reply.code, 200)
+            target_ids.append(json.loads(reply.body.decode())['target_id'])
+
+        reply = self.fetch('/targets')
+
+        r_targets = json.loads(reply.body.decode())
+
+        self.assertEqual(set(r_targets), set(target_ids))
 
     def get_app(self):
         return self.cc
