@@ -58,19 +58,9 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
 
-        # body = {'target_id': target_id,
-        #         'files': {"state.xml.gz.b64": fb3}
-        #         }
-        # uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
-        # client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-        #              validate_cert=cc._is_domain(url))
-        # reply = self.wait()
-        # self.assertEqual(reply.code, 200)
-
-        # test posting 20 streams
+        # test POSTing 20 streams
         for i in range(20):
             uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
-            print('POST URI:', uri, i)
             rand_bin = base64.b64encode(os.urandom(1024)).decode()
             body = {'target_id': target_id,
                     'files': {"state.xml.gz.b64": rand_bin}
@@ -81,11 +71,18 @@ class Test(tornado.testing.AsyncTestCase):
             reply = self.wait()
             self.assertEqual(reply.code, 200)
 
-        #client.close()
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
 
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        target_ids = set(json.loads(reply.body.decode())['targets'])
+        self.assertEqual(target_ids, {target_id})
 
-    #   def tearDown(self):
-        #self.io_loop.stop()
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
+        reply = self.wait()
+        print(reply.body)
 
     @classmethod
     def tearDownClass(cls):

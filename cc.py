@@ -159,7 +159,7 @@ class PostStreamHandler(BaseHandler):
                 }
 
         '''
-        print('----------------POSTING STREAM----------------')
+
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
@@ -215,7 +215,6 @@ class PostStreamHandler(BaseHandler):
         # client.close()
 
 
-        print('----------------COMPLETED STREAM----------------')
         self.set_status(rep.code)
         return self.write(rep.body)
 
@@ -240,6 +239,9 @@ class GetTargetHandler(BaseHandler):
         '''
         self.set_status(400)
         target = Target(target_id, self.db)
+
+        # get a list of streams
+
         body = {
             'description': target.hget('description'),
             'owner': target.hget('owner'),
@@ -268,9 +270,8 @@ class TargetHandler(BaseHandler):
             owned by the user.
 
         '''
-        self.set_status(400)
         streams = Target.members(self.db)
-        self.write(json.dumps(list(streams)))
+        self.write(json.dumps({'targets': list(streams)}))
 
     def post(self):
         ''' POST a new target to the server
@@ -303,9 +304,6 @@ class TargetHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         files = content['files']
-
-        print(content)
-
         if content['engine'] != 'openmm':
             return self.write(json.dumps({'error': 'engine must be openmm'}))
         if content['engine_versions'] != ['6.0']:
