@@ -63,10 +63,25 @@ class Test(tornado.testing.AsyncTestCase):
                      validate_cert=cc._is_domain(url))
         reply = self.wait()
         self.assertEqual(reply.code, 200)
+
+        # test posting 20 streams
+        for i in range(20):
+            print('POST URI:', uri, i)
+            rand_bin = base64.b64encode(os.urandom(1024)).decode()
+            body = {'target_id': target_id,
+                    'files': {"state.xml.gz.b64": rand_bin}
+                    }
+
+            client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                         validate_cert=cc._is_domain(url))
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+
         client.close()
 
-    def tearDown(self):
-        self.io_loop.stop()
+
+    #def tearDown(self):
+        #self.io_loop.stop()
 
     @classmethod
     def tearDownClass(cls):

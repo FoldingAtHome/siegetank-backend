@@ -159,6 +159,7 @@ class PostStreamHandler(BaseHandler):
                 }
 
         '''
+        print('----------------POSTINg STREAM----------------')
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
