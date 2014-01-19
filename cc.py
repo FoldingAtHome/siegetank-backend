@@ -159,7 +159,7 @@ class PostStreamHandler(BaseHandler):
                 }
 
         '''
-        print('----------------POSTINg STREAM----------------')
+        print('----------------POSTING STREAM----------------')
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
@@ -212,8 +212,10 @@ class PostStreamHandler(BaseHandler):
         # client = tornado.httpclient.HTTPClient()
         # rep = client.fetch('https://'+str(ws_ip)+':'+str(ws_http_port)
         #                    +'/streams', method='POST', validate_cert=False)
-        client.close()
+        # client.close()
 
+
+        print('----------------COMPLETED STREAM----------------')
         self.set_status(rep.code)
         return self.write(rep.body)
 
@@ -301,6 +303,8 @@ class TargetHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         files = content['files']
+
+        print(content)
 
         if content['engine'] != 'openmm':
             return self.write(json.dumps({'error': 'engine must be openmm'}))

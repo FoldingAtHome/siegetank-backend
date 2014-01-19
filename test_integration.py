@@ -10,6 +10,7 @@ import tornado.gen
 
 import ws
 import cc
+import sys
 
 import base64
 import json
@@ -53,19 +54,22 @@ class Test(tornado.testing.AsyncTestCase):
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
                      validate_cert=cc._is_domain(url))
         reply = self.wait()
+
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
-        body = {'target_id': target_id,
-                'files': {"state.xml.gz.b64": fb3}
-                }
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
-        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                     validate_cert=cc._is_domain(url))
-        reply = self.wait()
-        self.assertEqual(reply.code, 200)
+
+        # body = {'target_id': target_id,
+        #         'files': {"state.xml.gz.b64": fb3}
+        #         }
+        # uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
+        # client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+        #              validate_cert=cc._is_domain(url))
+        # reply = self.wait()
+        # self.assertEqual(reply.code, 200)
 
         # test posting 20 streams
         for i in range(20):
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
             print('POST URI:', uri, i)
             rand_bin = base64.b64encode(os.urandom(1024)).decode()
             body = {'target_id': target_id,
@@ -77,10 +81,10 @@ class Test(tornado.testing.AsyncTestCase):
             reply = self.wait()
             self.assertEqual(reply.code, 200)
 
-        client.close()
+        #client.close()
 
 
-    #def tearDown(self):
+    #   def tearDown(self):
         #self.io_loop.stop()
 
     @classmethod
@@ -96,4 +100,7 @@ class Test(tornado.testing.AsyncTestCase):
                 shutil.rmtree(folder)
 
 if __name__ == '__main__':
-    unittest.main()
+    suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
+    #suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
+    #suite.addTest(WSInitTestCase())
+    unittest.TextTestRunner(verbosity=3).run(suite)
