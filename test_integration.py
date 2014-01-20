@@ -58,7 +58,20 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
 
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        target_ids = set(json.loads(reply.body.decode())['targets'])
+        self.assertEqual(target_ids, {target_id})
+
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
         # test POSTing 20 streams
+        post_streams = set()
         for i in range(20):
             uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
             rand_bin = base64.b64encode(os.urandom(1024)).decode()
@@ -70,19 +83,23 @@ class Test(tornado.testing.AsyncTestCase):
                          validate_cert=cc._is_domain(url))
             reply = self.wait()
             self.assertEqual(reply.code, 200)
+            post_streams.add(json.loads(reply.body.decode())['stream_id'])
 
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        # test GETing the streams
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
+              +target_id
 
         client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
         reply = self.wait()
         self.assertEqual(reply.code, 200)
-        target_ids = set(json.loads(reply.body.decode())['targets'])
-        self.assertEqual(target_ids, {target_id})
 
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
-        reply = self.wait()
-        print(reply.body)
+        body = json.loads(reply.body.decode())
+
+        streams = set()
+        for k, v in body.items():
+            streams.add(k)
+
+        self.assertEqual(streams, post_streams)
 
     @classmethod
     def tearDownClass(cls):

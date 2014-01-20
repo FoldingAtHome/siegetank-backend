@@ -232,6 +232,7 @@ class PostStreamHandler(BaseHandler):
         target = Target(target_id, self.db)
         target.zadd('queue', stream_id, 0)
 
+        stream.hset('frames', 0)
         stream.hset('status', 'OK')
         stream.hset('error_count', 0)
         stream.hset('target', target)

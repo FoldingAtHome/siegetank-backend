@@ -11,24 +11,20 @@ import uuid
 import random
 import redis
 import signal
-import sys
 import apollo
 import time
-import random
 import ws
 import ipaddress
 
-import warnings
 import common
 
 
+# The command center manages several work servers in addition to managing the
+# stats system for each work server.
 
-# The command center manages several work servers in addition to managing 
-# the stats system for each work server.
-
-# CC uses Antirez's redis extensively as NoSQL store mainly because of 
-# its blazing fast speed. Binary blobs such as states, systems, and 
-# frames are written directly to disk.
+# CC uses Antirez's redis extensively as NoSQL store mainly because of its
+# blazing fast speed. Binary blobs such as states, systems, and frames are
+# written directly to disk.
 
 # For more information on redis memory usage, visit:
 # http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
@@ -40,6 +36,32 @@ import common
 # about 3 million requests per day - translating to about 35 requests
 # per second. Each request needs to be handled by the CC in 30 ms.
 
+#################
+#   Interface   #
+#################
+
+# [A] Requires authentication
+# [P] Publicly accessible (possibly limited info)
+
+# [A] POST x.com/targets - add a target
+# [P] GET x.com/targets - if Authenticated, retrieves User's targets
+#                       - if Public, retrieves list of all targets on server
+# [P] GET x.com/targets/info/:target_id - get info about a specific target
+# [A] PUT x.com/targets/stage/:target_id - change stage from beta->adv->full
+# [A] PUT x.com/targets/delete/:target_id - delete target and its streams
+# [A] PUT x.com/targets/stop/:target_id - stop the target and its streams
+# [A] GET x.com/targets/streams/:target_id - get the streams for the target
+
+# [A] POST x.com/streams - add a stream
+# [P] GET x.com/streams/info/:stream_id - get information about specific stream
+# [A] PUT x.com/streams/delete/:stream_id - delete a stream
+# [A] PUT x.com/streams/stop/:stream_id - stop a stream
+
+##################
+# Core Interface #
+##################
+
+# POST x.com/core/assign - get a stream to work on
 
 class WorkServer(apollo.Entity):
     prefix = 'ws'
@@ -64,33 +86,6 @@ class Target(apollo.Entity):
               }
 
 apollo.relate(Target, 'striated_ws', {WorkServer})
-
-#################
-#   Interface   #
-#################
-
-# [A] Requires authentication
-# [P] Publicly accessible (possibly limited info)
-
-# [A] POST x.com/targets - add a target
-# [P] GET x.com/targets - retrieve a list of all targets
-#                       - if Authenticated, retrieves User's targets
-#                       - if Public, retrieves list of all targets on server
-# [P] GET x.com/targets/info/:target_id - get info about target
-# [A] PUT x.com/targets/stage/:target_id - change stage from beta->adv->full
-# [A] PUT x.com/targets/delete/:target_id - delete target and its streams
-# [A] PUT x.com/targets/stop/:target_id - stop target and its streams
-
-# [A] POST x.com/streams - add a stream
-# [P] GET x.com/streams/info/:stream_id - get information about stream
-# [A] PUT x.com/streams/delete/:stream_id - delete a stream
-# [A] PUT x.com/streams/stop/:stream_id - stop a stream
-
-##################
-# Core Interface #
-##################
-
-# POST x.com/core/assign - get a stream to work on
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -214,7 +209,6 @@ class PostStreamHandler(BaseHandler):
         #                    +'/streams', method='POST', validate_cert=False)
         # client.close()
 
-
         self.set_status(rep.code)
         return self.write(rep.body)
 
@@ -223,18 +217,18 @@ class GetTargetHandler(BaseHandler):
     def get(self, target_id):
         ''' Retrieve details regarding this target
 
-            Reply:
-            {
-                'description': description,
-                'owner': owner,
-                'steps_per_frame': steps_per_frame,
-                'creation_date': creation_date,
-                'stage': disabled, beta, release
-                'allowed_ws': workservers allowed
-                'striated_ws': workservers used
-                'engine': engine_type (usually openmm)
-                'engine_versions': engine_versions
-            }
+        Reply:
+        {
+            'description': description,
+            'owner': owner,
+            'steps_per_frame': steps_per_frame,
+            'creation_date': creation_date,
+            'stage': disabled, beta, release
+            'allowed_ws': workservers allowed
+            'striated_ws': workservers used
+            'engine': engine_type (usually openmm)
+            'engine_versions': engine_versions
+        }
 
         '''
         self.set_status(400)
@@ -257,17 +251,49 @@ class GetTargetHandler(BaseHandler):
         self.write(json.dumps(body))
 
 
+class ListStreamsHandler(BaseHandler):
+    def get(self, target_id):
+        ''' Return a list of streams for the specified target
+
+        Reply:
+            {
+                'stream1_id': [status, n_frames, ws_name],
+                'stream2_id': [status, n_frames, ws_name],
+                ...
+            }
+
+        '''
+        self.set_status(400)
+        target = Target(target_id, self.db)
+        striated_ws = target.smembers('striated_ws')
+
+        body = {}
+
+        for ws_name in striated_ws:
+            ws_db = self.application.WorkServerDB[ws_name]
+            ws_target = ws.Target(target_id, ws_db)
+            stream_ids = ws_target.smembers('streams')
+            for stream_id in stream_ids:
+                body[stream_id] = []
+                stream = ws.Stream(stream_id, ws_db)
+                body[stream_id].append(stream.hget('status'))
+                body[stream_id].append(stream.hget('frames'))
+                body[stream_id].append(ws_name)
+
+        self.set_status(200)
+        self.write(json.dumps(body))
+
 class TargetHandler(BaseHandler):
     def get(self):
         ''' Return a list of targets on the CC depending on context
 
-            Reply:
-                {
-                    'targets': ['target_id1', 'target_id2', '...']
-                }
+        Reply:
+            {
+                'targets': ['target_id1', 'target_id2', '...']
+            }
 
-            If Authorized by a F@h user, it will only return list of targets
-            owned by the user.
+        If Authorized by a F@h user, it will only return list of targets
+        owned by the user.
 
         '''
         streams = Target.members(self.db)
@@ -275,30 +301,30 @@ class TargetHandler(BaseHandler):
 
     def post(self):
         ''' POST a new target to the server
-            Request:
-                {
+        Request:
+            {
 
-                    [required]
-                    "description": description,
-                    "files": {"file1_name": file1_bin_b64,
-                              "file2_name": file2_bin_b64,
-                              ...
-                              }
-                    "steps_per_frame": 100000,
-                    "engine": "openmm",
-                    "engine_versions": ["6.0", "5.5", "5.2"]
+                [required]
+                "description": description,
+                "files": {"file1_name": file1_bin_b64,
+                          "file2_name": file2_bin_b64,
+                          ...
+                          }
+                "steps_per_frame": 100000,
+                "engine": "openmm",
+                "engine_versions": ["6.0", "5.5", "5.2"]
 
-                    [optional]
-                    # if present, a list of workservers to striate on.
-                    "allowed_ws": ["mengsk", "arcturus"]
-                    "stage": beta,
+                [optional]
+                # if present, a list of workservers to striate on.
+                "allowed_ws": ["mengsk", "arcturus"]
+                "stage": beta,
 
-                }
+            }
 
-            Reply:
-                {
-                    "target_id": target_id,
-                }
+        Reply:
+            {
+                "target_id": target_id,
+            }
 
         '''
         self.set_status(400)
@@ -435,6 +461,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         signal.signal(signal.SIGTERM, self.shutdown)
         super(CommandCenter, self).__init__([
             (r'/targets/info/(.*)', GetTargetHandler),
+            (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/register_ws', RegisterWSHandler),
             (r'/targets', TargetHandler),
             (r'/streams', PostStreamHandler)
