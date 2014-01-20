@@ -115,13 +115,12 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
             self.assertEqual(reply.code, 200)
             target_ids.append(json.loads(reply.body.decode())['target_id'])
         reply = self.fetch('/targets')
-        r_targets = json.loads(reply.body.decode())
+        r_targets = json.loads(reply.body.decode())['targets']
         self.assertEqual(set(r_targets), set(target_ids))
 
         # get a specific target
         reply = self.fetch('/targets/info/'+target_ids[0])
         self.assertEqual(reply.code, 200)
-        print(reply.body.decode())
 
     def get_app(self):
         return self.cc
