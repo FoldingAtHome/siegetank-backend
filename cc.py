@@ -283,6 +283,7 @@ class ListStreamsHandler(BaseHandler):
         self.set_status(200)
         self.write(json.dumps(body))
 
+
 class TargetHandler(BaseHandler):
     def get(self):
         ''' Return a list of targets on the CC depending on context
