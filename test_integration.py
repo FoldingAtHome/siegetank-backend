@@ -25,9 +25,9 @@ class Test(tornado.testing.AsyncTestCase):
         cls.cc_rport = 5872
         cls.ws_hport = 9028
         cls.cc_hport = 8342
-        cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport)
+        cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport, debug=True)
         cls.cc = cc.CommandCenter('goliath', redis_port=cls.cc_rport,
-                                  targets_folder='cc_targets')
+                                  targets_folder='cc_targets', debug=True)
 
     def setUp(self):
         super(Test, self).setUp()

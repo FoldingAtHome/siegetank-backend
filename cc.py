@@ -15,6 +15,7 @@ import apollo
 import time
 import ws
 import ipaddress
+import functools
 
 import common
 
@@ -62,6 +63,28 @@ import common
 ##################
 
 # POST x.com/core/assign - get a stream to work on
+
+
+def authenticated(method):
+    """ Decorate methods with this that require users to login. Based off of
+    tornado's authenticated method. 
+
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if self.application.settings.get('debug'):
+            return method(self, *args, **kwargs)
+        token = self.request.headers['Authorization']
+
+        if _in_redis():
+            # check against redis first
+            return method(self, *args, **kwargs)
+        elif _in_postgres():
+            # check postgresql database
+            return method(self, *args, **kwargs)
+        else:
+            return self.set_status(401)
+    return wrapper
 
 class WorkServer(apollo.Entity):
     prefix = 'ws'
@@ -300,6 +323,7 @@ class TargetHandler(BaseHandler):
         streams = Target.members(self.db)
         self.write(json.dumps({'targets': list(streams)}))
 
+    @authenticated
     def post(self):
         ''' POST a new target to the server
         Request:
@@ -449,7 +473,7 @@ class StreamHandler(tornado.web.RequestHandler):
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
     def __init__(self, cc_name, redis_port,
-                 cc_pass=None, targets_folder='targets'):
+                 cc_pass=None, targets_folder='targets', debug=False):
         print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
@@ -466,7 +490,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             (r'/register_ws', RegisterWSHandler),
             (r'/targets', TargetHandler),
             (r'/streams', PostStreamHandler)
-            ])
+            ], debug=debug)
 
         self.WorkServerDB = {}
 

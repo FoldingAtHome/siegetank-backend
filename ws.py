@@ -532,7 +532,8 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                  redis_pass=None,
                  ws_ext_http_port=None,
                  ccs=None,
-                 increment=600):
+                 increment=600,
+                 debug=False):
 
         """ Initialize the WorkServer.
 
@@ -571,7 +572,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
             (r'/core/stop', CoreStopHandler),
-        ])
+        ], debug=debug)
 
     def check_heartbeats(self):
         dead_streams = self.db.zrangebyscore('heartbeats', 0, time.time())
