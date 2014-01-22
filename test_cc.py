@@ -24,12 +24,14 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     def tearDownClass(self):
         self.cc.db.flushdb()
         self.cc.shutdown_redis()
-        self.cc.mdb.managers.drop()
         folders = [self.cc.targets_folder]
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
         super(TestCCBasics, self).tearDownClass()
+
+    def tearDown(self):
+        self.cc.mdb.managers.drop()
 
     def test_add_manager(self):
         email = 'proteneer@gmail.com'
@@ -90,6 +92,16 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         test_db.shutdown()
 
     def test_post_target(self):
+        email = 'proteneer@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password
+        }
+        rep = self.fetch('/managers', method='POST', body=json.dumps(body))
+        auth = json.loads(rep.body.decode())['token']
+        headers = {'Authorization': auth}
+
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
                               for i in range(4))
 
@@ -103,7 +115,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
             'engine_versions': ['6.0'],
             }
 
-        reply = self.fetch('/targets', method='POST',
+        reply = self.fetch('/targets', method='POST', headers=headers,
                            body=json.dumps(body))
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
@@ -125,6 +137,15 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                                                     'integrator.xml.gz.b64'})
 
     def test_get_targets(self):
+        email = 'proteneer@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password
+        }
+        rep = self.fetch('/managers', method='POST', body=json.dumps(body))
+        auth = json.loads(rep.body.decode())['token']
+        headers = {'Authorization': auth}
 
         # post a bunch of targets
         target_ids = []
@@ -141,11 +162,11 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                 'engine_versions': ['6.0'],
                 }
 
-            reply = self.fetch('/targets', method='POST',
+            reply = self.fetch('/targets', method='POST', headers=headers,
                                body=json.dumps(body))
             self.assertEqual(reply.code, 200)
             target_ids.append(json.loads(reply.body.decode())['target_id'])
-        reply = self.fetch('/targets')
+        reply = self.fetch('/targets', headers=headers)
         r_targets = json.loads(reply.body.decode())['targets']
         self.assertEqual(set(r_targets), set(target_ids))
 

@@ -90,23 +90,25 @@ class Target(apollo.Entity):
 
 apollo.relate(Target, 'striated_ws', {WorkServer})
 
+
 def authenticated(method):
-    """ Decorate methods with this that require users to login. Based off of
-    tornado's authenticated method.
+    """ Decorate handlers with this that require managers to login. Based off
+    of tornado's authenticated method.
 
     """
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         try:
-            token = self.request.headers['Authorization']
+            self.request.headers['Authorization']
         except:
+            self.write(json.dumps({'error': 'missing Authorization header'}))
             return self.set_status(401)
 
-        if token:
-            # check against redis first
+        if self.get_current_user():
             return method(self, *args, **kwargs)
         else:
             return self.set_status(401)
+
     return wrapper
 
 
@@ -142,6 +144,7 @@ class AuthHandler(tornado.web.RequestHandler):
             return self.status(401)
 
         self.write(json.dumps({'token': new_token}))
+
 
 class AddManagerHandler(tornado.web.RequestHandler):
     def post(self):
@@ -186,10 +189,23 @@ class BaseHandler(tornado.web.RequestHandler):
     def db(self):
         return self.application.db
 
+    def get_current_user(self):
+        header_token = self.request.headers['Authorization']
+        mdb = self.application.mdb
+        query = mdb.managers.find_one({'token': header_token},
+                                      fields=['_id'])
+        try:
+            return query['_id']
+        except:
+            return None
+
 
 class RegisterWSHandler(BaseHandler):
     def put(self):
         ''' Called by WS for registration
+        Header:
+            'Authorization': cc_pass
+
         Request:
             {
                 'name': unique_name_of_the_cc
@@ -393,7 +409,7 @@ class TargetHandler(BaseHandler):
         streams = Target.members(self.db)
         self.write(json.dumps({'targets': list(streams)}))
 
-    #@authenticated
+    @authenticated
     def post(self):
         ''' POST a new target to the server
         Request:
