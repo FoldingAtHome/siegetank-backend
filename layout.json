@@ -1,0 +1,33 @@
+# Mongodb
+
+# A mongodb is used for authentication and storing stats.
+
+# 1. JSON based format makes it insanely easy to use
+# 2. Fairly fast
+# 3. Schemaless settings makes it easy to do append operations, eg:
+
+# Donor table
+
+donor_data = {
+    "_id": 1,
+    "passkey": "5mnaz26bklaspop0928",
+    "email": "proteneer@gmail.com",
+    "streams": {
+        "stream_id_1": {
+            "frames": [2936],
+            "start_times": [1857298.029],
+            "end_times": [1857231.02]
+            },
+        "stream_id_2": {
+            "frames": [2936, 124, 9872],
+            "start_times": [179898.02, 12359.49],
+            "end_times": [1102934.02, 1852303.52]   
+        }
+    }
+}
+
+# db.users.update({'email':'proteneer@gmail.com'}, { '$push': { 'streams.stream_id_1.frames': 1345 }})
+# db.users.update({'email':'proteneer@gmail.com'}, { '$push': { 'streams.stream_id_1.start_times': time.time() }})
+# db.users.update({'email':'proteneer@gmail.com'}, { '$push': { 'streams.stream_id_1.end_times': time.time()+10 }})
+
+db.users.find_one({'_id':1}, fields=['streams'])

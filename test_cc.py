@@ -16,7 +16,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.increment = 3
         self.cc_auth = '5lik2j3l4'
         self.cc = cc.CommandCenter('test_cc', redis_port, self.cc_auth,
-                                   targets_folder='cc_targets')
+                                   targets_folder='cc_targets', debug=True)
         super(TestCCBasics, self).setUpClass()
 
     @classmethod

@@ -18,7 +18,7 @@ import ipaddress
 import functools
 
 import common
-
+import psycopg2
 
 # The command center manages several work servers in addition to managing the
 # stats system for each work server.
@@ -64,28 +64,6 @@ import common
 
 # POST x.com/core/assign - get a stream to work on
 
-
-def authenticated(method):
-    """ Decorate methods with this that require users to login. Based off of
-    tornado's authenticated method. 
-
-    """
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        if self.application.settings.get('debug'):
-            return method(self, *args, **kwargs)
-        token = self.request.headers['Authorization']
-
-        if _in_redis():
-            # check against redis first
-            return method(self, *args, **kwargs)
-        elif _in_postgres():
-            # check postgresql database
-            return method(self, *args, **kwargs)
-        else:
-            return self.set_status(401)
-    return wrapper
-
 class WorkServer(apollo.Entity):
     prefix = 'ws'
     fields = {'url': str,  # http request url (verify based on if IP or not)
@@ -108,7 +86,33 @@ class Target(apollo.Entity):
               'engine_versions': {str},  # allowed core_versions
               }
 
-apollo.relate(Target, 'striated_ws', {WorkServer})
+
+#class Pilot(apollo.Entity):
+#    prefix = 'pilot'
+#    fields = {'token': str}
+
+# each token maps to at most one user, old token is deleted
+# Pilot.add_lookup('token', injective=True)
+# apollo.relate(Target, 'striated_ws', {WorkServer})
+
+def authenticated(method):
+    """ Decorate methods with this that require users to login. Based off of
+    tornado's authenticated method.
+
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        # disable authentication requirements if in debug mode (eg. unit tests)
+        if self.application.settings.get('debug'):
+            return method(self, *args, **kwargs)
+        token = self.request.headers['Authorization']
+        
+        token):
+            # check against redis first
+            return method(self, *args, **kwargs)
+        else:
+            return self.set_status(401)
+    return wrapper
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -484,6 +488,11 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             os.makedirs('files')
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
+
+        if debug:
+            self.stats_conn = psycopg2.connect("dbname='fahdb' user='postgres'\
+                              password='testpass' host='localhost'")
+
         super(CommandCenter, self).__init__([
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
@@ -491,6 +500,8 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             (r'/targets', TargetHandler),
             (r'/streams', PostStreamHandler)
             ], debug=debug)
+
+
 
         self.WorkServerDB = {}
 
