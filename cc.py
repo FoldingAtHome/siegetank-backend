@@ -164,6 +164,7 @@ class AddManagerHandler(tornado.web.RequestHandler):
         }
 
         """
+        print('ADDING MANAGER')
         if self.request.remote_ip != '127.0.0.1':
             return self.set_status(401)
 

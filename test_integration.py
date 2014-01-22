@@ -37,8 +37,28 @@ class Test(tornado.testing.AsyncTestCase):
         self.ws.listen(self.ws_hport, io_loop=self.io_loop, ssl_options={
             'certfile': 'certs/cc.crt', 'keyfile': 'certs/cc.key'})
 
+    def tearDown(self):
+        self.cc.mdb.managers.drop()
+
     def test_post_target_and_streams(self):
+
+        # register an account
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
+        url = '127.0.0.1'
+        email = 'proteneer@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password
+        }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=cc._is_domain(url))
+        rep = self.wait()
+        self.assertEqual(rep.code, 200)
+        auth = json.loads(rep.body.decode())['token']
+        headers = {'Authorization': auth}
+
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
                               for i in range(4))
         description = "Diwakar and John's top secret project"
@@ -49,24 +69,25 @@ class Test(tornado.testing.AsyncTestCase):
             'engine': 'openmm',
             'engine_versions': ['6.0'],
             }
-        url = '127.0.0.1'
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                     validate_cert=cc._is_domain(url))
+                     validate_cert=cc._is_domain(url), headers=headers)
         reply = self.wait()
 
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
 
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                     headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
         target_ids = set(json.loads(reply.body.decode())['targets'])
         self.assertEqual(target_ids, {target_id})
 
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                     headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
 
@@ -80,7 +101,8 @@ class Test(tornado.testing.AsyncTestCase):
                     }
 
             client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                         validate_cert=cc._is_domain(url))
+                         validate_cert=cc._is_domain(url),
+                         headers=headers)
             reply = self.wait()
             self.assertEqual(reply.code, 200)
             post_streams.add(json.loads(reply.body.decode())['stream_id'])
@@ -89,7 +111,8 @@ class Test(tornado.testing.AsyncTestCase):
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
               +target_id
 
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url))
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                     headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
 
