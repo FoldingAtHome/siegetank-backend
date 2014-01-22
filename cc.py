@@ -164,7 +164,6 @@ class AddManagerHandler(tornado.web.RequestHandler):
         }
 
         """
-        print('ADDING MANAGER')
         if self.request.remote_ip != '127.0.0.1':
             return self.set_status(401)
 
@@ -245,6 +244,7 @@ def _is_domain(url):
 
 
 class PostStreamHandler(BaseHandler):
+    @authenticated
     @tornado.gen.coroutine
     def post(self):
         ''' POST a new stream to the server
@@ -264,11 +264,13 @@ class PostStreamHandler(BaseHandler):
                 }
 
         '''
-
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
         target = Target(target_id, self.db)
+        if target.hget('owner') != self.get_current_user():
+            self.set_status(401)
+            return self.write(json.dumps({'error': 'target not owned by you'}))
         files = content['files']
         for filename in files:
             if target.hget('engine') == 'openmm':
@@ -584,8 +586,6 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             (r'/targets', TargetHandler),
             (r'/streams', PostStreamHandler)
             ], debug=debug)
-
-
 
         self.WorkServerDB = {}
 
