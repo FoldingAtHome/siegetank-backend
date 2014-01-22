@@ -110,6 +110,18 @@ def authenticated(method):
     return wrapper
 
 
+class AuthHandler(tornado.web.RequestHandler):
+    """ Generate a new authorization token for the user
+
+        Request: {
+            'email': proteneer@gmail.com,
+            'password': password
+        }
+
+
+
+    """
+
 class AddManagerHandler(tornado.web.RequestHandler):
     def post(self):
         """ Add a PG member as a Manager.
@@ -118,6 +130,12 @@ class AddManagerHandler(tornado.web.RequestHandler):
 
             'email': proteneer@gmail.com,
             'password': password,
+
+        }
+
+        Reply: {
+
+            token: token
 
         }
 

@@ -7,6 +7,7 @@ import sys
 import common
 import json
 import base64
+import bcrypt
 
 
 class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
@@ -23,13 +24,12 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     def tearDownClass(self):
         self.cc.db.flushdb()
         self.cc.shutdown_redis()
-        #self.cc.mdb.managers.drop()
+        self.cc.mdb.managers.drop()
         folders = [self.cc.targets_folder]
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
         super(TestCCBasics, self).tearDownClass()
-
 
     def test_add_manager(self):
         email = 'proteneer@gmail.com'
@@ -40,7 +40,11 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         }
         rep = self.fetch('/managers', method='POST', body=json.dumps(body))
         self.assertEqual(rep.code, 200)
-
+        query = self.cc.mdb.managers.find_one({'_id': email},
+                                              fields=['password_hash'])
+        stored_hash = query['password_hash']
+        self.assertEqual(stored_hash,
+                         bcrypt.hashpw(password.encode(), stored_hash))
 
     def test_register_cc(self):
 
