@@ -23,11 +23,24 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     def tearDownClass(self):
         self.cc.db.flushdb()
         self.cc.shutdown_redis()
+        #self.cc.mdb.managers.drop()
         folders = [self.cc.targets_folder]
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
         super(TestCCBasics, self).tearDownClass()
+
+
+    def test_add_manager(self):
+        email = 'proteneer@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password
+        }
+        rep = self.fetch('/managers', method='POST', body=json.dumps(body))
+        self.assertEqual(rep.code, 200)
+
 
     def test_register_cc(self):
 

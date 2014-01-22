@@ -16,9 +16,11 @@ import time
 import ws
 import ipaddress
 import functools
-
+import bcrypt
+import uuid
 import common
-import psycopg2
+import pymongo
+
 
 # The command center manages several work servers in addition to managing the
 # stats system for each work server.
@@ -86,14 +88,7 @@ class Target(apollo.Entity):
               'engine_versions': {str},  # allowed core_versions
               }
 
-
-#class Pilot(apollo.Entity):
-#    prefix = 'pilot'
-#    fields = {'token': str}
-
-# each token maps to at most one user, old token is deleted
-# Pilot.add_lookup('token', injective=True)
-# apollo.relate(Target, 'striated_ws', {WorkServer})
+apollo.relate(Target, 'striated_ws', {WorkServer})
 
 def authenticated(method):
     """ Decorate methods with this that require users to login. Based off of
@@ -102,17 +97,49 @@ def authenticated(method):
     """
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
-        # disable authentication requirements if in debug mode (eg. unit tests)
-        if self.application.settings.get('debug'):
-            return method(self, *args, **kwargs)
-        token = self.request.headers['Authorization']
-        
-        token):
+        try:
+            token = self.request.headers['Authorization']
+        except:
+            return self.set_status(401)
+
+        if token:
             # check against redis first
             return method(self, *args, **kwargs)
         else:
             return self.set_status(401)
     return wrapper
+
+
+class AddManagerHandler(tornado.web.RequestHandler):
+    def post(self):
+        """ Add a PG member as a Manager.
+
+        Request: {
+
+            'email': proteneer@gmail.com,
+            'password': password,
+
+        }
+
+        """
+        if self.request.remote_ip != '127.0.0.1':
+            return self.set_status(401)
+
+        content = json.loads(self.request.body.decode())
+        token = str(uuid.uuid4())
+        password = content['password']
+        hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+
+        db_body = {'_id': content['email'],
+                   'password_hash': hash_password,
+                   'token': token
+                   }
+
+        mdb = self.application.mdb
+        managers = mdb.managers
+        managers.insert(db_body)
+
+        self.write(json.dumps({'token': token}))
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -327,7 +354,7 @@ class TargetHandler(BaseHandler):
         streams = Target.members(self.db)
         self.write(json.dumps({'targets': list(streams)}))
 
-    @authenticated
+    #@authenticated
     def post(self):
         ''' POST a new target to the server
         Request:
@@ -477,23 +504,23 @@ class StreamHandler(tornado.web.RequestHandler):
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
     def __init__(self, cc_name, redis_port,
-                 cc_pass=None, targets_folder='targets', debug=False):
+                 cc_pass=None, targets_folder='targets', debug=False,
+                 mdb_host='localhost', mdb_port=27017, mdb_password=None):
         print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
         self.db = common.init_redis(redis_port, cc_pass)
         self.ws_dbs = {}
+        self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
+
         self.targets_folder = targets_folder
         if not os.path.exists('files'):
             os.makedirs('files')
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
-        if debug:
-            self.stats_conn = psycopg2.connect("dbname='fahdb' user='postgres'\
-                              password='testpass' host='localhost'")
-
         super(CommandCenter, self).__init__([
+            (r'/managers', AddManagerHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/register_ws', RegisterWSHandler),
