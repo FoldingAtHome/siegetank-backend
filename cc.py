@@ -481,7 +481,7 @@ class TargetHandler(BaseHandler):
         target.hset('creation_date', time.time())
         target.hset('engine', engine)
         target.hset('stage', 'disabled')
-        target.hset('owner', 'NotImplemented')
+        target.hset('owner', self.get_current_user())
         for allowed_version in content['engine_versions']:
             target.sadd('engine_versions', allowed_version)
         if 'allowed_ws' in content:

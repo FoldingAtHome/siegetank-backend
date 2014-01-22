@@ -132,6 +132,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(target.hget('steps_per_frame'), 50000)
         self.assertEqual(target.hget('stage'), 'disabled')
         self.assertEqual(target.hget('engine'), 'openmm')
+        self.assertEqual(target.hget('owner'), email)
         self.assertEqual(target.smembers('engine_versions'), {'6.0'})
         self.assertEqual(target.smembers('files'), {'system.xml.gz.b64',
                                                     'integrator.xml.gz.b64'})
