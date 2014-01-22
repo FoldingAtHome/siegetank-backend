@@ -111,16 +111,37 @@ def authenticated(method):
 
 
 class AuthHandler(tornado.web.RequestHandler):
-    """ Generate a new authorization token for the user
+    def post(self):
+        """ Generate a new authorization token for the user
 
         Request: {
+
             'email': proteneer@gmail.com,
             'password': password
+
         }
 
+        Reply: {
 
+            token: token
 
-    """
+        }
+
+        """
+        content = json.loads(self.request.body.decode())
+        password = content['password']
+        email = content['email']
+        mdb = self.application.mdb
+        query = mdb.managers.find_one({'_id': email},
+                                      fields=['password_hash'])
+        stored_hash = query['password_hash']
+        if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
+            new_token = str(uuid.uuid4())
+            mdb.managers.update({'_id': email}, {'token': new_token})
+        else:
+            return self.status(401)
+
+        self.write(json.dumps({'token': new_token}))
 
 class AddManagerHandler(tornado.web.RequestHandler):
     def post(self):
@@ -538,6 +559,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         signal.signal(signal.SIGTERM, self.shutdown)
 
         super(CommandCenter, self).__init__([
+            (r'/auth', AuthHandler),
             (r'/managers', AddManagerHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),

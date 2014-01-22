@@ -40,11 +40,25 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         }
         rep = self.fetch('/managers', method='POST', body=json.dumps(body))
         self.assertEqual(rep.code, 200)
-        query = self.cc.mdb.managers.find_one({'_id': email},
-                                              fields=['password_hash'])
+        query = self.cc.mdb.managers.find_one({'_id': email})
         stored_hash = query['password_hash']
+        stored_token = query['token']
         self.assertEqual(stored_hash,
                          bcrypt.hashpw(password.encode(), stored_hash))
+        reply_token = json.loads(rep.body.decode())['token']
+        self.assertEqual(stored_token, reply_token)
+
+        # test auth
+        body = {
+            'email': email,
+            'password': password
+        }
+        rep = self.fetch('/auth', method='POST', body=json.dumps(body))
+        self.assertEqual(rep.code, 200)
+        reply_token = json.loads(rep.body.decode())['token']
+        query = self.cc.mdb.managers.find_one({'_id': email})
+        stored_token = query['token']
+        self.assertEqual(reply_token, stored_token)
 
     def test_register_cc(self):
 
