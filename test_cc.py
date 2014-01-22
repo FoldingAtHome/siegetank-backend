@@ -63,7 +63,6 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply_token, stored_token)
 
     def test_register_cc(self):
-
         ws_name = 'ramanujan'
         ext_http_port = 5829
         ws_redis_port = 1234
@@ -119,7 +118,6 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                            body=json.dumps(body))
         self.assertEqual(reply.code, 200)
         target_id = json.loads(reply.body.decode())['target_id']
-
         system_path = os.path.join(self.cc.targets_folder, target_id,
                                    'system.xml.gz.b64')
         self.assertEqual(open(system_path, 'rb').read().decode(), fb1)
@@ -140,7 +138,6 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         query = self.cc.mdb.managers.find_one({'_id': email},
                                               fields=['targets'])
         self.assertEqual(query['targets'], {'test_cc': [target_id]})
-
 
     def test_get_targets(self):
         email = 'proteneer@gmail.com'

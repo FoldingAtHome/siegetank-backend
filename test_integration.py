@@ -141,6 +141,25 @@ class Test(tornado.testing.AsyncTestCase):
         post_streams.remove(stream_id)
         self.assertEqual(streams, post_streams)
 
+        # test assigning
+        body = {
+            'engine': 'openmm',
+            'engine_version': '6.0'
+        }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/assign'
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                     body=json.dumps(body), method='POST')
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+        token = content['token']
+        uri = content['uri']
+
+        ws_headers = {'Authorization': token}
+        client.fetch(uri, self.stop, headers=ws_headers,
+                     validate_cert=cc._is_domain(url))
+        rep = self.wait()
+        self.assertEqual(rep.code, 200)
 
     @classmethod
     def tearDownClass(cls):

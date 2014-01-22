@@ -23,7 +23,8 @@ import pymongo
 
 
 # The command center manages several work servers in addition to managing the
-# stats system for each work server.
+# stats system for each work server. A single command center manages a single
+# engine type (eg. OpenMM). 
 
 # CC uses Antirez's redis extensively as NoSQL store mainly because of its
 # blazing fast speed. Binary blobs such as states, systems, and frames are
@@ -87,6 +88,9 @@ class Target(apollo.Entity):
               'engine': str,  # openmm or gromacs
               'engine_versions': {str},  # allowed core_versions
               }
+
+# allow queries to find which targets have a matching engine version
+Target.add_lookup('engine_versions', injective=False)
 
 apollo.relate(Target, 'striated_ws', {WorkServer})
 
@@ -190,6 +194,76 @@ class BaseHandler(tornado.web.RequestHandler):
             return query['_id']
         except:
             return None
+
+
+class AssignHandler(BaseHandler):
+    def post(self):
+        """ Get a job assignment.
+
+        Request:
+            {
+                #"core_id": core_id,
+                "engine": "openmm", (lowercase)
+                "engine_version": "5.2"
+            }
+
+        Reply:
+            {
+                "token": "6lk2j5-tpoi2p6-poipoi23",
+                "uri": 'https://raynor.stanford.edu:port/core/start'
+            }
+
+        Matching algorithm:
+
+        1. "engine" type must match that of the CC's engine type.
+        2. A list of targets matching "engine_versions" is determined.
+
+        A cdf function is built with weights of each target. A random target
+        is picked from this cdf, and one of its streams is activated. The set
+        of striated_ws for this target is found, and a random WS is picked.
+
+        The stream is then activated on this WS.
+
+        """
+
+        self.set_status(400)
+        #core_id = self.request.body['core_id']
+        content = json.loads(self.request.body.decode())
+        engine = content['engine']
+        if engine != 'openmm':
+            return self.write(json.dumps({'error': 'engine must be openmm'}))
+        engine_version = content['engine_version']
+
+        available_targets = Target.lookup('engine_versions', engine_version,
+                                          self.db)
+        if not available_targets:
+            self.write(json.dumps({'error': 'no jobs match engine version'}))
+            return
+
+        attempts = 0
+        while True and attempts < 3:
+            attempts += 1
+            # pick a random target from available targets
+            target_id = random.sample(available_targets, 1)[0]
+            target = Target(target_id, self.db)
+            # pick a random ws the target is striating over
+            ws_name = target.srandmember('striated_ws')
+            ws_db = self.application.WorkServerDB[ws_name]
+            token = str(uuid.uuid4())
+            stream_id = ws.WorkServer.activate_stream(target_id,
+                                                      token, ws_db, 1800)
+            if stream_id:
+                workserver = WorkServer(ws_name, self.db)
+                ws_url = workserver.hget('url')
+                ws_port = workserver.hget('http_port')
+                body = {
+                    'token': token,
+                    'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
+                }
+                self.write(json.dumps(body))
+                return self.set_status(200)
+            else:
+                pass
 
 
 class RegisterWSHandler(BaseHandler):
@@ -569,6 +643,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         signal.signal(signal.SIGTERM, self.shutdown)
 
         super(CommandCenter, self).__init__([
+            (r'/assign', AssignHandler),
             (r'/auth', AuthHandler),
             (r'/managers', AddManagerHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
