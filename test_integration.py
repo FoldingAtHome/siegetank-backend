@@ -105,7 +105,7 @@ class Test(tornado.testing.AsyncTestCase):
             self.assertEqual(reply.code, 200)
             post_streams.add(json.loads(reply.body.decode())['stream_id'])
 
-        # test GETing the streams
+        # test GET the streams
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
               +target_id
         client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
@@ -119,12 +119,27 @@ class Test(tornado.testing.AsyncTestCase):
             streams.add(k)
         self.assertEqual(streams, post_streams)
 
+        # delete a random stream
         stream_id = random.sample(streams, 1)[0]
         uri = 'https://'+url+':'+str(self.cc_hport)+'/streams/delete/'\
               +stream_id
         client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
                      headers=headers, method='PUT', body='{}')
         reply = self.wait()
+
+        # test GET the streams again
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
+              +target_id
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                     headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        body = json.loads(reply.body.decode())
+        streams = set()
+        for k, v in body.items():
+            streams.add(k)
+        post_streams.remove(stream_id)
+        self.assertEqual(streams, post_streams)
 
 
     @classmethod

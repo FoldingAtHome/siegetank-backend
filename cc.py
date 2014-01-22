@@ -245,13 +245,27 @@ class DeleteStreamHandler(BaseHandler):
 
         Request:
             {
-                'target_id': target_id,
+                'stream_id': stream_id,
             }
 
         """
-        for db_name, db_client in self.application.WorkServerDB.items():
+        for ws_name, db_client in self.application.WorkServerDB.items():
             if ws.Stream.exists(stream_id, db_client):
-                print('FOUND on ', db_name)
+                picked_ws = WorkServer(ws_name, self.db)
+                ws_url = picked_ws.hget('url')
+                ws_http_port = picked_ws.hget('http_port')
+                client = tornado.httpclient.AsyncHTTPClient()
+                body = {
+                    'stream_id': stream_id
+                }
+                rep = yield client.fetch('https://'+str(ws_url)+':'
+                                         +str(ws_http_port)+'/streams/delete',
+                                         method='PUT', body=json.dumps(body),
+                                         validate_cert=_is_domain(ws_url))
+                return self.set_status(rep.code)
+
+        self.set_status(400)
+
 
 class PostStreamHandler(BaseHandler):
     @authenticated
