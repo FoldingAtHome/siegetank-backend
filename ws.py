@@ -245,15 +245,16 @@ class PostStreamHandler(BaseHandler):
 
 class DeleteStreamHandler(BaseHandler):
     def put(self):
-        """ Accessible by CC only.
+        """ Accessible by CC only. TODO: make it authenticated! So that
+        this method can be called either from the CC or the WS.
 
-        Request
-        {
-            'id': stream_id
-        }
+        Request:
+            {
+                'stream_id': stream_id,
+            }
 
         """
-        stream_id = json.loads(self.request.body.decode())['id']
+        stream_id = json.loads(self.request.body.decode())['stream_id']
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
         stream = Stream(stream_id, self.db)

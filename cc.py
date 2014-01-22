@@ -117,16 +117,12 @@ class AuthHandler(tornado.web.RequestHandler):
         """ Generate a new authorization token for the user
 
         Request: {
-
             'email': proteneer@gmail.com,
             'password': password
-
         }
 
         Reply: {
-
             token: token
-
         }
 
         """
@@ -151,16 +147,12 @@ class AddManagerHandler(tornado.web.RequestHandler):
         """ Add a PG member as a Manager.
 
         Request: {
-
             'email': proteneer@gmail.com,
             'password': password,
-
         }
 
         Reply: {
-
             token: token
-
         }
 
         """
@@ -202,7 +194,8 @@ class BaseHandler(tornado.web.RequestHandler):
 
 class RegisterWSHandler(BaseHandler):
     def put(self):
-        ''' Called by WS for registration
+        """ Called by WS for registration
+
         Header:
             'Authorization': cc_pass
 
@@ -219,7 +212,8 @@ class RegisterWSHandler(BaseHandler):
             {
                 200 - OK
             }
-        '''
+
+        """
         content = json.loads(self.request.body.decode())
         auth = content['auth']
         if auth != self.application.cc_pass:
@@ -235,7 +229,7 @@ class RegisterWSHandler(BaseHandler):
 
 
 def _is_domain(url):
-    ''' returns True if url is a domain '''
+    """ Returns True if url is a domain """
     try:
         ipaddress.ip_address(url)
         return False
@@ -243,27 +237,44 @@ def _is_domain(url):
         return True
 
 
+class DeleteStreamHandler(BaseHandler):
+    @authenticated
+    @tornado.gen.coroutine
+    def put(self, stream_id):
+        """ Deletes a stream from the server
+
+        Request:
+            {
+                'target_id': target_id,
+            }
+
+        """
+        for db_name, db_client in self.application.WorkServerDB.items():
+            if ws.Stream.exists(stream_id, db_client):
+                print('FOUND on ', db_name)
+
 class PostStreamHandler(BaseHandler):
     @authenticated
     @tornado.gen.coroutine
     def post(self):
-        ''' POST a new stream to the server
-            Request:
-                {
-                    [required]
-                    "target_id": target_id,
-                    "files": {"file1_name": file1_bin_b64,
-                              "file2_name": file2_bin_b64,
-                              ...
-                              }
-                }
+        """ POST a new stream to the server
 
-            Reply:
-                {
-                    "stream_id": stream_id
-                }
+        Request:
+            {
+                [required]
+                "target_id": target_id,
+                "files": {"file1_name": file1_bin_b64,
+                          "file2_name": file2_bin_b64,
+                          ...
+                          }
+            }
 
-        '''
+        Reply:
+            {
+                "stream_id": stream_id
+            }
+
+        """
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
@@ -311,15 +322,9 @@ class PostStreamHandler(BaseHandler):
 
         client = tornado.httpclient.AsyncHTTPClient()
         rep = yield client.fetch('https://'+str(ws_url)+':'+str(ws_http_port)
-                                 +'/streams',
-                                 method='POST',
+                                 +'/streams', method='POST',
                                  body=json.dumps(body),
                                  validate_cert=_is_domain(ws_url))
-
-        # client = tornado.httpclient.HTTPClient()
-        # rep = client.fetch('https://'+str(ws_ip)+':'+str(ws_http_port)
-        #                    +'/streams', method='POST', validate_cert=False)
-        # client.close()
 
         self.set_status(rep.code)
         return self.write(rep.body)
@@ -327,7 +332,7 @@ class PostStreamHandler(BaseHandler):
 
 class GetTargetHandler(BaseHandler):
     def get(self, target_id):
-        ''' Retrieve details regarding this target
+        """ Retrieve details regarding this target
 
         Reply:
         {
@@ -342,7 +347,7 @@ class GetTargetHandler(BaseHandler):
             'engine_versions': engine_versions
         }
 
-        '''
+        """
         self.set_status(400)
         target = Target(target_id, self.db)
 
@@ -365,7 +370,7 @@ class GetTargetHandler(BaseHandler):
 
 class ListStreamsHandler(BaseHandler):
     def get(self, target_id):
-        ''' Return a list of streams for the specified target
+        """ Return a list of streams for the specified target
 
         Reply:
             {
@@ -374,7 +379,7 @@ class ListStreamsHandler(BaseHandler):
                 ...
             }
 
-        '''
+        """
         self.set_status(400)
         target = Target(target_id, self.db)
         striated_ws = target.smembers('striated_ws')
@@ -398,7 +403,7 @@ class ListStreamsHandler(BaseHandler):
 
 class TargetHandler(BaseHandler):
     def get(self):
-        ''' Return a list of targets on the CC depending on context
+        """ Return a list of targets on the CC depending on context
 
         Reply:
             {
@@ -408,16 +413,15 @@ class TargetHandler(BaseHandler):
         If Authorized by a F@h user, it will only return list of targets
         owned by the user.
 
-        '''
+        """
         streams = Target.members(self.db)
         self.write(json.dumps({'targets': list(streams)}))
 
     @authenticated
     def post(self):
-        ''' POST a new target to the server
+        """ POST a new target to the server
         Request:
             {
-
                 [required]
                 "description": description,
                 "files": {"file1_name": file1_bin_b64,
@@ -432,7 +436,6 @@ class TargetHandler(BaseHandler):
                 # if present, a list of workservers to striate on.
                 "allowed_ws": ["mengsk", "arcturus"]
                 "stage": beta,
-
             }
 
         Reply:
@@ -440,7 +443,7 @@ class TargetHandler(BaseHandler):
                 "target_id": target_id,
             }
 
-        '''
+        """
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         files = content['files']
@@ -507,7 +510,7 @@ class TargetHandler(BaseHandler):
         return self.write(json.dumps(response))
 
     # def get(self):
-    #     ''' PGI - Fetch details on a target'''
+    #     """ PGI - Fetch details on a target"""
     #     user = 'yutong'
     #     response = []
     #     targets = cc_redis.smembers(user+':targets')
@@ -527,37 +530,6 @@ class TargetHandler(BaseHandler):
 
     #     # delete the project
     #     return
-
-class StreamHandler(tornado.web.RequestHandler):
-    def post(self):
-        ''' PGI: Add new streams to an existing target. The input must be compressed
-            state.xml files encoded as base64. Streams are routed directly to the WS via 
-            redis using a pubsub mechanism - (Request Forwarded to WS) '''
-        content = json.loads(self.request.body)
-        try:
-            target_id = content['target_id']
-        except Exception as e:
-            return self.write('bad request')
-
-        # shove stream to random workserver
-        random_ws_id = cc_redis.srandmember('wss')
-        # record the WSs used by this target
-        cc_redis.sadd('target:'+target_id+':wss', random_ws_id)
-        random_ws_ip = cc.redis.get('ws:'+target_id+':ip')
-        response = requests.post('')
-
-    def put(self):
-        ''' PGI: Enable/Disable a particular stream
-            A stream is Enable/Disabled by sending a WS redis request directly 
-            However, if stream's error_count is > 10 then it cannot be ENABLED
-
-            '''
-        pass
-
-
-    def delete(self):
-        ''' PGI: Delete a particular stream - (Request Forwarded to WS) '''
-        pass
 
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
@@ -584,7 +556,8 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/register_ws', RegisterWSHandler),
             (r'/targets', TargetHandler),
-            (r'/streams', PostStreamHandler)
+            (r'/streams', PostStreamHandler),
+            (r'/streams/delete/(.*)', DeleteStreamHandler)
             ], debug=debug)
 
         self.WorkServerDB = {}

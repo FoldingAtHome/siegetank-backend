@@ -114,7 +114,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         stream_id2 = json.loads(response.body.decode())['stream_id']
         self.assertEqual(target.smembers('streams'), {stream_id1, stream_id2})
 
-        body = {'id': stream_id1}
+        body = {'stream_id': stream_id1}
         response = self.fetch('/streams/delete',
                               method='PUT',
                               body=json.dumps(body))
@@ -124,7 +124,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(isfile(os.path.join('streams', stream_id1, fn4)))
         self.assertTrue(target.zscore('queue', stream_id1) is None)
 
-        body = {'id': stream_id2}
+        body = {'stream_id': stream_id2}
         response = self.fetch('/streams/delete',
                               method='PUT',
                               body=json.dumps(body))

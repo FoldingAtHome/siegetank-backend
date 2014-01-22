@@ -1,17 +1,16 @@
-import unittest
-import os
-import shutil
-
 import tornado
 import tornado.web
 import tornado.httpclient
 import tornado.testing
 import tornado.gen
 
+import unittest
+import os
+import shutil
 import ws
 import cc
 import sys
-
+import random
 import base64
 import json
 
@@ -41,7 +40,6 @@ class Test(tornado.testing.AsyncTestCase):
         self.cc.mdb.managers.drop()
 
     def test_post_target_and_streams(self):
-
         # register an account
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
         url = '127.0.0.1'
@@ -110,19 +108,24 @@ class Test(tornado.testing.AsyncTestCase):
         # test GETing the streams
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
               +target_id
-
         client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
                      headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
 
         body = json.loads(reply.body.decode())
-
         streams = set()
         for k, v in body.items():
             streams.add(k)
-
         self.assertEqual(streams, post_streams)
+
+        stream_id = random.sample(streams, 1)[0]
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/streams/delete/'\
+              +stream_id
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                     headers=headers, method='PUT', body='{}')
+        reply = self.wait()
+
 
     @classmethod
     def tearDownClass(cls):
