@@ -508,6 +508,11 @@ class TargetHandler(BaseHandler):
             for ws_name in content['allowed_ws']:
                 target.sadd('allowed_ws', ws_name)
 
+        mdb = self.application.mdb
+        cc_id = self.application.name
+        mdb.managers.update({'_id': self.get_current_user()},
+                            {'$push': {'targets.'+cc_id: target_id}})
+
         target_dir = os.path.join(self.application.targets_folder, target_id)
         if not os.path.exists(target_dir):
             os.makedirs(target_dir)

@@ -137,6 +137,11 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(target.smembers('files'), {'system.xml.gz.b64',
                                                     'integrator.xml.gz.b64'})
 
+        query = self.cc.mdb.managers.find_one({'_id': email},
+                                              fields=['targets'])
+        self.assertEqual(query['targets'], {'test_cc': [target_id]})
+
+
     def test_get_targets(self):
         email = 'proteneer@gmail.com'
         password = 'test_pw_me'
