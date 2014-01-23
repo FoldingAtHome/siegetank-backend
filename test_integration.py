@@ -238,8 +238,6 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                          'keyfile': 'certs/cc.key'})
         self.cc_httpserver.listen(self.cc_hport)
 
-        self
-
     def tearDown(self):
         for k, v in self.workservers.items():
             v['httpserver'].stop()
@@ -247,7 +245,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         self.cc.mdb.managers.drop()
         pass
 
-    def test_post_target(self):
+    def test_post_target_restricted(self):
         # register an account
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
         url = '127.0.0.1'
@@ -274,6 +272,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             'steps_per_frame': 50000,
             'engine': 'openmm',
             'engine_versions': ['6.0'],
+            'allowed_ws': ['flash', 'jaedong'],
             }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
@@ -281,7 +280,38 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         reply = self.wait()
         self.assertEqual(reply.code, 200)
 
+        target_id = json.loads(reply.body.decode())['target_id']
+        # test POST 20 streams
+        post_streams = set()
+        for i in range(20):
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
+            rand_bin = base64.b64encode(os.urandom(1024)).decode()
+            body = {'target_id': target_id,
+                    'files': {"state.xml.gz.b64": rand_bin}
+                    }
+            client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                         validate_cert=cc._is_domain(url),
+                         headers=headers)
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            post_streams.add(json.loads(reply.body.decode())['stream_id'])
 
+        # test GET the streams
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
+              +target_id
+        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                     headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
+        body = json.loads(reply.body.decode())
+        streams = set()
+        striated_servers = set()
+        for k, v in body.items():
+            streams.add(k)
+            striated_servers.add(v[2])
+        self.assertEqual(streams, post_streams)
+        self.assertEqual(striated_servers, {'flash', 'jaedong'})
 
     @classmethod
     def tearDownClass(cls):

@@ -461,7 +461,7 @@ class ListStreamsHandler(BaseHandler):
 
         Reply:
             {
-                'stream1_id': [status, n_frames, ws_name],
+                'stream1_id': [status, n_frames, ws_name]
                 'stream2_id': [status, n_frames, ws_name],
                 ...
             }
