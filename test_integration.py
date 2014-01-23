@@ -14,6 +14,7 @@ import sys
 import random
 import base64
 import json
+import time
 
 
 class Test(tornado.testing.AsyncTestCase):
@@ -104,6 +105,9 @@ class Test(tornado.testing.AsyncTestCase):
 
         # test POSTing 20 streams
         post_streams = set()
+
+        stream_binaries = {}
+
         for i in range(20):
             uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
             rand_bin = base64.b64encode(os.urandom(1024)).decode()
@@ -116,7 +120,9 @@ class Test(tornado.testing.AsyncTestCase):
                          headers=headers)
             reply = self.wait()
             self.assertEqual(reply.code, 200)
-            post_streams.add(json.loads(reply.body.decode())['stream_id'])
+            stream_id = json.loads(reply.body.decode())['stream_id']
+            post_streams.add(stream_id)
+            stream_binaries[stream_id] = rand_bin
 
         # test GET the streams
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
@@ -168,11 +174,30 @@ class Test(tornado.testing.AsyncTestCase):
         token = content['token']
         uri = content['uri']
 
+        # fetch from the WS
         ws_headers = {'Authorization': token}
         client.fetch(uri, self.stop, headers=ws_headers,
                      validate_cert=cc._is_domain(url))
         rep = self.wait()
         self.assertEqual(rep.code, 200)
+
+        content = json.loads(rep.body.decode())
+        get_target_id = content['target_id']
+        self.assertEqual(get_target_id, target_id)
+        stream_id = content['stream_id']
+        self.assertTrue(stream_id in post_streams)
+        sys_file = content['target_files']['system.xml.gz.b64'].encode()
+        intg_file = content['target_files']['integrator.xml.gz.b64'].encode()
+        state_file = content['stream_files']['state.xml.gz.b64'].encode()
+        self.assertEqual(open(os.path.join(self.ws.targets_folder, target_id,
+                         'system.xml.gz.b64'), 'rb').read(), sys_file)
+        self.assertEqual(open(os.path.join(self.ws.targets_folder, target_id,
+                         'integrator.xml.gz.b64'), 'rb').read(), intg_file)
+        self.assertEqual(open(os.path.join(self.ws.streams_folder, stream_id,
+                         'state.xml.gz.b64'), 'rb').read(), state_file)
+        self.assertEqual(open(os.path.join(self.ws.streams_folder, stream_id,
+                         'state.xml.gz.b64'), 'rb').read(),
+                         stream_binaries[stream_id].encode())
 
     @classmethod
     def tearDownClass(cls):
@@ -312,6 +337,31 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             striated_servers.add(v[2])
         self.assertEqual(streams, post_streams)
         self.assertEqual(striated_servers, {'flash', 'jaedong'})
+
+        # test assigning
+        for i in range(5):
+            print('.', end='')
+            sys.stdout.flush()
+            body = {
+                'engine': 'openmm',
+                'engine_version': '6.0'
+            }
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/assign'
+            client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+                         body=json.dumps(body), method='POST')
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            content = json.loads(reply.body.decode())
+            token = content['token']
+            uri = content['uri']
+
+            # fetch from the WS
+            ws_headers = {'Authorization': token}
+            client.fetch(uri, self.stop, headers=ws_headers,
+                         validate_cert=cc._is_domain(url))
+            rep = self.wait()
+            self.assertEqual(rep.code, 200)
+            time.sleep(1)
 
     @classmethod
     def tearDownClass(cls):
