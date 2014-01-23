@@ -17,7 +17,6 @@ import ws
 import ipaddress
 import functools
 import bcrypt
-import uuid
 import common
 import pymongo
 
@@ -91,7 +90,6 @@ class Target(apollo.Entity):
 
 # allow queries to find which targets have a matching engine version
 Target.add_lookup('engine_versions', injective=False)
-
 apollo.relate(Target, 'striated_ws', {WorkServer})
 
 
@@ -265,6 +263,8 @@ class AssignHandler(BaseHandler):
             else:
                 pass
 
+        self.write(json.dumps({'error': 'could not get assignment'}))
+
 
 class RegisterWSHandler(BaseHandler):
     def put(self):
@@ -424,15 +424,15 @@ class GetTargetHandler(BaseHandler):
 
         Reply:
         {
-            'description': description,
-            'owner': owner,
-            'steps_per_frame': steps_per_frame,
-            'creation_date': creation_date,
-            'stage': disabled, beta, release
-            'allowed_ws': workservers allowed
-            'striated_ws': workservers used
-            'engine': engine_type (usually openmm)
-            'engine_versions': engine_versions
+            "description": description,
+            "owner": owner,
+            "steps_per_frame": steps_per_frame,
+            "creation_date": creation_date,
+            "stage": disabled, beta, release
+            "allowed_ws": workservers allowed
+            "striated_ws": workservers used
+            "engine": engine type ('openmm' for now)
+            "engine_versions": engine_versions
         }
 
         """
@@ -440,7 +440,6 @@ class GetTargetHandler(BaseHandler):
         target = Target(target_id, self.db)
 
         # get a list of streams
-
         body = {
             'description': target.hget('description'),
             'owner': target.hget('owner'),
@@ -508,6 +507,7 @@ class TargetHandler(BaseHandler):
     @authenticated
     def post(self):
         """ POST a new target to the server
+
         Request:
             {
                 [required]
@@ -646,10 +646,10 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             (r'/assign', AssignHandler),
             (r'/auth', AuthHandler),
             (r'/managers', AddManagerHandler),
+            (r'/targets', TargetHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/register_ws', RegisterWSHandler),
-            (r'/targets', TargetHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete/(.*)', DeleteStreamHandler)
             ], debug=debug)

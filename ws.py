@@ -206,9 +206,11 @@ class PostStreamHandler(BaseHandler):
         target_id = content['target_id']
         stream_files = content['stream_files']
 
+        targets_folder = self.application.targets_folder
+
         if not Target.exists(target_id, self.db):
             target_files = content['target_files']
-            target_dir = os.path.join('targets', target_id)
+            target_dir = os.path.join(targets_folder, target_id)
             if not os.path.exists(target_dir):
                 os.makedirs(target_dir)
             target = Target.create(target_id, self.db)
@@ -219,7 +221,7 @@ class PostStreamHandler(BaseHandler):
                 target.sadd('files', filename)
 
         stream_id = str(uuid.uuid4())
-        stream_dir = os.path.join('streams', stream_id)
+        stream_dir = os.path.join(self.application.streams_folder, stream_id)
         if not os.path.exists(stream_dir):
             os.makedirs(stream_dir)
 
@@ -267,14 +269,15 @@ class DeleteStreamHandler(BaseHandler):
                 active_stream.delete()
         except KeyError:
             pass
-        shutil.rmtree(os.path.join('streams', stream_id))
+        shutil.rmtree(os.path.join(self.application.streams_folder, stream_id))
 
         target = Target(target_id, self.db)
         # manual cleanup
         target.zrem('queue', stream_id)
         if target.scard('streams') == 0:
             target.delete()
-            shutil.rmtree(os.path.join('targets', target_id))
+            shutil.rmtree(os.path.join(self.application.targets_folder,
+                                       target_id))
 
         self.set_status(200)
 
@@ -368,13 +371,15 @@ class CoreStartHandler(BaseHandler):
 
         reply['stream_files'] = dict()
         for filename in stream.smembers('files'):
-            file_path = os.path.join('streams', stream_id, filename)
+            file_path = os.path.join(self.application.streams_folder,
+                                     stream_id, filename)
             with open(file_path, 'r') as handle:
                 reply['stream_files'][filename] = handle.read()
 
         reply['target_files'] = dict()
         for filename in target.smembers('files'):
-            file_path = os.path.join('targets', target_id, filename)
+            file_path = os.path.join(self.application.targets_folder,
+                                     target_id, filename)
             with open(file_path, 'r') as handle:
                 reply['target_files'][filename] = handle.read()
 
@@ -423,19 +428,20 @@ class CoreFrameHandler(BaseHandler):
         if active_stream.hget('last_frame_md5') == frame_hash:
             return self.set_status(200)
         active_stream.hset('last_frame_md5', frame_hash)
-        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        streams_folder = self.application.streams_folder
+        buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
         with open(buffer_path, 'ab') as buffer_file:
             buffer_file.write(frame_bytes)
         buffer_frames_count = active_stream.hincrby('buffer_frames', 1)
         if 'checkpoint' in content:
             checkpoint_bytes = base64.b64decode(content['checkpoint'])
-            # hard-coded checkpoint name to overwrite old state
-            checkpoint_path = os.path.join('streams', stream_id,
+            # HACK: hard-coded checkpoint name to overwrite old state
+            checkpoint_path = os.path.join(streams_folder, stream_id,
                                            'state.xml.gz.b64')
             with open(checkpoint_path, 'wb') as handle:
                 handle.write(checkpoint_bytes)
             # flush buffer.xtc to frames.xtc
-            frames_path = os.path.join('streams', stream_id, 'frames.xtc')
+            frames_path = os.path.join(streams_folder, stream_id, 'frames.xtc')
             with open(buffer_path, 'rb') as src:
                 with open(frames_path, 'ab') as dest:
                     while True:
@@ -481,7 +487,8 @@ class CoreStopHandler(BaseHandler):
         if 'error' in content:
             stream.hincrby('error_count', 1)
             message = content['error']
-            log_path = os.path.join('streams', stream_id, 'log.txt')
+            log_path = os.path.join(self.application.streams_folder,
+                                    stream_id, 'log.txt')
             with open(log_path, 'a') as handle:
                 handle.write(time.strftime("%c")+' | '+message)
 
@@ -534,17 +541,21 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                  ws_ext_http_port=None,
                  ccs=None,
                  increment=600,
+                 targets_folder='targets',
+                 streams_folder='streams',
                  debug=False):
 
         """ Initialize the WorkServer.
 
         """
 
+        self.targets_folder = targets_folder
+        self.streams_folder = streams_folder
         self.db = common.init_redis(redis_port, redis_pass)
-        if not os.path.exists('streams'):
-            os.makedirs('streams')
-        if not os.path.exists('targets'):
-            os.makedirs('targets')
+        if not os.path.exists(self.targets_folder):
+            os.makedirs(self.targets_folder)
+        if not os.path.exists(self.streams_folder):
+            os.makedirs(self.streams_folder)
         client = tornado.httpclient.AsyncHTTPClient()
 
         if ccs:
@@ -604,7 +615,8 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
     def deactivate_stream(self, stream_id):
         ActiveStream(stream_id, self.db).delete()
         self.db.zrem('heartbeats', stream_id)
-        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        buffer_path = os.path.join(self.streams_folder, 
+                                   stream_id, 'buffer.xtc')
         if os.path.exists(buffer_path):
             with open(buffer_path, 'w'):
                 pass

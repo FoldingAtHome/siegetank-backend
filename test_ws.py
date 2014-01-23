@@ -25,7 +25,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     def tearDownClass(self):
         self.ws.db.flushdb()
         self.ws.shutdown_redis()
-        folders = ['streams', 'targets']
+        folders = [self.ws.targets_folder, self.ws.streams_folder]
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
@@ -48,10 +48,13 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         stream_id = json.loads(response.body.decode())['stream_id']
 
-        self.assertTrue(isfile(os.path.join('targets', target_id, fn1)))
-        self.assertTrue(isfile(os.path.join('targets', target_id, fn2)))
-        self.assertTrue(isfile(os.path.join('streams', stream_id, fn3)))
-        self.assertTrue(isfile(os.path.join('streams', stream_id, fn4)))
+        targets_dir = self.ws.targets_folder
+        streams_dir = self.ws.streams_folder
+
+        self.assertTrue(isfile(os.path.join(targets_dir, target_id, fn1)))
+        self.assertTrue(isfile(os.path.join(targets_dir, target_id, fn2)))
+        self.assertTrue(isfile(os.path.join(streams_dir, stream_id, fn3)))
+        self.assertTrue(isfile(os.path.join(streams_dir, stream_id, fn4)))
 
         target = ws.Target(target_id, self.ws.db)
         self.assertFalse(target.zscore('queue', stream_id) is None)
@@ -79,7 +82,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         stream_id2 = json.loads(response.body.decode())['stream_id']
 
         self.assertTrue(stream_id != stream_id2)
-        self.assertTrue(isfile(os.path.join('streams', stream_id2, fn5)))
+        streams_dir = self.ws.streams_folder
+        self.assertTrue(isfile(os.path.join(streams_dir, stream_id2, fn5)))
         self.assertEqual(ws.Stream(stream_id2, self.ws.db).hget('target'),
                          target_id)
         self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
@@ -120,8 +124,10 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body))
         self.assertEqual(response.code, 200)
         self.assertEqual(target.smembers('streams'), {stream_id2})
-        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn3)))
-        self.assertFalse(isfile(os.path.join('streams', stream_id1, fn4)))
+
+        streams_dir = self.ws.streams_folder
+        self.assertFalse(isfile(os.path.join(streams_dir, stream_id1, fn3)))
+        self.assertFalse(isfile(os.path.join(streams_dir, stream_id1, fn4)))
         self.assertTrue(target.zscore('queue', stream_id1) is None)
 
         body = {'stream_id': stream_id2}
@@ -130,12 +136,14 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body))
         self.assertEqual(response.code, 200)
         self.assertFalse(ws.Target.exists(target_id, self.ws.db))
-        self.assertFalse(isfile(os.path.join('streams', stream_id2, fn5)))
-        self.assertFalse(isfile(os.path.join('streams', stream_id2, fn6)))
+        self.assertFalse(isfile(os.path.join(streams_dir, stream_id2, fn5)))
+        self.assertFalse(isfile(os.path.join(streams_dir, stream_id2, fn6)))
         self.assertTrue(target.zscore('queue', stream_id1) is None)
 
-        self.assertFalse(isfile(os.path.join('targets', target_id, fn1)))
-        self.assertFalse(isfile(os.path.join('targets', target_id, fn2)))
+        targets_dir = self.ws.targets_folder
+
+        self.assertFalse(isfile(os.path.join(targets_dir, target_id, fn1)))
+        self.assertFalse(isfile(os.path.join(targets_dir, target_id, fn2)))
 
     def test_activate_stream(self):
         target_id = str(uuid.uuid4())
@@ -218,7 +226,9 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             self.assertEqual(response.code, 200)
 
         self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
-        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+
+        streams_dir = self.ws.streams_folder
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer.xtc')
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
         # PUT a checkpoint
@@ -233,10 +243,10 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
         self.assertEqual(stream.hget('frames'), n_frames+1)
         self.assertEqual(b'', open(buffer_path, 'rb').read())
-        checkpoint_path = os.path.join('streams', stream_id, fn3)
+        checkpoint_path = os.path.join(streams_dir, stream_id, fn3)
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
         frame_buffer += frame_bin
-        frames_path = os.path.join('streams', stream_id, 'frames.xtc')
+        frames_path = os.path.join(streams_dir, stream_id, 'frames.xtc')
         self.assertEqual(frame_buffer, open(frames_path, 'rb').read())
 
         # PUT a few more frames
@@ -250,7 +260,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                                   body=json.dumps(body), method='PUT')
             self.assertEqual(response.code, 200)
         self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
-        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer.xtc')
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
         # test idempotency of PUT
@@ -309,7 +319,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stream.hget('error_count'), 1)
         self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
         self.assertFalse(target.zscore('queue', stream_id) is None)
-        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        buffer_path = os.path.join(self.ws.streams_folder,
+                                   stream_id, 'buffer.xtc')
         self.assertEqual(b'', open(buffer_path, 'rb').read())
 
     def test_stop_stream(self):
@@ -354,7 +365,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stream.hget('error_count'), 0)
         self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
         self.assertFalse(target.zscore('queue', stream_id) is None)
-        buffer_path = os.path.join('streams', stream_id, 'buffer.xtc')
+        buffer_path = os.path.join(self.ws.streams_folder,
+                                   stream_id, 'buffer.xtc')
         self.assertEqual(b'', open(buffer_path, 'rb').read())
 
 

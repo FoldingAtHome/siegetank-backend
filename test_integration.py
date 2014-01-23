@@ -24,7 +24,10 @@ class Test(tornado.testing.AsyncTestCase):
         cls.cc_rport = 5872
         cls.ws_hport = 9028
         cls.cc_hport = 8342
-        cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport, debug=True)
+        cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport,
+                               targets_folder='ws_targets',
+                               streams_folder='ws_streams',
+                               debug=True)
         cls.cc = cc.CommandCenter('goliath', redis_port=cls.cc_rport,
                                   targets_folder='cc_targets', debug=True)
 
@@ -168,10 +171,12 @@ class Test(tornado.testing.AsyncTestCase):
         cls.ws.db.flushdb()
         cls.cc.shutdown(kill=False)
         cls.ws.shutdown(kill=False)
-        folders = ['streams', 'targets', cls.cc.targets_folder]
+        folders = [cls.ws.targets_folder, cls.ws.streams_folder,
+                   cls.cc.targets_folder]
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
+
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
