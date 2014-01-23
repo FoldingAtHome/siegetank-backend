@@ -25,6 +25,7 @@ import hashlib
 import common
 import apollo
 import base64
+import functools
 
 import tornado.escape
 import tornado.ioloop
@@ -167,6 +168,33 @@ class BaseHandler(tornado.web.RequestHandler):
     @property
     def deactivate_stream(self):
         return self.application.deactivate_stream
+
+
+def authenticate_core(method):
+    """ Decorate handlers whose authorization token maps to a specific stream
+        identifier.
+
+        If the authorization token is valid, then the stream_id is sent to the
+        method as an argument.
+
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            token = self.request.headers['Authorization']
+        except:
+            self.write(json.dumps({'error': 'missing Authorization header'}))
+            return self.set_status(401)
+
+        stream_id = ActiveStream.lookup('auth_token', token, self.db)
+
+        if stream_id:
+            return method(self, stream_id)
+        else:
+            self.write(json.dumps({'error': 'bad Authorization header'}))
+            return self.set_status(401)
+
+    return wrapper
 
 
 class PostStreamHandler(BaseHandler):
@@ -316,9 +344,12 @@ class DeleteStreamHandler(BaseHandler):
 
 
 class CoreStartHandler(BaseHandler):
-    def get(self):
+    @authenticate_core
+    def get(self, stream_id):
         """ The core first goes to the CC to get an authorization token. The CC
         activates a stream, and maps the authorization token to the stream.
+
+        stream_id is passed in by the decorator from authenticate_core
 
         Request Header:
 
@@ -356,11 +387,7 @@ class CoreStartHandler(BaseHandler):
         are sent back to the workserver.
 
         """
-        shared_token = self.request.headers['Authorization']
-        stream_id = ActiveStream.lookup('auth_token', shared_token, self.db)
-        if stream_id is None:
-            self.set_status(401)
-            return self.write('Unknown token')
+        #stream_id = kwargs['stream_id']
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -390,7 +417,8 @@ class CoreStartHandler(BaseHandler):
 
 
 class CoreFrameHandler(BaseHandler):
-    def put(self):
+    @authenticate_core
+    def put(self, stream_id):
         """ Add a new frame. If the core posts to this method, then the WS
         assumes that the frame is good. NaNs, and other bad things are sent
         the /core/stop URI
@@ -413,11 +441,6 @@ class CoreFrameHandler(BaseHandler):
             200 - OK
 
         """
-
-        token = self.request.headers['Authorization']
-        stream_id = ActiveStream.lookup('auth_token', token, self.db)
-        if not stream_id:
-            return self.set_status(400)
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
@@ -458,30 +481,27 @@ class CoreFrameHandler(BaseHandler):
 
 
 class CoreStopHandler(BaseHandler):
-    def put(self):
+    @authenticate_core
+    def put(self, stream_id):
         """ Stop a stream from being ran by a core.
 
         Request Header:
 
-        Authorization - core_token
+            Authorization : core_token
 
         Request Body:
             {
                 [optional]
-                'error': error_message
+                "error": error_message
 
                 [optional]
-                'debug_files': {file1_name: file1_bin_b64,
+                "debug_files": {file1_name: file1_bin_b64,
                                 file2_name: file2_bin_b64,
                                 ...
                                 }
             }
 
         """
-        token = self.request.headers['Authorization']
-        stream_id = ActiveStream.lookup('auth_token', token, self.db)
-        if not stream_id:
-            return self.set_status(400)
         stream = Stream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
         if 'error' in content:
