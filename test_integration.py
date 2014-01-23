@@ -1,6 +1,7 @@
 import tornado
 import tornado.web
 import tornado.httpclient
+import tornado.httpserver
 import tornado.testing
 import tornado.gen
 
@@ -21,8 +22,8 @@ class Test(tornado.testing.AsyncTestCase):
     def setUpClass(cls):
         super(Test, cls).setUpClass()
         cls.ws_rport = 2398
-        cls.cc_rport = 5872
         cls.ws_hport = 9028
+        cls.cc_rport = 5872
         cls.cc_hport = 8342
         cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport,
                                targets_folder='ws_targets',
@@ -34,12 +35,22 @@ class Test(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(Test, self).setUp()
         self.cc.add_ws('mengsk', '127.0.0.1', self.ws_hport, self.ws_rport)
-        self.cc.listen(self.cc_hport, io_loop=self.io_loop, ssl_options={
-            'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
-        self.ws.listen(self.ws_hport, io_loop=self.io_loop, ssl_options={
-            'certfile': 'certs/cc.crt', 'keyfile': 'certs/cc.key'})
+        self.cc_httpserver = tornado.httpserver.HTTPServer(
+            self.cc,
+            io_loop=self.io_loop,
+            ssl_options={'certfile': 'certs/cc.crt',
+                         'keyfile': 'certs/cc.key'})
+        self.ws_httpserver = tornado.httpserver.HTTPServer(
+            self.ws,
+            io_loop=self.io_loop,
+            ssl_options={'certfile': 'certs/ws.crt',
+                         'keyfile': 'certs/ws.key'})
+        self.cc_httpserver.listen(self.cc_hport)
+        self.ws_httpserver.listen(self.ws_hport)
 
     def tearDown(self):
+        self.cc_httpserver.stop()
+        self.ws_httpserver.stop()
         self.cc.mdb.managers.drop()
 
     def test_post_target_and_streams(self):
@@ -74,10 +85,9 @@ class Test(tornado.testing.AsyncTestCase):
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
                      validate_cert=cc._is_domain(url), headers=headers)
         reply = self.wait()
-
         self.assertEqual(reply.code, 200)
-        target_id = json.loads(reply.body.decode())['target_id']
 
+        target_id = json.loads(reply.body.decode())['target_id']
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
                      headers=headers)
@@ -173,6 +183,120 @@ class Test(tornado.testing.AsyncTestCase):
         cls.ws.shutdown(kill=False)
         folders = [cls.ws.targets_folder, cls.ws.streams_folder,
                    cls.cc.targets_folder]
+        for folder in folders:
+            if os.path.exists(folder):
+                shutil.rmtree(folder)
+
+
+class TestMultiWS(tornado.testing.AsyncTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super(TestMultiWS, cls).setUpClass()
+        cls.workservers = {}
+        cls.workservers['flash'] = {}
+        cls.workservers['jaedong'] = {}
+        cls.workservers['bisu'] = {}
+
+        rport_start = 2398
+        hport_start = 9001
+
+        for k, v in cls.workservers.items():
+            v['rport'] = rport_start
+            v['hport'] = hport_start
+            targets_folder = 'targets_folder_'+k
+            streams_folder = 'streams_folder_'+k
+            v['targets_folder'] = targets_folder
+            v['streams_folder'] = streams_folder
+            v['ws'] = ws.WorkServer(k, redis_port=rport_start,
+                                    targets_folder=targets_folder,
+                                    streams_folder=streams_folder)
+            rport_start += 1
+            hport_start += 1
+
+        cls.cc_rport = 5872
+        cls.cc_hport = 8342
+
+        cls.cc = cc.CommandCenter('goliath', redis_port=cls.cc_rport,
+                                  targets_folder='cc_targets')
+
+    def setUp(self):
+        super(TestMultiWS, self).setUp()
+        for k, v in self.workservers.items():
+            self.cc.add_ws(k, '127.0.0.1', v['hport'], v['rport'])
+            v['httpserver'] = tornado.httpserver.HTTPServer(
+                v['ws'],
+                io_loop=self.io_loop,
+                ssl_options={'certfile': 'certs/ws.crt',
+                             'keyfile': 'certs/ws.key'})
+            v['httpserver'].listen(v['hport'])
+
+        self.cc_httpserver = tornado.httpserver.HTTPServer(
+            self.cc,
+            io_loop=self.io_loop,
+            ssl_options={'certfile': 'certs/cc.crt',
+                         'keyfile': 'certs/cc.key'})
+        self.cc_httpserver.listen(self.cc_hport)
+
+        self
+
+    def tearDown(self):
+        for k, v in self.workservers.items():
+            v['httpserver'].stop()
+        self.cc_httpserver.stop()
+        self.cc.mdb.managers.drop()
+        pass
+
+    def test_post_target(self):
+        # register an account
+        client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
+        url = '127.0.0.1'
+        email = 'proteneer@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password
+        }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=cc._is_domain(url))
+        rep = self.wait()
+        self.assertEqual(rep.code, 200)
+        auth = json.loads(rep.body.decode())['token']
+        headers = {'Authorization': auth}
+
+        fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
+                              for i in range(4))
+        description = "Diwakar and John's top secret project"
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
+            }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=cc._is_domain(url), headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
+
+
+    @classmethod
+    def tearDownClass(cls):
+        super(TestMultiWS, cls).tearDownClass()
+        cls.cc.db.flushdb()
+        cls.cc.shutdown(kill=False)
+
+        folders = [cls.cc.targets_folder]
+
+        for k, v in cls.workservers.items():
+            v['ws'].db.flushdb()
+            v['ws'].shutdown(kill=False)
+            folders.append(v['targets_folder'])
+            folders.append(v['streams_folder'])
+
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
