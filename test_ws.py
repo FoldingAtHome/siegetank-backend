@@ -217,6 +217,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         active_stream = ws.ActiveStream(stream_id, self.ws.db)
         stream = ws.Stream(stream_id, self.ws.db)
 
+        # PUT 20 frames
         for count in range(n_frames):
             frame_bin = os.urandom(1024)
             frame_buffer += frame_bin

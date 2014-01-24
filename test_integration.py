@@ -199,6 +199,11 @@ class Test(tornado.testing.AsyncTestCase):
                          'state.xml.gz.b64'), 'rb').read(),
                          stream_binaries[stream_id].encode())
 
+        # test posting frames
+        frame_bin = os.urandom(1024)
+
+        # test posting checkpoints
+
     @classmethod
     def tearDownClass(cls):
         super(Test, cls).tearDownClass()

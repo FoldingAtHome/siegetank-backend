@@ -121,7 +121,6 @@ class Stream(apollo.Entity):
     fields = {'frames': int,            # total number of frames completed
               'status': str,            # 'OK', 'DISABLED'
               'error_count': int,       # number of consecutive errors
-              'steps_per_frame': int,   # number of steps per frame
               'files': {str},           # set of filenames: fn1 fn2 fn3
               }
 
@@ -366,7 +365,6 @@ class CoreStartHandler(BaseHandler):
                                  file2_name: file2.b64,
                                  ...
                                  }
-                'steps_per_frame': int,
                 'stream_id': str,
                 'target_id': str
             }
@@ -375,9 +373,11 @@ class CoreStartHandler(BaseHandler):
         it is important we avoid writing duplicate frames on the first
         step for the core. We use the follow scheme:
 
+                      (0-10]                      (10-20]
+                    frameset_10                 frameset_20
               ------------------------------------------------------------
-              |c       core 1      |c|              core 2           |c|
-              ---                  --|--                             -----
+              |c       core 1      |c|              core 2         |c|
+              ---                  --|--                           --|--
         frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
                 ---------------------| ------------------------------- ---
 
@@ -421,7 +421,25 @@ class CoreFrameHandler(BaseHandler):
     def put(self, stream_id):
         """ Add a new frame. If the core posts to this method, then the WS
         assumes that the frame is good. NaNs, and other bad things are sent
-        the /core/stop URI
+        the /core/stop URI.
+
+        Frames are written directly to a buffer file. When a checkpoint is sent
+        buffered_frames are renamed (safely) to a frameset file.
+
+        files:
+
+        frameset_10 (0-10]
+        frameset_15 (10-15]
+        frameset_29 (15-29]
+        frameset_39 (29-39] <----- state.xml.gz
+
+        buffer_frames
+
+        when a checkpoint is received, the buffer_frames is renamed to
+        frameset_+(stream.frames+active_stream.buffer_frames), the buffer is
+        then deleted.
+
+        ...
 
         Request Header:
 
@@ -431,9 +449,6 @@ class CoreFrameHandler(BaseHandler):
             {
                 [required]
                 'frame' : frame.xtc (b64 encoded)
-
-                [optional]
-                'checkpoint' : checkpoint.xtc (b64 encoded)
             }
 
         Reply:
@@ -441,7 +456,6 @@ class CoreFrameHandler(BaseHandler):
             200 - OK
 
         """
-        stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
 
@@ -455,30 +469,85 @@ class CoreFrameHandler(BaseHandler):
         buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
         with open(buffer_path, 'ab') as buffer_file:
             buffer_file.write(frame_bytes)
-        buffer_frames_count = active_stream.hincrby('buffer_frames', 1)
-        if 'checkpoint' in content:
-            checkpoint_bytes = base64.b64decode(content['checkpoint'])
-            # HACK: hard-coded checkpoint name to overwrite old state
-            checkpoint_path = os.path.join(streams_folder, stream_id,
-                                           'state.xml.gz.b64')
-            with open(checkpoint_path, 'wb') as handle:
-                handle.write(checkpoint_bytes)
-            # flush buffer.xtc to frames.xtc
-            frames_path = os.path.join(streams_folder, stream_id, 'frames.xtc')
-            with open(buffer_path, 'rb') as src:
-                with open(frames_path, 'ab') as dest:
-                    while True:
-                        chars = src.read(4096)
-                        if not chars:
-                            break
-                        dest.write(chars)
-            with open(buffer_path, 'wb'):
-                pass
-            stream.hincrby('frames', buffer_frames_count)
-            active_stream.hset('buffer_frames', 0)
+        active_stream.hincrby('buffer_frames', 1)
+        # if 'checkpoint' in content:
+        #     # BUGGY: why are we decoding if it's to be sent out again?
+        #     checkpoint_bytes = content['checkpoint']
+        #     # HACK: hard-coded checkpoint name to overwrite old state
+        #     checkpoint_path = os.path.join(streams_folder, stream_id,
+        #                                    'state.xml.gz.b64')
+        #     with open(checkpoint_path, 'wb') as handle:
+        #         handle.write(checkpoint_bytes)
+        #     # flush buffer.xtc to frames.xtc
+        #     frames_path = os.path.join(streams_folder, stream_id, 
+        #                                'frames.xtc')
+        #     with open(buffer_path, 'rb') as src:
+        #         with open(frames_path, 'ab') as dest:
+        #             while True:
+        #                 chars = src.read(4096)
+        #                 if not chars:
+        #                     break
+        #                 dest.write(chars)
+        #     with open(buffer_path, 'wb'):
+        #         pass
+        #     stream.hincrby('frames', buffer_frames_count)
+        #     active_stream.hset('buffer_frames', 0)
 
         return self.set_status(200)
 
+
+class CoreCheckpointHandler(BaseHandler):
+    @authenticate_core
+    def put(self, stream_id):
+        """ Add a checkpoint. A checkpoint flushes the buffer and appends to
+        the frames.xtc file.
+
+        Request Header:
+
+            Authorization - core_token
+
+        Request Body:
+            {
+                [required]
+                "last_frame_md5" : frame.xtc (b64 encoded)
+                "checkpoint" : checkpoint.xml.tar.gz (b64 encoded)
+            }
+
+        Reply:
+
+            200 - OK
+
+        """
+        self.set_status(400)
+        content = json.loads(self.request.body.decode())
+        last_frame_md5 = content['last_frame_md5']
+        stream = Stream(stream_id, self.db)
+        active_stream = ActiveStream(stream_id, self.db)
+        if last_frame_md5 != active_stream.hget('last_frame_md5'):
+            return
+        streams_folder = self.application.streams_folder
+        buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
+        checkpoint_bytes = content['checkpoint']
+        # HACK: hard-coded checkpoint name to overwrite old state
+        checkpoint_path = os.path.join(streams_folder, stream_id,
+                                       'state.xml.gz.b64')
+        with open(checkpoint_path, 'wb') as handle:
+            handle.write(checkpoint_bytes)
+        # flush buffer.xtc to frames.xtc
+        frames_path = os.path.join(streams_folder, stream_id, 'frames.xtc')
+        with open(buffer_path, 'rb') as src:
+            with open(frames_path, 'ab') as dest:
+                while True:
+                    chars = src.read(4096)
+                    if not chars:
+                        break
+                    dest.write(chars)
+        # delete the old buffer
+        with open(buffer_path, 'wb'):
+            pass
+        buffer_frames_count = active_stream.hincrby('buffer_frames', 1)
+        stream.hincrby('frames', buffer_frames_count)
+        active_stream.hset('buffer_frames', 0)
 
 class CoreStopHandler(BaseHandler):
     @authenticate_core

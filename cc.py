@@ -209,6 +209,7 @@ class AssignHandler(BaseHandler):
             {
                 "token": "6lk2j5-tpoi2p6-poipoi23",
                 "uri": 'https://raynor.stanford.edu:port/core/start'
+                "steps_per_frame": 50000
             }
 
         Matching algorithm:
