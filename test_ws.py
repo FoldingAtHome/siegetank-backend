@@ -64,12 +64,14 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                          target_id)
         self.assertSetEqual(
             ws.Target(target_id, self.ws.db).smembers('streams'), {stream_id})
-        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('files'),
-                         {fn1, fn2})
-        self.assertEqual(ws.Stream(stream_id, self.ws.db).smembers('files'),
-                         {fn3, fn4})
+        self.assertEqual(
+            ws.Target(target_id, self.ws.db).smembers('target_files'),
+            {fn1, fn2})
+        self.assertEqual(
+            ws.Target(target_id, self.ws.db).smembers('stream_files'),
+            {fn3, fn4})
 
-        # post a second stream
+        # post a second stream with bad filenames
 
         fn5, fb5 = (str(uuid.uuid4()) for i in range(2))
 
@@ -78,20 +80,31 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                 }
 
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 400)
+
+        # post a third stream with the correct filenames
+
+        body = {'target_id': target_id,
+                'stream_files': {fn3: fb5, fn4: fn5}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         stream_id2 = json.loads(response.body.decode())['stream_id']
 
         self.assertTrue(stream_id != stream_id2)
         streams_dir = self.ws.streams_folder
-        self.assertTrue(isfile(os.path.join(streams_dir, stream_id2, fn5)))
+        self.assertTrue(isfile(os.path.join(streams_dir, stream_id2, fn3)))
+        self.assertTrue(isfile(os.path.join(streams_dir, stream_id2, fn4)))
         self.assertEqual(ws.Stream(stream_id2, self.ws.db).hget('target'),
                          target_id)
         self.assertEqual(ws.Target(target_id, self.ws.db).smembers('streams'),
                          {stream_id, stream_id2})
-        self.assertEqual(ws.Target(target_id, self.ws.db).smembers('files'),
-                         {fn1, fn2})
-        self.assertEqual(ws.Stream(stream_id2, self.ws.db).smembers('files'),
-                         {fn5})
+        self.assertEqual(
+            ws.Target(target_id, self.ws.db).smembers('target_files'),
+            {fn1, fn2})
+        self.assertEqual(
+            ws.Target(target_id, self.ws.db).smembers('stream_files'),
+            {fn3, fn4})
 
     def test_delete_stream(self):
         target_id = str(uuid.uuid4())
@@ -110,8 +123,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         fn5, fn6, fn7, fn8 = (str(uuid.uuid4()) for i in range(4))
         fb5, fb6, fb7, fb8 = (str(uuid.uuid4()) for i in range(4))
         body = {'target_id': target_id,
-                'target_files': {fn5: fb5, fn6: fb6},
-                'stream_files': {fn7: fb7, fn8: fb8}
+                'target_files': {fn1: fb5, fn2: fb6},
+                'stream_files': {fn3: fb7, fn4: fb8}
                 }
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)

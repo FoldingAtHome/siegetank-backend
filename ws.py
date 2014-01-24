@@ -116,12 +116,13 @@ import tornado.options
 # md5sum of last frame) would be the same as PUTing it once.
 
 
+# define stream_files and target_files (to save memory)
+
 class Stream(apollo.Entity):
     prefix = 'stream'
     fields = {'frames': int,            # total number of frames completed
               'status': str,            # 'OK', 'DISABLED'
               'error_count': int,       # number of consecutive errors
-              'files': {str},           # set of filenames: fn1 fn2 fn3
               }
 
 
@@ -139,7 +140,8 @@ class ActiveStream(apollo.Entity):
 class Target(apollo.Entity):
     prefix = 'target'
     fields = {'queue': apollo.zset(str),    # queue of inactive streams
-              'files': {str},               # list of filenames,
+              'stream_files': {str},        # set of filenames for the stream
+              'target_files': {str},        # set of filenames for the target
               'cc': str                     # which cc the target belongs to
               }
 
@@ -198,41 +200,42 @@ def authenticate_core(method):
 
 class PostStreamHandler(BaseHandler):
     def post(self):
-        ''' Accessible by CC only.
+        """ Accessible by CC only.
 
-            Add a new stream to WS. The POST method on this URI
-            can only be accessed by known CCs (IP restricted)
+        Add a new stream to WS. The POST method on this URI
+        can only be accessed by known CCs (IP restricted)
 
-            Request:
-                {
-                    'target_id': target_id
+        Request:
+            {
+                'target_id': target_id
 
-                    'target_files': {file1_name: file1.b64,
-                                     file2_name: file2.b64,
-                                     ...
-                                     }
+                [required if target_id does not exist on ws]
+                'target_files': {file1_name: file1.b64,
+                                 file2_name: file2.b64,
+                                 ...
+                                 }
 
-                    'stream_files': {file3_name: file3.b64,
-                                     file4_name: file4.b64,
-                                     ...
-                                     }
-                }
+                'stream_files': {file3_name: file3.b64,
+                                 file4_name: file4.b64,
+                                 ...
+                                 }
 
-            Response:
-                {
-                    'stream_id' : hash
-                }
+            }
 
-            Notes: Binaries in files must be base64 encoded.
+        Response:
+            {
+                'stream_id' : hash
+            }
 
-        '''
+        Notes: Binaries in files must be base64 encoded.
+
+        """
         #if not CommandCenter.lookup('ip', self.request.remote_ip, self.db):
         #    return self.set_status(401)
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
         stream_files = content['stream_files']
-
         targets_folder = self.application.targets_folder
 
         if not Target.exists(target_id, self.db):
@@ -245,7 +248,14 @@ class PostStreamHandler(BaseHandler):
                 target_file = os.path.join(target_dir, filename)
                 with open(target_file, 'w') as handle:
                     handle.write(binary)
-                target.sadd('files', filename)
+                target.sadd('target_files', filename)
+            for filename, binary in stream_files.items():
+                target.sadd('stream_files', filename)
+        else:
+            target = Target(target_id, self.db)
+            if target.smembers('stream_files') != stream_files.keys():
+                self.write(json.dumps({'error': 'inconsistent stream files'}))
+                return
 
         stream_id = str(uuid.uuid4())
         stream_dir = os.path.join(self.application.streams_folder, stream_id)
@@ -256,15 +266,13 @@ class PostStreamHandler(BaseHandler):
         for filename, binary in stream_files.items():
             with open(os.path.join(stream_dir, filename), 'w') as handle:
                 handle.write(binary)
-            stream.sadd('files', filename)
 
         target = Target(target_id, self.db)
         target.zadd('queue', stream_id, 0)
-
+        stream.hset('target', target)
         stream.hset('frames', 0)
         stream.hset('status', 'OK')
         stream.hset('error_count', 0)
-        stream.hset('target', target)
 
         response = {'stream_id': stream_id}
 
@@ -297,7 +305,6 @@ class DeleteStreamHandler(BaseHandler):
         except KeyError:
             pass
         shutil.rmtree(os.path.join(self.application.streams_folder, stream_id))
-
         target = Target(target_id, self.db)
         # manual cleanup
         target.zrem('queue', stream_id)
@@ -395,14 +402,14 @@ class CoreStartHandler(BaseHandler):
         reply = dict()
 
         reply['stream_files'] = dict()
-        for filename in stream.smembers('files'):
+        for filename in target.smembers('stream_files'):
             file_path = os.path.join(self.application.streams_folder,
                                      stream_id, filename)
             with open(file_path, 'r') as handle:
                 reply['stream_files'][filename] = handle.read()
 
         reply['target_files'] = dict()
-        for filename in target.smembers('files'):
+        for filename in target.smembers('target_files'):
             file_path = os.path.join(self.application.targets_folder,
                                      target_id, filename)
             with open(file_path, 'r') as handle:
@@ -431,8 +438,8 @@ class CoreFrameHandler(BaseHandler):
             10_frameset.xtc (0-10]
             15_frameset.xtc (10-15]
             29_frameset.xtc (15-29]
-            39_frameset.xtc (29-39] <- 39_state.xml.gz.b64
-            buffer_frames.xtc
+            39_frameset.xtc (29-39] <- 39_state.xml.gz.b64 |  39
+            buffer_frames.xtc                              | ????
 
         When a checkpoint is received, the following steps happen
 
