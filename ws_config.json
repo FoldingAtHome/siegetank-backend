@@ -1,18 +1,22 @@
-{
-    "name": "firebat",
-    "url": "firebat.stanford.edu",
-    "redis_port": 4738,
-    "redis_pass": "test_pass",
-    "internal_http_port": 8959,
-    "external_http_port": 8959,
-    "ccs" : {
-        "flash": {
-            "url": "flash.stanford.edu",
-            "auth": "PROTOSS_IS_FOR_NOOBS"     
-        },
-        "boxer": {
-            "ip": "127.0.0.2",
-            "auth": "I_DRINK_ZERG_TEARS"
-        }
+name = 'firebat'
+url = 'firebat.stanford.edu'
+redis_port = 4738
+redis_pass = 'test_pass'
+internal_http_port = 8959
+external_http_port = 8959
+
+command_centers = {
+    'flash': {
+        'url': 'flash.stanford.edu',
+        'auth': 'PROTOSS_IS_FOR_NOOBS',
+    },
+    'boxer': {
+        'url': '127.0.0.2',
+        'auth': 'I_DRINK_ZERG_TEARS',
     }
+}
+
+stats_server: {
+    'url': 'mongod.stanford.edu',
+
 }

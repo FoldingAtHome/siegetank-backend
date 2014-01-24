@@ -17,9 +17,9 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
         redis_port = str(3828)
-        self.increment = 3
-        self.ws = ws.WorkServer('test_server', redis_port, None,
-                                23847, None, self.increment)
+        self.ws = ws.WorkServer(ws_name='test_server',
+                                redis_port=redis_port,
+                                ws_ext_http_port=23847)
         super(TestStreamMethods, self).setUpClass()
 
     @classmethod
@@ -171,9 +171,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         stream1 = json.loads(response.body.decode())['stream_id']
         token = str(uuid.uuid4())
-        increment = 30*60
-        stream2 = ws.WorkServer.activate_stream(target_id, token,
-                                                self.ws.db, 30*60)
+        increment = tornado.options.options['heartbeat_increment']
+        stream2 = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
         self.assertEqual(stream1, stream2)
         self.assertTrue(ws.ActiveStream(stream1, self.ws.db))
         self.assertAlmostEqual(self.ws.db.zscore('heartbeats', stream1),
@@ -194,8 +193,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token,
-                                                  self.ws.db, 30*60)
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
@@ -219,8 +217,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token,
-                                                  self.ws.db, 30*60)
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
 
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
@@ -341,8 +338,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token,
-                                                  self.ws.db, 30*60)
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
@@ -387,15 +383,13 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token,
-                                                  self.ws.db, 30*60)
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
         frame_buffer = bytes()
         n_frames = 25
 
-        active_stream = ws.ActiveStream(stream_id, self.ws.db)
         stream = ws.Stream(stream_id, self.ws.db)
         target = ws.Target(target_id, self.ws.db)
 

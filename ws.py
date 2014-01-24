@@ -85,7 +85,7 @@ import tornado.options
 # PUT x.com/core/frame            - add a frame to a stream (idempotent)
 # PUT x.com/core/stop             - stop a stream
 # PUT x.com/core/checkpoint       - send a checkpoint file corresponding
-#                                 - to the last frame received
+#                                   to the last frame received
 # POST x.com/core/heartbeat       - send a heartbeat
 
 # checkpointing technique
@@ -115,8 +115,6 @@ import tornado.options
 # stream. However, PUTing the same frame twice (by means of checking the
 # md5sum of last frame) would be the same as PUTing it once.
 
-
-# define stream_files and target_files (to save memory)
 
 class Stream(apollo.Entity):
     prefix = 'stream'
@@ -157,9 +155,20 @@ Target.add_lookup('owner')
 apollo.relate(Target, 'streams', {Stream}, 'target')
 apollo.relate(Target, 'active_streams', {ActiveStream})
 
-# General WS config
-# Block ALL ports except port 80
-# Redis port is only available to CC's IP on the intranet
+##########
+# Config #
+##########
+
+tornado.options.define('name', type=str)
+tornado.options.define('redis_port', type=int)
+tornado.options.define('redis_pass', type=int)
+tornado.options.define('url', type=str)
+tornado.options.define('internal_http_port', type=int)
+tornado.options.define('external_http_port', type=int)
+tornado.options.define('command_centers', type=dict)
+tornado.options.define('heartbeat_increment', default=900, type=int)
+
+
 class BaseHandler(tornado.web.RequestHandler):
     @property
     def db(self):
@@ -277,6 +286,7 @@ class PostStreamHandler(BaseHandler):
 
         self.set_status(200)
         self.write(json.dumps(response))
+
 
 class DeleteStreamHandler(BaseHandler):
     def put(self):
@@ -550,6 +560,7 @@ class CoreCheckpointHandler(BaseHandler):
         active_stream.hset('buffer_frames', 0)
         self.set_status(200)
 
+
 class CoreStopHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
@@ -587,23 +598,16 @@ class CoreStopHandler(BaseHandler):
 
 
 class HeartbeatHandler(BaseHandler):
-    def initialize(self, increment=30*60):
-        ''' Each heartbeat received by the core increments the timer by
-            increment amount. Defaults to once every 30 minutes '''
-        self._increment = increment
-
-    def get(self):
-        self.set_status(200)
-        return self.write('OK')
-
-    def post(self):
-        ''' Cores POST to this handler to notify the WS that it is still 
+    @authenticate_core
+    def post(self, stream_id):
+        ''' Cores POST to this handler to notify the WS that it is still
             alive. WS executes a zadd initially as well'''
         try:
             content = json.loads(self.request.body.decode)
             token_id = content['shared_token']
+            increment = tornado.options.options['heartbeat_increment']
             stream_id = ActiveStream.lookup('shared_token', token_id, self.db)
-            self.db.zadd('heartbeats', stream_id, time.time()+self._increment)
+            self.db.zadd('heartbeats', stream_id, time.time()+increment)
             self.set_status(200)
         except KeyError:
             self.set_status(400)
@@ -630,7 +634,6 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                  redis_pass=None,
                  ws_ext_http_port=None,
                  ccs=None,
-                 increment=600,
                  targets_folder='targets',
                  streams_folder='streams',
                  debug=False):
@@ -648,6 +651,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             os.makedirs(self.streams_folder)
         client = tornado.httpclient.AsyncHTTPClient()
 
+        # Notify the command centers that this workserver is starting
         if ccs:
             for cc_name in ccs:
                 body = {
@@ -664,8 +668,6 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 if rep.code != 200:
                     print('Warning: not connect to CC '+cc_name)
 
-        client.close()
-
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
         super(WorkServer, self).__init__([
@@ -678,13 +680,11 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         ], debug=debug)
 
     def check_heartbeats(self):
-        dead_streams = self.db.zrangebyscore('heartbeats', 0, time.time())
-        if dead_streams:
-            for dead_stream in dead_streams:
-                self.deactivate_stream(dead_stream)
+        for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
+            self.deactivate_stream(dead_stream)
 
     @staticmethod
-    def activate_stream(target_id, token, db, increment):
+    def activate_stream(target_id, token, db):
         """ Activate and return the highest priority stream belonging to target
         target_id. This is called directly by the CC to start a stream.
 
@@ -698,15 +698,16 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             active_stream.hset('auth_token', token)
             active_stream.hset('steps', 0)
             active_stream.hset('start_time', time.time())
+            increment = tornado.options.options['heartbeat_increment']
             db.zadd('heartbeats', stream_id, time.time() + increment)
 
         return stream_id
 
-    # clears the buffer so it must be executed on WS side.
+    # deactivates the stream on the workserver
     def deactivate_stream(self, stream_id):
         ActiveStream(stream_id, self.db).delete()
         self.db.zrem('heartbeats', stream_id)
-        buffer_path = os.path.join(self.streams_folder, 
+        buffer_path = os.path.join(self.streams_folder,
                                    stream_id, 'buffer.xtc')
         if os.path.exists(buffer_path):
             with open(buffer_path, 'w'):
@@ -714,9 +715,9 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         # push this stream back into queue
         stream = Stream(stream_id, self.db)
         frames_completed = stream.hget('frames')
-        if frames_completed is None:
-            frames_completed = 0
         target = Target(stream.hget('target'), self.db)
+        # TODO: to a check to make sure the stream's status is OK. Check the
+        # error count, if it's too high, then the stream is stopped
         target.zadd('queue', stream_id, frames_completed)
 
     def push_stream_to_cc(stream_id):

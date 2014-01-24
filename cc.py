@@ -249,8 +249,7 @@ class AssignHandler(BaseHandler):
             ws_name = target.srandmember('striated_ws')
             ws_db = self.application.WorkServerDB[ws_name]
             token = str(uuid.uuid4())
-            stream_id = ws.WorkServer.activate_stream(target_id,
-                                                      token, ws_db, 1800)
+            stream_id = ws.WorkServer.activate_stream(target_id, token, ws_db)
             if stream_id:
                 workserver = WorkServer(ws_name, self.db)
                 ws_url = workserver.hget('url')
