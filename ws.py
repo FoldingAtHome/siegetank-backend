@@ -383,8 +383,6 @@ class CoreStartHandler(BaseHandler):
 
         When a core fetches a state.xml, it makes sure to NOT write the
         first frame (equivalent to the frame of fetched state.xml file).
-        On every subsequent checkpoint, both the frame and the checkpoint
-        are sent back to the workserver.
 
         """
         #stream_id = kwargs['stream_id']
@@ -419,27 +417,36 @@ class CoreStartHandler(BaseHandler):
 class CoreFrameHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Add a new frame. If the core posts to this method, then the WS
-        assumes that the frame is good. NaNs, and other bad things are sent
-        the /core/stop URI.
+        """ Add a new frame.
+
+        If the core posts to this method, then the WS assumes that the frame is
+        good.
 
         Frames are written directly to a buffer file. When a checkpoint is sent
-        buffered_frames are renamed (safely) to a frameset file.
+        buffered_frames are renamed (safely) to a frameset file. renames are in
+        general very fast compared to copy & moves.
 
-        files:
+        Example files on disk for a given stream:
 
-        frameset_10 (0-10]
-        frameset_15 (10-15]
-        frameset_29 (15-29]
-        frameset_39 (29-39] <----- state.xml.gz
+            10_frameset.xtc (0-10]
+            15_frameset.xtc (10-15]
+            29_frameset.xtc (15-29]
+            39_frameset.xtc (29-39] <- 39_state.xml.gz.b64
+            buffer_frames.xtc
 
-        buffer_frames
+        When a checkpoint is received, the following steps happen
 
-        when a checkpoint is received, the buffer_frames is renamed to
-        frameset_+(stream.frames+active_stream.buffer_frames), the buffer is
-        then deleted.
+        nframes = stream.hget('frames')+active_stream.hget('buffer_frames')
+        buffer_frames.xtc --> nframes+_frameset.xtc (via os.rename())
+        checkpoint.json --> nframes+_state.xml.gz.b64
+        stream.hset('frames', nframes)
+        39_state.xml.gz.b64 file is safely removed
 
-        ...
+        presence of k_frameset.xtc and k_state.xml.gz.b64 guarantees that the
+        frames up to k are valid.
+
+        If the WS crashes, we can directly read from the files to rebuild the
+        frames value in redis.
 
         Request Header:
 
@@ -447,7 +454,6 @@ class CoreFrameHandler(BaseHandler):
 
         Request Body:
             {
-                [required]
                 'frame' : frame.xtc (b64 encoded)
             }
 
