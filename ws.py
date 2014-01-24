@@ -474,7 +474,6 @@ class CoreFrameHandler(BaseHandler):
         """
         active_stream = ActiveStream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
-
         frame_bytes = base64.b64decode(content['frame'])
         # see if this frame has been submitted before
         frame_hash = hashlib.md5(frame_bytes).hexdigest()
@@ -486,29 +485,6 @@ class CoreFrameHandler(BaseHandler):
         with open(buffer_path, 'ab') as buffer_file:
             buffer_file.write(frame_bytes)
         active_stream.hincrby('buffer_frames', 1)
-        # if 'checkpoint' in content:
-        #     # BUGGY: why are we decoding if it's to be sent out again?
-        #     checkpoint_bytes = content['checkpoint']
-        #     # HACK: hard-coded checkpoint name to overwrite old state
-        #     checkpoint_path = os.path.join(streams_folder, stream_id,
-        #                                    'state.xml.gz.b64')
-        #     with open(checkpoint_path, 'wb') as handle:
-        #         handle.write(checkpoint_bytes)
-        #     # flush buffer.xtc to frames.xtc
-        #     frames_path = os.path.join(streams_folder, stream_id, 
-        #                                'frames.xtc')
-        #     with open(buffer_path, 'rb') as src:
-        #         with open(frames_path, 'ab') as dest:
-        #             while True:
-        #                 chars = src.read(4096)
-        #                 if not chars:
-        #                     break
-        #                 dest.write(chars)
-        #     with open(buffer_path, 'wb'):
-        #         pass
-        #     stream.hincrby('frames', buffer_frames_count)
-        #     active_stream.hset('buffer_frames', 0)
-
         return self.set_status(200)
 
 
@@ -545,11 +521,15 @@ class CoreCheckpointHandler(BaseHandler):
         buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
         checkpoint_bytes = content['checkpoint'].encode()
 
-        # HACK: write checkpoint as a new state
         stream_frames = stream.hget('frames')
         buffer_frames = active_stream.hget('buffer_frames')
+        # if buffer is empty then this checkpoint does nothing
+        # (important for idempotency)
+        if buffer_frames == 0:
+            return self.set_status(200)
         total_frames = stream_frames + buffer_frames
         base_name = 'state.xml.gz.b64'
+        # HACK: write checkpoint as a new state
         checkpoint_path = os.path.join(streams_folder, stream_id,
                                        str(total_frames)+'_'+base_name)
         with open(checkpoint_path, 'wb') as handle:
