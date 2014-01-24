@@ -18,7 +18,6 @@ def init_redis(redis_port, redis_pass=None):
                      this token before they can send messages
 
     '''
-    print('STARTING UP REDIS')
     redis_port = str(redis_port)
     args = ["redis/src/redis-server", "--port", redis_port]
     if redis_pass:

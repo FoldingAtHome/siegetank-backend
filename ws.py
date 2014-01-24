@@ -157,7 +157,6 @@ Target.add_lookup('owner')
 apollo.relate(Target, 'streams', {Stream}, 'target')
 apollo.relate(Target, 'active_streams', {ActiveStream})
 
-
 # General WS config
 # Block ALL ports except port 80
 # Redis port is only available to CC's IP on the intranet
@@ -279,7 +278,6 @@ class PostStreamHandler(BaseHandler):
         self.set_status(200)
         self.write(json.dumps(response))
 
-
 class DeleteStreamHandler(BaseHandler):
     def put(self):
         """ Accessible by CC only. TODO: make it authenticated! So that
@@ -392,7 +390,6 @@ class CoreStartHandler(BaseHandler):
         first frame (equivalent to the frame of fetched state.xml file).
 
         """
-        #stream_id = kwargs['stream_id']
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -400,13 +397,19 @@ class CoreStartHandler(BaseHandler):
         assert stream.hget('status') == 'OK'
 
         reply = dict()
-
         reply['stream_files'] = dict()
-        for filename in target.smembers('stream_files'):
-            file_path = os.path.join(self.application.streams_folder,
-                                     stream_id, filename)
-            with open(file_path, 'r') as handle:
-                reply['stream_files'][filename] = handle.read()
+        # if target is OpenMM engine type, use the following recipe:
+        base_name = 'state.xml.gz.b64'
+        frame_count = stream.hget('frames')
+        if frame_count == 0:
+            filename = 'state.xml.gz.b64'
+        else:
+            filename = str(stream.hget('frames'))+'_'+filename
+        file_path = os.path.join(self.application.streams_folder,
+                                 stream_id, filename)
+        with open(file_path, 'r') as handle:
+            reply['stream_files'][base_name] = handle.read()
+        # create additional methods later for gromacs/amber/etc.
 
         reply['target_files'] = dict()
         for filename in target.smembers('target_files'):
@@ -435,16 +438,16 @@ class CoreFrameHandler(BaseHandler):
 
         Example files on disk for a given stream:
 
-            10_frameset.xtc (0-10]
-            15_frameset.xtc (10-15]
-            29_frameset.xtc (15-29]
-            39_frameset.xtc (29-39] <- 39_state.xml.gz.b64 |  39
-            buffer_frames.xtc                              | ????
+            10_frames.xtc (0-10]
+            15_frames.xtc (10-15]
+            29_frames.xtc (15-29]
+            39_frames.xtc (29-39] <- 39_state.xml.gz.b64 |  39
+            buffer.xtc                                     | ????
 
         When a checkpoint is received, the following steps happen
 
         nframes = stream.hget('frames')+active_stream.hget('buffer_frames')
-        buffer_frames.xtc --> nframes+_frameset.xtc (via os.rename())
+        buffer.xtc --> nframes+_frames.xtc (via os.rename())
         checkpoint.json --> nframes+_state.xml.gz.b64
         stream.hset('frames', nframes)
         39_state.xml.gz.b64 file is safely removed
@@ -512,8 +515,8 @@ class CoreFrameHandler(BaseHandler):
 class CoreCheckpointHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Add a checkpoint. A checkpoint flushes the buffer and appends to
-        the frames.xtc file.
+        """ Add a checkpoint. A checkpoint renames into the buffer into a valid
+        frameset.
 
         Request Header:
 
@@ -522,7 +525,7 @@ class CoreCheckpointHandler(BaseHandler):
         Request Body:
             {
                 [required]
-                "last_frame_md5" : frame.xtc (b64 encoded)
+                "last_frame_hash" : frame.xtc (b64 encoded)
                 "checkpoint" : checkpoint.xml.tar.gz (b64 encoded)
             }
 
@@ -533,34 +536,39 @@ class CoreCheckpointHandler(BaseHandler):
         """
         self.set_status(400)
         content = json.loads(self.request.body.decode())
-        last_frame_md5 = content['last_frame_md5']
+        last_frame_md5 = content['last_frame_hash']
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
         if last_frame_md5 != active_stream.hget('last_frame_md5'):
             return
         streams_folder = self.application.streams_folder
         buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
-        checkpoint_bytes = content['checkpoint']
-        # HACK: hard-coded checkpoint name to overwrite old state
+        checkpoint_bytes = content['checkpoint'].encode()
+
+        # HACK: write checkpoint as a new state
+        stream_frames = stream.hget('frames')
+        buffer_frames = active_stream.hget('buffer_frames')
+        total_frames = stream_frames + buffer_frames
+        base_name = 'state.xml.gz.b64'
         checkpoint_path = os.path.join(streams_folder, stream_id,
-                                       'state.xml.gz.b64')
+                                       str(total_frames)+'_'+base_name)
         with open(checkpoint_path, 'wb') as handle:
             handle.write(checkpoint_bytes)
-        # flush buffer.xtc to frames.xtc
-        frames_path = os.path.join(streams_folder, stream_id, 'frames.xtc')
-        with open(buffer_path, 'rb') as src:
-            with open(frames_path, 'ab') as dest:
-                while True:
-                    chars = src.read(4096)
-                    if not chars:
-                        break
-                    dest.write(chars)
-        # delete the old buffer
+        # rename buffer.xtc to total_frames_frameset.xtc
+        frames_path = os.path.join(streams_folder, stream_id,
+                                   str(total_frames)+'_frames.xtc')
+        os.rename(buffer_path, frames_path)
+        # clear the old buffer
         with open(buffer_path, 'wb'):
             pass
-        buffer_frames_count = active_stream.hincrby('buffer_frames', 1)
-        stream.hincrby('frames', buffer_frames_count)
+        # delete the old state
+        old_state_path = os.path.join(streams_folder, stream_id,
+                                      str(stream_frames)+'_'+base_name)
+        if stream_frames > 0:
+            os.remove(old_state_path)
+        stream.hincrby('frames', buffer_frames)
         active_stream.hset('buffer_frames', 0)
+        self.set_status(200)
 
 class CoreStopHandler(BaseHandler):
     @authenticate_core
@@ -685,6 +693,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/streams/delete', DeleteStreamHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
+            (r'/core/checkpoint', CoreCheckpointHandler),
             (r'/core/stop', CoreStopHandler),
         ], debug=debug)
 

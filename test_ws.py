@@ -9,6 +9,7 @@ import uuid
 import json
 import time
 import base64
+import hashlib
 from os.path import isfile
 
 
@@ -205,7 +206,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['stream_id'], stream_id)
         self.assertEqual(content['target_id'], target_id)
 
-    def test_post_frame(self):
+    def test_put_frame(self):
         target_id = str(uuid.uuid4())
         fn1 = 'system.xml.gz.b64'
         fn2 = 'integrator.xml.gz.b64'
@@ -238,6 +239,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             response = self.fetch('/core/frame', headers=headers,
                                   body=json.dumps(body), method='PUT')
             self.assertEqual(response.code, 200)
+            frame_hash = hashlib.md5(frame_bin).hexdigest()
 
         self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
 
@@ -246,40 +248,59 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
         # PUT a checkpoint
-        frame_bin = os.urandom(1024)
-        checkpoint_bin = os.urandom(1024)
-        body = {'frame': base64.b64encode(frame_bin).decode(),
-                'checkpoint': base64.b64encode(checkpoint_bin).decode()
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        body = {'last_frame_hash': frame_hash,
+                'checkpoint': checkpoint_bin.decode()
                 }
-        response = self.fetch('/core/frame', headers=headers,
+        response = self.fetch('/core/checkpoint', headers=headers,
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
-        self.assertEqual(stream.hget('frames'), n_frames+1)
+        self.assertEqual(stream.hget('frames'), n_frames)
         self.assertEqual(b'', open(buffer_path, 'rb').read())
-        checkpoint_path = os.path.join(streams_dir, stream_id, fn3)
+        checkpoint_path = os.path.join(streams_dir, stream_id,
+                                       str(n_frames)+'_state.xml.gz.b64')
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
-        frame_buffer += frame_bin
-        frames_path = os.path.join(streams_dir, stream_id, 'frames.xtc')
+        frames_path = os.path.join(streams_dir, stream_id,
+                                   str(n_frames)+'_frames.xtc')
         self.assertEqual(frame_buffer, open(frames_path, 'rb').read())
 
         # PUT a few more frames
         frame_buffer = bytes()
-        n_frames = 5
-        for count in range(n_frames):
+        more_frames = 5
+        for count in range(more_frames):
             frame_bin = os.urandom(1024)
             frame_buffer += frame_bin
             body = {'frame': base64.b64encode(frame_bin).decode()}
             response = self.fetch('/core/frame', headers=headers,
                                   body=json.dumps(body), method='PUT')
             self.assertEqual(response.code, 200)
-        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
-        buffer_path = os.path.join(streams_dir, stream_id, 'buffer.xtc')
+            frame_hash = hashlib.md5(frame_bin).hexdigest()
+        self.assertEqual(active_stream.hget('buffer_frames'), more_frames)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # PUT a checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        body = {'last_frame_hash': frame_hash,
+                'checkpoint': checkpoint_bin.decode()
+                }
+        response = self.fetch('/core/checkpoint', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(b'', open(buffer_path, 'rb').read())
+        self.assertEqual(stream.hget('frames'), n_frames+more_frames)
+        self.assertEqual(active_stream.hget('buffer_frames'), 0)
+        total_frames = n_frames+more_frames
+        initial_state_path = os.path.join(streams_dir, stream_id,
+                                          'state.xml.gz.b64')
+        self.assertTrue(isfile(initial_state_path))
+        self.assertFalse(isfile(checkpoint_path))
+        checkpoint_path = os.path.join(streams_dir, stream_id,
+                                       str(total_frames)+'_state.xml.gz.b64')
+        self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
 
         # test idempotency of PUT
         frame_bin = os.urandom(1024)
-        frame_buffer += frame_bin
+        frame_buffer = frame_bin
         body = {'frame': base64.b64encode(frame_bin).decode()}
         response = self.fetch('/core/frame', headers=headers,
                               body=json.dumps(body), method='PUT')
@@ -289,6 +310,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
 
     def test_stop_error_stream(self):
         target_id = str(uuid.uuid4())
@@ -311,7 +333,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         frame_buffer = bytes()
         n_frames = 25
 
-        active_stream = ws.ActiveStream(stream_id, self.ws.db)
         stream = ws.Stream(stream_id, self.ws.db)
         target = ws.Target(target_id, self.ws.db)
 
