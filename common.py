@@ -2,7 +2,7 @@ import redis
 import subprocess
 import sys
 import time
-import redis
+import tornado
 
 
 def sum_time(time):
@@ -58,5 +58,6 @@ class RedisMixin():
         print('shutting down server...')
         self.shutdown_redis()
         if kill:
+            print('stopping tornado ioloop...')
             tornado.ioloop.IOLoop.instance().stop()
             sys.exit(0)

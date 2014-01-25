@@ -18,7 +18,6 @@ import signal
 import uuid
 import os
 import json
-import sys
 import time
 import shutil
 import hashlib
@@ -161,7 +160,7 @@ apollo.relate(Target, 'active_streams', {ActiveStream})
 
 tornado.options.define('name', type=str)
 tornado.options.define('redis_port', type=int)
-tornado.options.define('redis_pass', type=int)
+tornado.options.define('redis_pass', type=str)
 tornado.options.define('url', type=str)
 tornado.options.define('internal_http_port', type=int)
 tornado.options.define('external_http_port', type=int)
@@ -635,7 +634,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                  url='127.0.0.1',
                  redis_pass=None,
                  ws_ext_http_port=None,
-                 ccs=None,
+                 ccs=set(),
                  targets_folder='targets',
                  streams_folder='streams',
                  debug=False):
@@ -651,28 +650,32 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             os.makedirs(self.targets_folder)
         if not os.path.exists(self.streams_folder):
             os.makedirs(self.streams_folder)
-        client = tornado.httpclient.AsyncHTTPClient()
-
-        # Notify the command centers that this workserver is starting
-        if ccs:
-            for cc_name in ccs:
-                body = {
-                    'name': ws_name,
-                    'url': url,
-                    'http_port': ws_ext_http_port,
-                    'redis_port': redis_port,
-                    'redis_pass': redis_pass,
-                    'auth': ccs[cc_name]['auth']
-                }
-
-                uri = 'https://'+ccs[cc_name]['ip']+':'+\
-                      +ccs[cc_name]['http_port'] + '/register_ws'
-                rep = client.fetch(uri, method='POST', body=json.dumps(body))
-                if rep.code != 200:
-                    print('Warning: not connect to CC '+cc_name)
 
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
+
+        # Notify the command centers that this workserver is starting
+        for cc_name in ccs:
+            body = {
+                'name': ws_name,
+                'url': url,
+                'http_port': ws_ext_http_port,
+                'redis_port': redis_port,
+                'redis_pass': redis_pass,
+                'auth': ccs[cc_name]['auth']
+            }
+
+            # use the synchronous client
+            client = tornado.httpclient.HTTPClient()
+            uri = 'https://'+ccs[cc_name]['url']+'/register_ws'
+            try:
+                rep = client.fetch(uri, method='POST', connect_timeout=2,
+                                   body=json.dumps(body))
+                if rep.code != 200:
+                    print('Warning: not connect to CC '+cc_name)
+            except Exception:
+                print('Warning: not connect to CC '+cc_name)
+
         super(WorkServer, self).__init__([
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
@@ -682,6 +685,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/core/stop', CoreStopHandler),
         ], debug=debug)
 
+    def initialize_pulse(self):
         frequency = tornado.options.options['pulse_frequency_in_ms']
         self.pulse = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
                                                      frequency)
@@ -728,35 +732,35 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         # error count, if it's too high, then the stream is stopped
         target.zadd('queue', stream_id, frames_completed)
 
-    def push_stream_to_cc(stream_id):
-        pass
-
 
 def start():
-    ws_instance = WorkServer(ws_name='lol',
-                             redis_port=9087,
-                             ws_ext_http_port=1234)
+
+    tornado.options.parse_config_file('ws.conf')
+
+    options = tornado.options.options
+
+    ws_name = options.name
+    redis_port = options.redis_port
+    redis_pass = options.redis_pass
+    url = options.url
+    internal_http_port = options.internal_http_port
+    external_http_port = options.external_http_port
+    command_centers = options.command_centers
+
+    ws_instance = WorkServer(ws_name=ws_name,
+                             url=url,
+                             redis_port=redis_port,
+                             redis_pass=redis_pass,
+                             ccs=command_centers,
+                             ws_ext_http_port=external_http_port)
 
     ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
         'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
 
-    ws_server.listen(12345)
+    ws_server.bind(internal_http_port)
+    ws_server.start(0)
+    ws_instance.initialize_pulse()
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
     start()
-    '''
-    application = tornado.web.Application()
-
-    # inform the CCs that the WS is now online and ready for work
-    ws_uuid = 'firebat'
-    try:
-        for server_address, secret_key in CCs.iteritems():
-            payload = {'cc_key' : secret_key, 'ws_id' : ws_uuid, \
-                    'http_port' : http_port, 'redis_port' : ws_port}
-            r = requests.post('http://'+server_address+':80/add_ws', 
-                              json.dumps(payload))
-            print 'r.text', r.text
-    except:
-        print 'cc is down'
-'''
