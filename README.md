@@ -1,20 +1,12 @@
-<h1> Siege Tank </h1>
+<h1> Command Center </h1>
 
-F@h re-exposed using a web-based RESTful API with Python bindings.
-
-Standard Draft v0.1 
+The RESTful backend for Siege Tank.
 
 <h1> Components </h1>
 
-ST - Siege Public, Public API
-CC - Command Center, Fixed IP
+ST - Siege Public
+CC - Command Center
 WS - Work Server
-FU - FAH Users
-SS - Stats Server? 
-
-CC -> WS, via redis, and HTTP port 80 for communication (IP restriction)
-WS -> CC, HTTP backport for registration, HTTP port 80 for communication (IP Restriction). 
-CC -> FU, redis connection, FU blocks all ports (even 80), except for the redis port. (which is IP restricted)
 
 
 <h1> Key goals </h1>
@@ -23,122 +15,57 @@ The major goals in the development of Siege Tank are:
 
 1. Striated workservers for load-balancing
 2. Significantly improved ease of use in creating, storing, and accessing jobs
-3. Adopt modern technologies
+3. Adopt modern technologies and libraries
 4. Common RESTful Web API with Python bindings
 5. Scalability on both generic servers and AWS
 6. Emphasize convention over configuration
 
-<h1> Dependencies </h1>
+<h2> Server Dependencies </h2>
 
-1. Redis - super fast in-memory database.
-2. Protocol Buffers - for communicating frames back to WS.
-3. Tornado - WS base
-4. POCO - C++ HTTPSession library
+Python 3.3:
+1. redis
+2. tornado
+3. bcrypt
+4. pymongo
+5. apollo
+
+<h2> Core Dependencies </h2>
+
+POCO libraries.
 
 <h1> API </h1>
 
-Currently, the allowed RESTful requests are: 
+Currently, the allowed RESTful requests are GET, PUT, and POST. GETs and PUTs are guaranteed idempotent, that is, sending the same request 2+ times has the same effect as sending a single request. Requests that can be made publicly are denoted with [P], and requests requiring authentication are denoted using [A]. Detailed request parameters are available in the source code. In general, with the exception of downloading the final trajectory, PG users work with the Command Center methods. 
 
-1. read-only GET  
-2. add POST  
-3. delete DELETE  
-4. move PUT
+<h2> CC Methods </h2>
 
-A stream is a conceptualized instance of an MD-run. A project consists of a collection of streams.
+[P] POST x.com/auth - Authenticate the user, returning the password
 
-<h2> Authentication </h2>
+[A] POST x.com/targets - add a target
+[P] GET x.com/targets - if Authenticated, retrieves User's targets
+                      - if Public, retrieves list of all targets on server
+[P] GET x.com/targets/info/:target_id - get info about a specific target
+[A] PUT x.com/targets/stage/:target_id - change stage from beta->adv->full
+[A] PUT x.com/targets/delete/:target_id - delete target and its streams
+[A] PUT x.com/targets/stop/:target_id - stop the target and its streams
+[A] GET x.com/targets/streams/:target_id - get the streams for the target
 
-PUT x.com/st/auth  
-__REQ__
-``` json
-{
-  "username": "username",
-  "password": "password"
-}
-```  
-__REP__
-``` json
-{
-  "token": "random_token"
-}
-```
-The token can be used by other APIs as well.
+[A] POST x.com/streams - add a stream
+[P] GET x.com/streams/info/:stream_id - get information about specific stream
+[A] PUT x.com/streams/delete/:stream_id - delete a stream
+[A] PUT x.com/streams/stop/:stream_id - stop a stream
 
-<h2> POST,DELETE,PUT </h2>
-<h3> POST x.com/st/projects </h3>  
-Create a new, empty, project. All streams within a project have the same system and integrator. frame\_format, precision, steps\_per\_frame are optional, with default values listed below.  
-__REQ__
-``` json
-{
-  "description" : "kinase project",
-  "system" : "system.xml",
-  "integrator" : "integrator.xml",
-  "frame_format" : "xtc",
-  "precision" : 3,
-  "steps_per_frame" : 50000
-}
-```
-__REP__
-``` json
-{
-  "project_id": "sha1sum",
-}
-```
-<h3> POST x.com/st/projects/{project-id} </h3>
-Add stream(s) to a pre-existing project by giving it initial states. The states must be consistent with project's system and integrator.  
-__REQ__
-``` json
-{
-  "states" : ["state0.xml","state3.xml","state2349.xml"]
-}
-```
-__REP__
-``` json
-{
-  "stream_ids": ["sha1sum3", "sha1sum4", "sha1sum5"]
-}
-```
-<h3> DELETE x.com/st/projects/{project-id}/{stream-id} </h3>
-Delete a stream from a project, replies with HTTP 200 if successful
-<h3> DELETE x.com/st/projects/{project-id} </h3>
-Delete a project and its streams, replies with HTTP 200 if successful
-<h3> PUT x.com/st/projects/{source-project-id}/{stream-id} </h3>
-Move a stream from {source-project-id}/{stream-id} to {destination-project-id}/{stream-id}, replies with HTTP 200 if successful
-``` json
-{
-  "destination" : "destination_project_sha1sum",
-}
-```
-<h2> GET </h2>
-<h3> GET x.com/st/projects </h3>
-List projects ids available to authenticated user along with their descriptions  
-__REP__  
-``` json
-{
-  "project_ids" : [ 
-                     "project_id_0" : 
-                     { 
-                       "description" : "kinase project",
-                       "creation date" : "date",
-                       "streams" : 59834
-                     }
-                     "project_id_1" : 
-                     { 
-                       "description" : "gpcrs",
-                       "creation date" : "date",
-                       "streams" : 29341
-                     }
-                  ]
-}
-```
-<h3> GET x.com/st/projects/{project-id} </h3>
-List streams in the project along with the number of frames  
-__REP__ 
-``` json
-{
-  "project_ids" : [ 
-                     {"sha1sum0": 5234},
-                     {"sha1sum1": 6234}
-                  ]
-}
-```
+<h2> WS Methods </h2>
+
+[R] IP restricted to requests made by CC
+[C] Used by the core
+
+[A] GET x.com/streams/stream_id     - download a stream
+[R] PUT x.com/streams/delete        - delete a stream
+[R] POST x.com/streams              - add a new stream
+
+[C] GET x.com/core/start            - start a stream (given an auth token)
+[C] PUT x.com/core/frame            - add a frame to a stream (idempotent)
+[C] PUT x.com/core/stop             - stop a stream
+[C] PUT x.com/core/checkpoint       - send a checkpoint file corresponding to the last frame received
+[C] POST x.com/core/heartbeat       - send a heartbeat
