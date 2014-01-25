@@ -24,7 +24,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
     @classmethod
     def tearDownClass(self):
-        self.ws.db.flushdb()
         self.ws.shutdown_redis()
         folders = [self.ws.targets_folder, self.ws.streams_folder]
         for folder in folders:
@@ -34,6 +33,10 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
     def get_app(self):
         return self.ws
+
+    def tearDown(self):
+        super(TestStreamMethods, self).tearDown()
+        self.ws.db.flushdb()
 
     def test_post_stream(self):
         target_id = str(uuid.uuid4())
@@ -414,51 +417,30 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                                    stream_id, 'buffer.xtc')
         self.assertEqual(b'', open(buffer_path, 'rb').read())
 
+    def test_heartbeat(self):
+        # for sanity
+        tornado.options.options.heartbeat_increment = 5
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), set())
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        test_set = set([stream_id])
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), test_set)
+        increment_time = tornado.options.options['heartbeat_increment']
+        time.sleep(increment_time+0.5)
+        self.ws.check_heartbeats()
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), set())
 
-    #  def test_heartbeat(self):
-    #     token_id = str(uuid.uuid4())
-    #     stream_id = str(uuid.uuid4())
-    #     self.redis_client.set('shared_token:'+token_id+':active_stream', stream_id)
-
-    #     # test sending request to uri: /heartbeat extends the expiration time
-    #     for iteration in range(10):
-    #         response = self.fetch('/heartbeat', method='POST',
-    #                             body=json.dumps({'shared_token' : token_id}))
-    #         hb = self.redis_client.zscore('heartbeats',stream_id)
-    #         ws_start_time = common.sum_time(self.redis_client.time())
-    #         self.assertAlmostEqual(ws_start_time+self.increment, hb, places=1)
-    #     # test expirations
-    #     response = self.fetch('/heartbeat', method='POST',
-    #                 body=json.dumps({'shared_token' : token_id}))
-    #     self.redis_client.sadd('active_streams',stream_id)
-    #     self.redis_client.hset('active_stream:'+stream_id, 
-    #                            'shared_token', token_id)
-    #     self.assertTrue(
-    #         self.redis_client.sismember('active_streams',stream_id) and
-    #         self.redis_client.exists('active_stream:'+stream_id) and 
-    #         self.redis_client.exists('shared_token:'+token_id+':active_stream'))
-    #     time.sleep(self.increment+1)
-    #     self.ws.check_heartbeats() 
-    #     self.assertFalse(
-    #         self.redis_client.sismember('active_streams',stream_id) and
-    #         self.redis_client.exists('active_stream:'+stream_id) and 
-    #         self.redis_client.exists('shared_token:'+token_id+':active_stream'))
-    # 
-
-    # def test_init_stream(self):
-    #     active_streams = self.redis_client.exists('active_streams')
-    #     active_stream_ids = self.redis_client.keys('active_stream:*')
-    #     shared_tokens = self.redis_client.keys('shared_token:*')
-
-    #     self.assertFalse(active_streams)
-    #     self.assertFalse(active_stream_ids)
-    #     self.assertFalse(shared_tokens)
-
-    #     self.assertTrue(self.redis_client.sismember('ccs','test_cc'))
-    #     self.assertEqual(self.redis_client.hget('cc:test_cc','ip'),
-    #                      '127.0.0.1')
-    #     self.assertEqual(self.redis_client.hget('cc:test_cc','http_port'),
-    #                      '999')
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

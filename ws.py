@@ -167,6 +167,7 @@ tornado.options.define('internal_http_port', type=int)
 tornado.options.define('external_http_port', type=int)
 tornado.options.define('command_centers', type=dict)
 tornado.options.define('heartbeat_increment', default=900, type=int)
+tornado.options.define('pulse_frequency_in_ms', default=3000, type=int)
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -631,6 +632,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
     def __init__(self,
                  ws_name,
                  redis_port,
+                 url='127.0.0.1',
                  redis_pass=None,
                  ws_ext_http_port=None,
                  ccs=None,
@@ -656,6 +658,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             for cc_name in ccs:
                 body = {
                     'name': ws_name,
+                    'url': url,
                     'http_port': ws_ext_http_port,
                     'redis_port': redis_port,
                     'redis_pass': redis_pass,
@@ -678,6 +681,11 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             (r'/core/checkpoint', CoreCheckpointHandler),
             (r'/core/stop', CoreStopHandler),
         ], debug=debug)
+
+        frequency = tornado.options.options['pulse_frequency_in_ms']
+        self.pulse = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
+                                                     frequency)
+        self.pulse.start()
 
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
@@ -725,63 +733,14 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
 
 def start():
-    config_file = 'ws_config.json'
-    settings = json.loads(open(config_file).read())
-
-    ws_name = settings['name']
-    ws_redis_port = settings['redis_port']
-    ws_redis_pass = settings['redis_pass']
-    int_http_port = settings['int_http_port']
-    ext_http_port = settings['ext_http_port']
-    ccs = settings['ccs']
-
-    ws_instance = WorkServer(ws_name, ws_redis_port,
-                             ws_redis_pass, ext_http_port, ccs)
+    ws_instance = WorkServer(ws_name='lol',
+                             redis_port=9087,
+                             ws_ext_http_port=1234)
 
     ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
         'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
 
-    ws_server.listen(int_http_port)
-
-
-def start():
-    config_file = 'ws_conf'
-    Config = ConfigParser.ConfigParser() 
-    Config.read(config_file)
-
-
-    cc_str        = Config.get('WS','cc_names').split(',')
-    ccs = []
-    for cc in cc_str:
-        cc_ip   = Config.get(cc,'ip')
-        cc_port = Config.getint(cc,'http_port')
-        ccs.append((cc,cc_ip,cc_port))
-
-    ws_instance = WorkServer(ws_name,ws_redis_port,ws_redis_pass,ccs)
-    ws_server = tornado.httpserver.HTTPServer(ws_instance,ssl_options={
-                    'certfile' : 'ws.crt','keyfile'  : 'ws.key'})
-    #ws_server = tornado.httpserver.HTTPServer(ws_instance)
-    ws_server.listen(int_http_port)
-
-    sync_client = tornado.httpclient.HTTPClient()
-    for cc in cc_str:
-        ip   = Config.get(cc,'ip')
-        auth_port = Config.get(cc,'auth_port')
-        auth_pass = Config.get(cc,'auth_pass')
-        msg = {
-            'name'       : ws_name,
-            'http_port'  : ext_http_port,
-            'redis_port' : ws_redis_port,
-            'redis_pass' : ws_redis_pass,
-            'auth_pass'  : auth_pass
-        }
-        uri = "http://"+ip+":"+auth_port+'/register_ws'
-        try:
-            resp = sync_client.fetch(uri,method='POST',body=json.dumps(msg))
-        except tornado.httpclient.HTTPError as e: 
-            print(repr(e))
-            print('Could not connect to CC')
-            ws_instance.shutdown()
+    ws_server.listen(12345)
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
