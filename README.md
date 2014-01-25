@@ -41,7 +41,7 @@ Currently, the allowed RESTful requests are GET, PUT, and POST. GETs and PUTs ar
 [P] Unauthenticated requests  
 [A] Authenticated requests 
 
-- [P] POST x.com/auth - Authenticate the user, returning the password
+- [P] POST x.com/auth - Authenticate the user, returning an authorization token
 - [A] POST x.com/targets - add a target
 - [P] GET x.com/targets - if Authenticated, retrieves User's targets, if Public, retrieves list of all targets on server
 - [P] GET x.com/targets/info/:target_id - get info about a specific target
