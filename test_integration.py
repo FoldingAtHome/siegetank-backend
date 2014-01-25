@@ -15,6 +15,7 @@ import random
 import base64
 import json
 import time
+import common
 
 
 class Test(tornado.testing.AsyncTestCase):
@@ -66,7 +67,7 @@ class Test(tornado.testing.AsyncTestCase):
         }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                     validate_cert=cc._is_domain(url))
+                     validate_cert=common.is_domain(url))
         rep = self.wait()
         self.assertEqual(rep.code, 200)
         auth = json.loads(rep.body.decode())['token']
@@ -84,13 +85,13 @@ class Test(tornado.testing.AsyncTestCase):
             }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                     validate_cert=cc._is_domain(url), headers=headers)
+                     validate_cert=common.is_domain(url), headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
 
         target_id = json.loads(reply.body.decode())['target_id']
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
@@ -98,7 +99,7 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(target_ids, {target_id})
 
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
@@ -116,7 +117,7 @@ class Test(tornado.testing.AsyncTestCase):
                     }
 
             client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                         validate_cert=cc._is_domain(url),
+                         validate_cert=common.is_domain(url),
                          headers=headers)
             reply = self.wait()
             self.assertEqual(reply.code, 200)
@@ -127,7 +128,7 @@ class Test(tornado.testing.AsyncTestCase):
         # test GET the streams
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
               +target_id
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
@@ -142,14 +143,14 @@ class Test(tornado.testing.AsyncTestCase):
         stream_id = random.sample(streams, 1)[0]
         uri = 'https://'+url+':'+str(self.cc_hport)+'/streams/delete/'\
               +stream_id
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      headers=headers, method='PUT', body='{}')
         reply = self.wait()
 
         # test GET the streams again
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
               +target_id
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
@@ -166,7 +167,7 @@ class Test(tornado.testing.AsyncTestCase):
             'engine_version': '6.0'
         }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/assign'
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      body=json.dumps(body), method='POST')
         reply = self.wait()
         self.assertEqual(reply.code, 200)
@@ -177,7 +178,7 @@ class Test(tornado.testing.AsyncTestCase):
         # fetch from the WS
         ws_headers = {'Authorization': token}
         client.fetch(uri, self.stop, headers=ws_headers,
-                     validate_cert=cc._is_domain(url))
+                     validate_cert=common.is_domain(url))
         rep = self.wait()
         self.assertEqual(rep.code, 200)
 
@@ -287,7 +288,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                     validate_cert=cc._is_domain(url))
+                     validate_cert=common.is_domain(url))
         rep = self.wait()
         self.assertEqual(rep.code, 200)
         auth = json.loads(rep.body.decode())['token']
@@ -306,7 +307,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                     validate_cert=cc._is_domain(url), headers=headers)
+                     validate_cert=common.is_domain(url), headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
 
@@ -320,7 +321,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                     'files': {"state.xml.gz.b64": rand_bin}
                     }
             client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                         validate_cert=cc._is_domain(url),
+                         validate_cert=common.is_domain(url),
                          headers=headers)
             reply = self.wait()
             self.assertEqual(reply.code, 200)
@@ -329,7 +330,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         # test GET the streams
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
               +target_id
-        client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
@@ -352,7 +353,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                 'engine_version': '6.0'
             }
             uri = 'https://'+url+':'+str(self.cc_hport)+'/assign'
-            client.fetch(uri, self.stop, validate_cert=cc._is_domain(url),
+            client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                          body=json.dumps(body), method='POST')
             reply = self.wait()
             self.assertEqual(reply.code, 200)
@@ -363,7 +364,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             # fetch from the WS
             ws_headers = {'Authorization': token}
             client.fetch(uri, self.stop, headers=ws_headers,
-                         validate_cert=cc._is_domain(url))
+                         validate_cert=common.is_domain(url))
             rep = self.wait()
             self.assertEqual(rep.code, 200)
             time.sleep(1)

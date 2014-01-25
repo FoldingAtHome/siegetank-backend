@@ -289,8 +289,9 @@ class RegisterWSHandler(BaseHandler):
 
         """
         content = json.loads(self.request.body.decode())
-        auth = content['auth']
+        auth = self.request.headers['Authorization']
         if auth != self.application.cc_pass:
+            print(auth, self.application.cc_pass)
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
         name = content['name']
@@ -299,16 +300,8 @@ class RegisterWSHandler(BaseHandler):
         redis_port = content['redis_port']
         redis_pass = content['redis_pass']
         self.application.add_ws(name, url, http_port, redis_port, redis_pass)
+        print(content['name']+' is now connected')
         self.set_status(200)
-
-
-def _is_domain(url):
-    """ Returns True if url is a domain """
-    try:
-        ipaddress.ip_address(url)
-        return False
-    except Exception:
-        return True
 
 
 class DeleteStreamHandler(BaseHandler):
@@ -335,7 +328,7 @@ class DeleteStreamHandler(BaseHandler):
                 rep = yield client.fetch('https://'+str(ws_url)+':'
                                          +str(ws_http_port)+'/streams/delete',
                                          method='PUT', body=json.dumps(body),
-                                         validate_cert=_is_domain(ws_url))
+                                         validate_cert=common.is_domain(ws_url))
                 return self.set_status(rep.code)
 
         self.set_status(400)
@@ -412,7 +405,7 @@ class PostStreamHandler(BaseHandler):
         rep = yield client.fetch('https://'+str(ws_url)+':'+str(ws_http_port)
                                  +'/streams', method='POST',
                                  body=json.dumps(body),
-                                 validate_cert=_is_domain(ws_url))
+                                 validate_cert=common.is_domain(ws_url))
 
         self.set_status(rep.code)
         return self.write(rep.body)
@@ -626,13 +619,13 @@ class TargetHandler(BaseHandler):
 
 
 class CommandCenter(tornado.web.Application, common.RedisMixin):
-    def __init__(self, cc_name, redis_port,
+    def __init__(self, cc_name, redis_port, redis_pass=None,
                  cc_pass=None, targets_folder='targets', debug=False,
                  mdb_host='localhost', mdb_port=27017, mdb_password=None):
         print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
-        self.db = common.init_redis(redis_port, cc_pass)
+        self.db = common.init_redis(redis_port, redis_pass)
         self.ws_dbs = {}
         self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
 
@@ -672,43 +665,40 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         ws.hset('redis_pass', redis_pass)
         self.WorkServerDB[name] = client
 
-    def cleanup_ws_dbs(self):
-        for db in self.WorkServerDB:
-            del db
-
-    def shutdown(self, **kwargs):
-        super(CommandCenter, self).shutdown(**kwargs)
-        for db_name, db_client in self.WorkServerDB.items():
-            db_client.connection_pool.disconnect()
 
 def start():
-    config_file = 'cc_conf'
-    Config = ConfigParser.ConfigParser()
-    Config.read(config_file)
-    # read config file
-    cc_name      = Config.get('CC','name')
-    redis_port   = Config.getint('CC','redis_port')
-    cc_http_port = Config.getint('CC','http_port')
-    auth_port = Config.getint('CC','auth_port')
-    auth_pass = Config.get('CC','auth_pass')
-    cc_instance  = CommandCenter(cc_name,redis_port)
-    ws_registrar = tornado.web.Application([
-        (r"/register_ws",RegisterWSHandler,
-         dict(cc=cc_instance, cc_auth_pass=auth_pass))
-                                          ])
-    tornado.httpserver.HTTPServer(cc_instance).listen(cc_http_port)
-    tornado.httpserver.HTTPServer(ws_registrar).listen(auth_port)
+
+    #######################
+    # CC Specific Options #
+    #######################
+    tornado.options.define('name', type=str)
+    tornado.options.define('redis_port', type=int)
+    tornado.options.define('redis_pass', type=str)
+    tornado.options.define('url', type=str)
+    tornado.options.define('internal_http_port', type=int)
+    tornado.options.define('external_http_port', type=int)
+    tornado.options.define('cc_pass', type=str)
+    tornado.options.parse_config_file('cc.conf')
+
+    options = tornado.options.options
+
+    cc_name = options.name
+    redis_port = options.redis_port
+    redis_pass = options.redis_pass
+    internal_http_port = options.internal_http_port
+    cc_pass = options.cc_pass
+
+    cc_instance = CommandCenter(cc_name=cc_name,
+                                cc_pass=cc_pass,
+                                redis_port=redis_port,
+                                redis_pass=redis_pass)
+
+    cc_server = tornado.httpserver.HTTPServer(cc_instance, ssl_options={
+        'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
+
+    cc_server.bind(internal_http_port)
+    cc_server.start(0)
     tornado.ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
     start()
-
-    #cc_redis.flushdb()
-
-    # when CC starts, we need to:
-    # rebuild all priority queues. 
-
-    #application.listen(8888, '0.0.0.0')
-    #if not os.path.exists('files'):
-    #    os.makedirs('files')
-    #tornado.ioloop.IOLoop.instance().start()

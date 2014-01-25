@@ -16,7 +16,9 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         redis_port = str(3828)
         self.increment = 3
         self.cc_auth = '5lik2j3l4'
-        self.cc = cc.CommandCenter('test_cc', redis_port, self.cc_auth,
+        self.cc = cc.CommandCenter(cc_name='test_cc',
+                                   redis_port=redis_port,
+                                   cc_pass=self.cc_auth,
                                    targets_folder='cc_targets', debug=True)
         super(TestCCBasics, self).setUpClass()
 
@@ -79,7 +81,10 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                 'auth': self.cc_auth
                 }
 
-        reply = self.fetch('/register_ws', method='PUT', body=json.dumps(body))
+        headers = {'Authorization': self.cc_auth}
+
+        reply = self.fetch('/register_ws', method='PUT', body=json.dumps(body),
+                           headers=headers)
         self.assertEqual(reply.code, 200)
 
         ws = cc.WorkServer(ws_name, self.cc.db)

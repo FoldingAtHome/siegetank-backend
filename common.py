@@ -3,10 +3,22 @@ import subprocess
 import sys
 import time
 import tornado
+import ipaddress
 
 
 def sum_time(time):
     return int(time[0])+float(time[1])/10**6
+
+
+def is_domain(url):
+    """ Returns True if url is a domain """
+    # if a port is present in the url, then we extract the base part
+    base = url.split(':')[0]
+    try:
+        ipaddress.ip_address(base)
+        return False
+    except Exception:
+        return True
 
 
 def init_redis(redis_port, redis_pass=None):
