@@ -74,7 +74,6 @@ import tornado.options
 # POST x.com/streams              - add a new stream
 # PUT x.com/streams/delete        - delete a stream
 # GET x.com/streams/stream_id     - download a stream
-# POST x.com/targets              - add a new target
 
 ##################
 # CORE Interface #

@@ -46,6 +46,7 @@ import pymongo
 # [A] Requires authentication
 # [P] Publicly accessible (possibly limited info)
 
+# [P] POST x.com/auth - Authenticate the user, returning an authorization token
 # [A] POST x.com/targets - add a target
 # [P] GET x.com/targets - if Authenticated, retrieves User's targets
 #                       - if Public, retrieves list of all targets on server
