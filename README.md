@@ -32,8 +32,9 @@ Everything aside from apollo can be pip-installed.
 
 <h2> Core Dependencies </h2>
 
-1. [POCO](http://pocoproject.org/)
-2. [OpenMM](https://github.com/SimTk/openmm)
+1. [POCO Complete Edition](http://pocoproject.org/)
+2. [OpenMM 6.0](https://github.com/SimTk/openmm)
+3. [cmake](http://www.cmake.org/cmake/resources/software.html)
 
 <h1> API </h1>
 
