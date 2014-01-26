@@ -22,15 +22,18 @@ The major goals in the development of Siege Tank are:
 
 <h2> Server Dependencies </h2>
 
+Everything aside from apollo can be pip-installed. 
+
 1. python 3.3
 2. redis
 3. bcrypt
 4. pymongo
-5. apollo
+5. [apollo](https://github.com/proteneer/apollo)
 
 <h2> Core Dependencies </h2>
 
-POCO libraries.
+1. [POCO](http://pocoproject.org/)
+2. [OpenMM](https://github.com/SimTk/openmm)
 
 <h1> API </h1>
 
