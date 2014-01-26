@@ -10,7 +10,6 @@
 #include <Poco/Net/Context.h>
 #include <Poco/Net/SSLException.h>
 #include <Poco/Net/X509Certificate.h>
-#include <Poco/Util/Application.h>
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/x509.h>
@@ -24,32 +23,7 @@
 
 using namespace std;
 using namespace Poco::Net;
-using namespace Poco::Util;
 using namespace Poco;
-
-
-class TestApp : public Application {
-
-public:
-    TestApp() {};
-    ~TestApp() {};
-
-    int main() {
-        cout << "creating session" << endl;
-        HTTPSClientSession session("www.yahoo.com", 443);
-        cout << "creating get" << endl;
-        HTTPRequest request("GET", "/");
-        cout << "sending request" << endl;
-        session.sendRequest(request);
-        cout << '1' << endl;
-        HTTPResponse response;
-        cout << '1' << endl;
-        session.receiveResponse(response);
-        cout << response.getStatus() << endl;
-        return 0;
-    }
-
-};
 
 void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
     // Add a stream of PEM formatted certificate strings to the trusted store
@@ -93,7 +67,7 @@ int main() {
 
     try {
         cout << "creating session" << endl;
-        HTTPSClientSession session("www.yahoo.com", 443, context);
+        HTTPSClientSession session("www.stanford.edu", 443, context);
         cout << "creating get" << endl;
         HTTPRequest request("GET", "/");
         cout << "sending request" << endl;
