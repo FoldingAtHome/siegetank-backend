@@ -22,15 +22,19 @@ The major goals in the development of Siege Tank are:
 
 <h2> Server Dependencies </h2>
 
+Everything aside from apollo can be pip-installed. 
+
 1. python 3.3
 2. redis
 3. bcrypt
 4. pymongo
-5. apollo
+5. [apollo](https://github.com/proteneer/apollo)
 
 <h2> Core Dependencies </h2>
 
-POCO libraries.
+1. [POCO Complete Edition](http://pocoproject.org/)
+2. [OpenMM 6.0](https://github.com/SimTk/openmm)
+3. [cmake](http://www.cmake.org/cmake/resources/software.html)
 
 <h1> API </h1>
 
@@ -41,7 +45,7 @@ Currently, the allowed RESTful requests are GET, PUT, and POST. GETs and PUTs ar
 [P] Unauthenticated requests  
 [A] Authenticated requests 
 
-- [P] POST x.com/auth - Authenticate the user, returning the password
+- [P] POST x.com/auth - Authenticate the user, returning an authorization token
 - [A] POST x.com/targets - add a target
 - [P] GET x.com/targets - if Authenticated, retrieves User's targets, if Public, retrieves list of all targets on server
 - [P] GET x.com/targets/info/:target_id - get info about a specific target
