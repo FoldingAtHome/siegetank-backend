@@ -261,6 +261,42 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
 
+        old_buffer = frame_buffer
+
+        # PUT 25 more frames
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+            frame_hash = hashlib.md5(frame_bin).hexdigest()
+
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+
+        streams_dir = self.ws.streams_folder
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer.xtc')
+
+        # download the frames
+        response = self.fetch('/streams/download/'+stream_id)
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body, old_buffer)
+
+        # PUT a checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        body = {'last_frame_hash': frame_hash,
+                'checkpoint': checkpoint_bin.decode()
+                }
+        response = self.fetch('/core/checkpoint', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+
+        #download the frames
+        response = self.fetch('/streams/download/'+stream_id)
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body, frame_buffer)
+
     def test_put_frame(self):
         target_id = str(uuid.uuid4())
         fn1 = 'system.xml.gz.b64'
