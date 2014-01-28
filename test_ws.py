@@ -207,6 +207,60 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['stream_id'], stream_id)
         self.assertEqual(content['target_id'], target_id)
 
+    def test_download_stream(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+
+        frame_buffer = bytes()
+        n_frames = 25
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+
+        # PUT 25 frames
+        for count in range(n_frames):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            body = {'frame': base64.b64encode(frame_bin).decode()}
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+            frame_hash = hashlib.md5(frame_bin).hexdigest()
+
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+
+        streams_dir = self.ws.streams_folder
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # PUT a checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        body = {'last_frame_hash': frame_hash,
+                'checkpoint': checkpoint_bin.decode()
+                }
+        response = self.fetch('/core/checkpoint', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+
+        # download the frames
+        response = self.fetch('/streams/download/'+stream_id)
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body, frame_buffer)
+
     def test_put_frame(self):
         target_id = str(uuid.uuid4())
         fn1 = 'system.xml.gz.b64'

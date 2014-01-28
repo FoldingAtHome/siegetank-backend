@@ -308,39 +308,6 @@ class DeleteStreamHandler(BaseHandler):
 
         self.set_status(200)
 
-    # def get(self):
-    #     ''' PRIVATE - Download a stream.
-    #         The CC first creates a token given to the Core for identification
-    #         The token and WS's IP is then sent back to the ST interface
-    #         Parameters:
-    #         download_token: download_token automatically maps to the right
-    #                         stream_id
-    #         RESPONDS with the appropriate frames.
-
-    #         TODO: Record the file size
-    #     '''
-    #     self.set_status(400)
-    #     try:
-    #         token = self.request.headers['download_token']
-    #         stream_id = Stream.lookup('download_token',token,self.db)
-    #         if stream_id:
-    #             filename = os.path.join('streams',stream_id,'frames.xtc')
-    #             buf_size = 4096
-    #             self.set_header('Content-Type', 'application/octet-stream')
-    #             self.set_header('Content-Disposition',
-    #                             'attachment; filename=' + filename)
-    #             with open(filename, 'r') as f:
-    #                 while True:
-    #                     data = f.read(buf_size)
-    #                     if not data:
-    #                         break
-    #                     self.write(data)
-    #             self.finish()
-    #         else:
-    #             self.set_status(400)
-    #     except Exception as e:
-    #         print(repr(e))
-
 
 class CoreStartHandler(BaseHandler):
     @authenticate_core
@@ -486,8 +453,8 @@ class CoreFrameHandler(BaseHandler):
 class CoreCheckpointHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Add a checkpoint. A checkpoint renames into the buffer into a valid
-        frameset.
+        """ Add a checkpoint. A checkpoint renames the buffer into a valid set
+        of frames.
 
         Request Header:
 
@@ -529,7 +496,7 @@ class CoreCheckpointHandler(BaseHandler):
                                        str(total_frames)+'_'+base_name)
         with open(checkpoint_path, 'wb') as handle:
             handle.write(checkpoint_bytes)
-        # rename buffer.xtc to total_frames_frameset.xtc
+        # rename buffer.xtc to [total_frames]_frameset.xtc
         frames_path = os.path.join(streams_folder, stream_id,
                                    str(total_frames)+'_frames.xtc')
         os.rename(buffer_path, frames_path)
@@ -580,6 +547,44 @@ class CoreStopHandler(BaseHandler):
 
         self.set_status(200)
         self.deactivate_stream(stream_id)
+
+
+class DownloadHandler(BaseHandler):
+    def get(self, stream_id):
+        """ Download a stream
+
+        This function concatenates the list of frames on the fly by reading
+        the files and yielding chunks.
+
+        """
+        self.set_status(400)
+        stream = Stream(stream_id, self.db)
+        if stream:
+            streams_folder = self.application.streams_folder
+            stream_dir = os.path.join(streams_folder, stream_id)
+            if stream.hget('frames') > 0:
+                files = [f for f in os.listdir(stream_dir) if 'frames' in f]
+                files = sorted(files, key=lambda k: int(k.split('_')[0]))
+                buf_size = 4096
+                self.set_header('Content-Type', 'application/octet-stream')
+                self.set_header('Content-Disposition',
+                                'attachment; filename=frames.xtc')
+                for sorted_file in files:
+                    filename = os.path.join(stream_dir, sorted_file)
+                    with open(filename, 'rb') as f:
+                        while True:
+                            data = f.read(buf_size)
+                            if not data:
+                                break
+                            self.write(data)
+                self.set_status(200)
+                self.finish()
+                return
+            else:
+                self.write('')
+                return self.set_status(200)
+        else:
+            return self.write(json.dumps({'error': 'bad stream_id'}))
 
 
 class HeartbeatHandler(BaseHandler):
@@ -671,6 +676,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         super(WorkServer, self).__init__([
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
+            (r'/streams/download/(.*)', DownloadHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
             (r'/core/checkpoint', CoreCheckpointHandler),
