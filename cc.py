@@ -162,6 +162,9 @@ class AddManagerHandler(tornado.web.RequestHandler):
         if self.request.remote_ip != '127.0.0.1':
             return self.set_status(401)
 
+        print('Request Headers:', self.request.headers)
+        print('Request Body:', self.request.body)
+
         content = json.loads(self.request.body.decode())
         token = str(uuid.uuid4())
         password = content['password']

@@ -2,16 +2,21 @@
 // ./Configure darwin64-x86_64-cc -noshared
 // g++ -I ~/poco/include Core.cpp ~/poco/lib/libPoco* /usr/local/ssl/lib/lib*
 // Linux:
-// g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/home/yutong/poco_install/include -L/home/yutong/poco_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMM_static
+// g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/home/yutong/poco152_install/include -L/home/yutong/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMMCUDA_static /usr/lib/nvidia-current/libcuda.so /usr/local/cuda/lib64/libcufft.so -lOpenMMCPU_static -lOpenMMPME_static -L/home/yutong/fftw_install/lib/ -lfftw3f -lfftw3f_threads -lOpenMM_static; ./a.out 
+
+//  ./configure --static --prefix=/home/yutong/poco152_install --omit=Data/MySQL,Data/ODBC
 
 #include <iostream>
 #include <Poco/Net/HTTPSClientSession.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
+#include <Poco/JSON/Object.h>
 #include <Poco/URI.h>
 #include <Poco/Net/Context.h>
 #include <Poco/Net/SSLException.h>
 #include <Poco/Net/X509Certificate.h>
+#include <Poco/UnicodeConverter.h>
+
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/x509.h>
@@ -52,16 +57,17 @@ void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
 }
 
 extern "C" void registerSerializationProxies();
-// extern "C" void registerOpenCLPlatform();
-// extern "C" void registerCudaPlatform();
+extern "C" void registerOpenCLPlatform();
+extern "C" void registerCudaPlatform();
 extern "C" void registerCpuPlatform();
 extern "C" void registerCpuPmeKernelFactories();
 
 int main() {
+    /*
     registerSerializationProxies();
-    //registerOpenCLPlatform();
+    registerOpenCLPlatform();
     registerCpuPlatform();
-    //registerCudaPlatform();
+    registerCudaPlatform();
     registerCpuPmeKernelFactories();
     ifstream system_file("systems/DHFR_SYSTEM_EXPLICIT.xml");
     ifstream integrator_file("systems/DHFR_INTEGRATOR_EXPLICIT.xml");
@@ -75,7 +81,7 @@ int main() {
 
     cout << "Creating context..." << endl;
     OpenMM::Context* coreContext_ = new OpenMM::Context(*sys, *integrator, \
-                               OpenMM::Platform::getPlatformByName("CPU"));
+                               OpenMM::Platform::getPlatformByName("CUDA"));
     cout << "Context created..." << endl;
 
     coreContext_->setState(*state);
@@ -87,10 +93,11 @@ int main() {
         }
         integrator->step(1);
     }
+    */
 
     try {
         Poco::Net::Context::Ptr context = new Poco::Net::Context(Poco::Net::Context::CLIENT_USE, "", 
-            Poco::Net::Context::VERIFY_RELAXED, 9, false);
+            Poco::Net::Context::VERIFY_NONE, 9, false);
         SSL_CTX *ctx = context->sslContext();
         std::ifstream t("rootcert.pem");
         std::string str((std::istreambuf_iterator<char>(t)),
@@ -100,11 +107,13 @@ int main() {
         read_cert_into_ctx(ss, ctx);
 
         cout << "creating session" << endl;
-        Poco::Net::HTTPSClientSession session("axess.sahr.stanford.edu", 443, context);
-        cout << "creating get" << endl;
-        Poco::Net::HTTPRequest request("GET", "/");
+        Poco::Net::HTTPSClientSession session("127.0.0.1", 8980, context);
+        cout << "creating request" << endl;
+        Poco::Net::HTTPRequest request("POST", "/managers");
         cout << "sending request" << endl;
-        session.sendRequest(request);
+        string body("{\"email\":\"proteneer@gmail.com\", \"password\": \"foo\"}");
+        request.setContentLength(body.length());
+        session.sendRequest(request) << body;
         cout << "obtaining response" << endl;
         Poco::Net::HTTPResponse response;
         session.receiveResponse(response);
