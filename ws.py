@@ -632,7 +632,8 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                  ccs=dict(),
                  targets_folder='targets',
                  streams_folder='streams',
-                 debug=False):
+                 debug=False,
+                 appendonly=False):
 
         """ Initialize the WorkServer.
 
@@ -640,7 +641,9 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
         self.targets_folder = targets_folder
         self.streams_folder = streams_folder
-        self.db = common.init_redis(redis_port, redis_pass)
+        self.db = common.init_redis(redis_port, redis_pass,
+                                    appendonly=appendonly,
+                                    appendfilename='aof_'+ws_name)
         if not os.path.exists(self.targets_folder):
             os.makedirs(self.targets_folder)
         if not os.path.exists(self.streams_folder):
@@ -668,12 +671,10 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             client = tornado.httpclient.HTTPClient()
             url = ccs[cc_name]['url']
             uri = 'https://'+url+'/register_ws'
-            print('URI:', uri)
             try:
                 rep = client.fetch(uri, method='PUT', connect_timeout=2,
                                    body=json.dumps(body), headers=headers,
                                    validate_cert=common.is_domain(url))
-                print('REP CODE:', rep.code)
                 if rep.code != 200:
                     print('Warning: not connect to CC '+cc_name)
             except Exception as e:
@@ -778,7 +779,8 @@ def start():
                              redis_port=redis_port,
                              redis_pass=redis_pass,
                              ccs=command_centers,
-                             ws_ext_http_port=external_http_port)
+                             ws_ext_http_port=external_http_port,
+                             appendonly=True)
 
     ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
         'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})

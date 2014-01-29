@@ -21,7 +21,8 @@ def is_domain(url):
         return True
 
 
-def init_redis(redis_port, redis_pass=None):
+def init_redis(redis_port, redis_pass=None,
+               appendonly=False, appendfilename=None):
     ''' Spawn a redis subprocess port and returns a redis client.
 
         Parameters:
@@ -32,6 +33,12 @@ def init_redis(redis_port, redis_pass=None):
     '''
     redis_port = str(redis_port)
     args = ["redis/src/redis-server", "--port", redis_port]
+    if appendonly:
+        args.append('--appendonly')
+        args.append('yes')
+        if appendfilename:
+            args.append('--appendfilename')
+            args.append(appendfilename)
     if redis_pass:
         args.append('--requirepass')
         args.append(str(redis_pass))

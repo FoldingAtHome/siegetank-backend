@@ -625,11 +625,14 @@ class TargetHandler(BaseHandler):
 class CommandCenter(tornado.web.Application, common.RedisMixin):
     def __init__(self, cc_name, redis_port, redis_pass=None,
                  cc_pass=None, targets_folder='targets', debug=False,
-                 mdb_host='localhost', mdb_port=27017, mdb_password=None):
+                 mdb_host='localhost', mdb_port=27017, mdb_password=None,
+                 appendonly=False):
         print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
-        self.db = common.init_redis(redis_port, redis_pass)
+        self.db = common.init_redis(redis_port, redis_pass,
+                                    appendonly=appendonly,
+                                    appendfilename='aof_'+self.name)
         self.ws_dbs = {}
         self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
 
@@ -754,7 +757,8 @@ def start():
     cc_instance = CommandCenter(cc_name=cc_name,
                                 cc_pass=cc_pass,
                                 redis_port=redis_port,
-                                redis_pass=redis_pass)
+                                redis_pass=redis_pass,
+                                appendonly=True)
 
     cc_server = tornado.httpserver.HTTPServer(cc_instance, ssl_options={
         'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
