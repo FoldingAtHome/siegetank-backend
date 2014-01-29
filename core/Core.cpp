@@ -16,6 +16,7 @@
 #include <Poco/Net/SSLException.h>
 #include <Poco/Net/X509Certificate.h>
 #include <Poco/UnicodeConverter.h>
+#include <Poco/Util/Application.h>
 
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
@@ -61,6 +62,20 @@ extern "C" void registerOpenCLPlatform();
 extern "C" void registerCudaPlatform();
 extern "C" void registerCpuPlatform();
 extern "C" void registerCpuPmeKernelFactories();
+
+
+/*
+class Core: public Poco::Util::Application {
+
+public:
+    Core::Core();
+    Core::~Core();
+
+    void getJob(); 
+
+};
+*/
+
 
 int main() {
     /*
@@ -108,6 +123,8 @@ int main() {
 
         cout << "creating session" << endl;
         Poco::Net::HTTPSClientSession session("127.0.0.1", 8980, context);
+
+/*
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/managers");
         cout << "sending request" << endl;
@@ -118,6 +135,19 @@ int main() {
         Poco::Net::HTTPResponse response;
         session.receiveResponse(response);
         cout << response.getStatus() << endl;
+*/
+
+        cout << "creating request" << endl;
+        Poco::Net::HTTPRequest request("POST", "/auth");
+        cout << "sending request" << endl;
+        string body("{ \"email\": \"proteneer@gmail.com\", \"password\": \"foo\" }");
+        request.setContentLength(body.length());
+        session.sendRequest(request) << body;
+        cout << "obtaining response" << endl;
+        Poco::Net::HTTPResponse response;
+        cout << session.receiveResponse(response).rdbuf() << endl;
+        cout << response.getStatus() << endl;
+
         return 0;
 
     } catch(Exception &e) {

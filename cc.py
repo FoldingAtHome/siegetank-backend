@@ -138,7 +138,7 @@ class AuthHandler(tornado.web.RequestHandler):
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
-            mdb.managers.update({'_id': email}, {'token': new_token})
+            mdb.managers.update({'_id': email}, {'$set': {'token': new_token}})
         else:
             return self.status(401)
 
