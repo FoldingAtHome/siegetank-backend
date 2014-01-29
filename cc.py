@@ -129,6 +129,7 @@ class AuthHandler(tornado.web.RequestHandler):
         }
 
         """
+        self.set_status(400)
         content = json.loads(self.request.body.decode())
         password = content['password']
         email = content['email']
@@ -141,7 +142,7 @@ class AuthHandler(tornado.web.RequestHandler):
             mdb.managers.update({'_id': email}, {'$set': {'token': new_token}})
         else:
             return self.status(401)
-
+        self.set_status(200)
         self.write(json.dumps({'token': new_token}))
 
 
