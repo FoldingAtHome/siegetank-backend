@@ -113,6 +113,9 @@ import tornado.options
 # stream. However, PUTing the same frame twice (by means of checking the
 # md5sum of last frame) would be the same as PUTing it once.
 
+# When the WS dies, we can recreate the entire redis database using data from
+# the disk! This implies we don't actually need to save an rdb.
+
 
 class Stream(apollo.Entity):
     prefix = 'stream'
@@ -138,7 +141,7 @@ class Target(apollo.Entity):
     fields = {'queue': apollo.zset(str),    # queue of inactive streams
               'stream_files': {str},        # set of filenames for the stream
               'target_files': {str},        # set of filenames for the target
-              'cc': str                     # which cc the target belongs to
+#              'cc': str                     # which cc the target belongs to
               }
 
 
@@ -221,6 +224,8 @@ class PostStreamHandler(BaseHandler):
             }
 
         Notes: Binaries in files must be base64 encoded.
+
+        # TODO: stream creation needs to be pipelined and atomic
 
         """
         #if not CommandCenter.lookup('ip', self.request.remote_ip, self.db):

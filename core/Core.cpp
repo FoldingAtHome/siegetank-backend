@@ -138,7 +138,7 @@ int main() {
         Poco::Net::HTTPResponse response;
         session.receiveResponse(response);
         cout << response.getStatus() << endl;
-*/
+        */
 
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/auth");

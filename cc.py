@@ -74,6 +74,7 @@ class WorkServer(apollo.Entity):
               'http_port': int,  # ws http port
               'redis_port': int,  # ws redis port
               'redis_pass': str,  # ws password
+              'online': bool,  # denotes if the server is online or not
               }
 
 
@@ -332,7 +333,8 @@ class DeleteStreamHandler(BaseHandler):
                                          method='PUT', body=json.dumps(body),
                                          validate_cert=common.is_domain(ws_url))
                 return self.set_status(rep.code)
-
+            else:
+                self.write(json.dumps({'error': 'stream not found'}))
         self.set_status(400)
 
 
@@ -651,36 +653,58 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
 
         self.WorkServerDB = {}
 
+    def _guarded_get(self, name):
+        """ Returns a workserver's db client with name if and only if the
+        client is still alive.
+
+        """
+        ws = WorkServer(name, self.db)
+        if ws.hget('online'):
+            try:
+                # the ws is supposed to be working fine
+                self.WorkServerDB[name].ping()  # raise exception otherwise
+                return self.WorkServerDB[name]
+            except Exception:
+                # oh noes, the ws is dead
+                ws.hset('online', False)
+                return None
+        else:
+            return None
+
     def get_ws_db(self, name):
-        """ When pre-forking with tornado, a register_ws request typically gets
-        sent to a only a single process. Meaning that the other processes did
+        """ When pre-forking with tornado, a register_ws request gets
+        sent to a single process, meaning that the other processes did
         not end up actually calling add_ws() to register the ws.
 
         However, we can do lazy connects, since all the information pertaining
         to the ws is contained entirely in redis! So we can reconstruct the
-        client after the fact.
+        client after the fact, and each process constructs at most one time.
+
+        Returns None if the WS is not available.
 
         """
         if name in self.WorkServerDB:
-            return self.WorkServerDB[name]
+            # the workserver has already been added in this process
+            return self._guarded_get(name)
         else:
-            ws = WorkServer(name, self.db)
-            url = ws.hget('url')
-            redis_port = ws.hget('redis_port')
-            redis_pass = ws.hget('redis_pass')
+            # see if this WS exists but hasn't been added to the db
+            if WorkServer.exists(name, self.db):
+                ws = WorkServer(name, self.db)
+                url = ws.hget('url')
+                redis_port = ws.hget('redis_port')
+                redis_pass = ws.hget('redis_pass')
+                client = redis.Redis(host=url,
+                                     port=redis_port,
+                                     password=redis_pass,
+                                     decode_responses=True)
 
-            client = redis.Redis(host=url,
-                                 port=redis_port,
-                                 password=redis_pass,
-                                 decode_responses=True)
-
-            client.ping()
-
-            self.WorkServerDB[name] = client
-            return self.WorkServerDB[name]
+                client.ping()
+                self.WorkServerDB[name] = client
+                return self._guarded_get(name)
+            else:
+                return None
 
     def add_ws(self, name, url, http_port, redis_port, redis_pass=None):
-
         try:
             # make sure the client is alive
             client = redis.Redis(host=url,
@@ -697,6 +721,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
             ws.hset('url', url)
             ws.hset('http_port', http_port)
             ws.hset('redis_port', redis_port)
+            ws.hset('online', True)
             if redis_pass:
                 ws.hset('redis_pass', redis_pass)
             self.WorkServerDB[name] = client
