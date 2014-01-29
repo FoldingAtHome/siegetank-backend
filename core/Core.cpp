@@ -23,6 +23,8 @@
 #include <Poco/Util/Application.h>
 #include <Poco/StreamCopier.h>
 #include <Poco/Dynamic/Var.h>
+#include <Poco/Base64Decoder.h>
+#include <Poco/Base64Encoder.h>
 
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
@@ -127,6 +129,7 @@ int main() {
         ss << str;
         read_cert_into_ctx(ss, ctx);
 
+        Poco::JSON::Parser parser;
 
         cout << "creating cc session" << endl;
         Poco::Net::HTTPSClientSession cc_session("127.0.0.1", 8980, context);
@@ -145,7 +148,6 @@ int main() {
         cout << response.getStatus() << endl;
         string content;
         Poco::StreamCopier::copyToString(content_stream, content);
-        Poco::JSON::Parser parser;
         Poco::Dynamic::Var result = parser.parse(content);
         Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
         Poco::Dynamic::Var uri = object->get("uri");
@@ -158,7 +160,52 @@ int main() {
         cout << ws_uri << endl;
         cout << ws_token << endl;
 
-        Poco::Net::HTTPSClientSession ws_session("127.0.0.1", 8960, context);
+        Poco::URI wuri(ws_uri);
+        cout << wuri.getHost() << endl;
+        cout << wuri.getPort() << endl;
+        cout << wuri.getPath() << endl;
+
+        Poco::Net::HTTPSClientSession ws_session(
+            wuri.getHost(), wuri.getPort(), context);
+
+        string stream_id;
+        string target_id;
+        string system_b64;
+        string integrator_b64;
+        string state_b64;
+
+        {
+        cout << "starting a stream" << endl;
+        Poco::Net::HTTPRequest request("GET", wuri.getPath());
+        request.set("Authorization", ws_token);
+        ws_session.sendRequest(request);
+        cout << "obtaining files" << endl;
+        Poco::Net::HTTPResponse response;
+        istream &content_stream = ws_session.receiveResponse(response);
+        string content;
+        Poco::StreamCopier::copyToString(content_stream, content);
+        cout << content << endl;
+        Poco::Dynamic::Var result = parser.parse(content);
+        Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();        
+        stream_id = object->get("stream_id").convert<std::string>();
+        target_id = object->get("target_id").convert<std::string>();
+        // extract target files and stream files
+        Poco::Dynamic::Var target_files = object->get("target_files");
+        Poco::JSON::Object::Ptr object_file = target_files.extract<Poco::JSON::Object::Ptr>();
+        system_b64 = object_file->get("system.xml.gz.b64").convert<std::string>();
+        integrator_b64 = object_file->get("integrator.xml.gz.b64").convert<std::string>();
+        Poco::Dynamic::Var stream_files = object->get("stream_files");
+        object_file = stream_files.extract<Poco::JSON::Object::Ptr>();
+        state_b64 = object_file->get("state.xml.gz.b64").convert<std::string>();
+        parser.reset();
+        }
+
+        cout << stream_id << endl;
+        cout << target_id << endl;
+        cout << system_b64 << endl;
+        cout << integrator_b64 << endl;
+        cout << state_b64 << endl;
+
         /*
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/managers");
