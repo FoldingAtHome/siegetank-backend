@@ -47,6 +47,7 @@ import pymongo
 # [P] Publicly accessible (possibly limited info)
 
 # [P] POST x.com/auth - Authenticate the user, returning an authorization token
+
 # [A] POST x.com/targets - add a target
 # [P] GET x.com/targets - if Authenticated, retrieves User's targets
 #                       - if Public, retrieves list of all targets on server
@@ -162,10 +163,6 @@ class AddManagerHandler(tornado.web.RequestHandler):
         """
         if self.request.remote_ip != '127.0.0.1':
             return self.set_status(401)
-
-        print('Request Headers:', self.request.headers)
-        print('Request Body:', self.request.body)
-
         content = json.loads(self.request.body.decode())
         token = str(uuid.uuid4())
         password = content['password']
@@ -296,7 +293,6 @@ class RegisterWSHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         auth = self.request.headers['Authorization']
         if auth != self.application.cc_pass:
-            print(auth, self.application.cc_pass)
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
         name = content['name']
@@ -305,7 +301,7 @@ class RegisterWSHandler(BaseHandler):
         redis_port = content['redis_port']
         redis_pass = content['redis_pass']
         self.application.add_ws(name, url, http_port, redis_port, redis_pass)
-        print(content['name']+' is now connected')
+        print('WS '+content['name']+' is now connected')
         self.set_status(200)
 
 

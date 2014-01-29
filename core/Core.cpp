@@ -124,7 +124,7 @@ int main() {
         cout << "creating session" << endl;
         Poco::Net::HTTPSClientSession session("127.0.0.1", 8980, context);
 
-/*
+/* Add a user
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/managers");
         cout << "sending request" << endl;
@@ -137,6 +137,7 @@ int main() {
         cout << response.getStatus() << endl;
 */
 
+/* Get an auth token
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/auth");
         cout << "sending request" << endl;
@@ -147,6 +148,7 @@ int main() {
         Poco::Net::HTTPResponse response;
         cout << session.receiveResponse(response).rdbuf() << endl;
         cout << response.getStatus() << endl;
+*/
 
         return 0;
 
