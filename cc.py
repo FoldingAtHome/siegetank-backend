@@ -168,7 +168,7 @@ class AddManagerHandler(tornado.web.RequestHandler):
         password = content['password']
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-        db_body = {'_id': content['email'],
+        db_body = {'_id': content   ['email'],
                    'password_hash': hash_password,
                    'token': token
                    }
@@ -249,7 +249,7 @@ class AssignHandler(BaseHandler):
             target = Target(target_id, self.db)
             # pick a random ws the target is striating over
             ws_name = target.srandmember('striated_ws')
-            ws_db = self.application.WorkServerDB[ws_name]
+            ws_db = self.application.get_ws_db(ws_name)
             token = str(uuid.uuid4())
             stream_id = ws.WorkServer.activate_stream(target_id, token, ws_db)
             if stream_id:
@@ -317,7 +317,8 @@ class DeleteStreamHandler(BaseHandler):
             }
 
         """
-        for ws_name, db_client in self.application.WorkServerDB.items():
+        for ws_name in WorkServer.members(self.db):
+            db_client = self.application.get_ws_db(ws_name)
             if ws.Stream.exists(stream_id, db_client):
                 picked_ws = WorkServer(ws_name, self.db)
                 ws_url = picked_ws.hget('url')
@@ -382,6 +383,7 @@ class PostStreamHandler(BaseHandler):
 
         ws_url = picked_ws.hget('url')
         ws_http_port = picked_ws.hget('http_port')
+        ws_db = self.application.get_ws_db(ws_id)
 
         body = {
             'target_id': target_id,
@@ -392,8 +394,7 @@ class PostStreamHandler(BaseHandler):
         for filename, filebin in files.items():
             body['stream_files'][filename] = filebin
 
-        if not ws.Target.exists(target_id,
-                                self.application.WorkServerDB[picked_ws.id]):
+        if not ws.Target.exists(target_id, ws_db):
             target_files = target.smembers('files')
             body['target_files'] = {}
             for filename in target_files:
@@ -404,7 +405,7 @@ class PostStreamHandler(BaseHandler):
 
         client = tornado.httpclient.AsyncHTTPClient()
         rep = yield client.fetch('https://'+str(ws_url)+':'+str(ws_http_port)
-                                 +'/streams', method='POST',
+                                 + '/streams', method='POST',
                                  body=json.dumps(body),
                                  validate_cert=common.is_domain(ws_url))
 
@@ -468,7 +469,7 @@ class ListStreamsHandler(BaseHandler):
         body = {}
 
         for ws_name in striated_ws:
-            ws_db = self.application.WorkServerDB[ws_name]
+            ws_db = self.application.get_ws_db(ws_name)
             ws_target = ws.Target(target_id, ws_db)
             stream_ids = ws_target.smembers('streams')
             for stream_id in stream_ids:
@@ -631,8 +632,8 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
 
         self.targets_folder = targets_folder
-        if not os.path.exists('files'):
-            os.makedirs('files')
+        #if not os.path.exists('files'):
+        #    os.makedirs('files')
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
@@ -650,21 +651,57 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
 
         self.WorkServerDB = {}
 
-    def add_ws(self, name, url, http_port, redis_port, redis_pass=None):
-        client = redis.Redis(host=url, port=redis_port, password=redis_pass,
-                             decode_responses=True)
-        client.ping()
+    def get_ws_db(self, name):
+        """ When pre-forking with tornado, a register_ws request typically gets
+        sent to a only a single process. Meaning that the other processes did
+        not end up actually calling add_ws() to register the ws.
 
-        if not WorkServer.exists(name, self.db):
-            ws = WorkServer.create(name, self.db)
+        However, we can do lazy connects, since all the information pertaining
+        to the ws is contained entirely in redis! So we can reconstruct the
+        client after the fact.
+
+        """
+        if name in self.WorkServerDB:
+            return self.WorkServerDB[name]
         else:
             ws = WorkServer(name, self.db)
+            url = ws.hget('url')
+            redis_port = ws.hget('redis_port')
+            redis_pass = ws.hget('redis_pass')
 
-        ws.hset('url', url)
-        ws.hset('http_port', http_port)
-        ws.hset('redis_port', redis_port)
-        ws.hset('redis_pass', redis_pass)
-        self.WorkServerDB[name] = client
+            client = redis.Redis(host=url,
+                                 port=redis_port,
+                                 password=redis_pass,
+                                 decode_responses=True)
+
+            client.ping()
+
+            self.WorkServerDB[name] = client
+            return self.WorkServerDB[name]
+
+    def add_ws(self, name, url, http_port, redis_port, redis_pass=None):
+
+        try:
+            # make sure the client is alive
+            client = redis.Redis(host=url,
+                                 port=redis_port,
+                                 password=redis_pass,
+                                 decode_responses=True)
+            client.ping()
+
+            if not WorkServer.exists(name, self.db):
+                ws = WorkServer.create(name, self.db)
+            else:
+                ws = WorkServer(name, self.db)
+
+            ws.hset('url', url)
+            ws.hset('http_port', http_port)
+            ws.hset('redis_port', redis_port)
+            if redis_pass:
+                ws.hset('redis_pass', redis_pass)
+            self.WorkServerDB[name] = client
+        except Exception as e:
+            print(e)
 
 
 def start():

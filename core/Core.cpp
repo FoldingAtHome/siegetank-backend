@@ -4,6 +4,9 @@
 // Linux:
 // g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/home/yutong/poco152_install/include -L/home/yutong/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMMCUDA_static /usr/lib/nvidia-current/libcuda.so /usr/local/cuda/lib64/libcufft.so -lOpenMMCPU_static -lOpenMMPME_static -L/home/yutong/fftw_install/lib/ -lfftw3f -lfftw3f_threads -lOpenMM_static; ./a.out 
 
+// Linux:
+// g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/users/yutongzhao/poco152_install/include -L/users/yutongzhao/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMMCUDA_static /usr/lib/nvidia-current/libcuda.so /usr/local/cuda/lib64/libcufft.so -lOpenMMCPU_static -lOpenMMPME_static -L/home/yutong/fftw_install/lib/ -lfftw3f -lfftw3f_threads -lOpenMM_static; ./a.out 
+
 //  ./configure --static --prefix=/home/yutong/poco152_install --omit=Data/MySQL,Data/ODBC
 
 #include <iostream>
@@ -27,7 +30,7 @@
 #include <streambuf>
 #include <sstream>
 
-#include <OpenMM.h>
+// #include <OpenMM.h>
 
 using namespace std;
 using namespace Poco;
@@ -121,10 +124,10 @@ int main() {
         ss << str;
         read_cert_into_ctx(ss, ctx);
 
+
         cout << "creating session" << endl;
         Poco::Net::HTTPSClientSession session("127.0.0.1", 8980, context);
-
-/* Add a user
+        /*
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/managers");
         cout << "sending request" << endl;
@@ -137,7 +140,6 @@ int main() {
         cout << response.getStatus() << endl;
 */
 
-/* Get an auth token
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/auth");
         cout << "sending request" << endl;
@@ -148,7 +150,6 @@ int main() {
         Poco::Net::HTTPResponse response;
         cout << session.receiveResponse(response).rdbuf() << endl;
         cout << response.getStatus() << endl;
-*/
 
         return 0;
 

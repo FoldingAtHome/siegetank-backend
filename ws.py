@@ -668,9 +668,11 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
                 rep = client.fetch(uri, method='PUT', connect_timeout=2,
                                    body=json.dumps(body), headers=headers,
                                    validate_cert=common.is_domain(url))
+                print('REP CODE:', rep.code)
                 if rep.code != 200:
                     print('Warning: not connect to CC '+cc_name)
-            except Exception:
+            except Exception as e:
+                print(e.code)
                 print('Warning: not connect to CC '+cc_name)
 
         super(WorkServer, self).__init__([
