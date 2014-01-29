@@ -643,7 +643,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         signal.signal(signal.SIGTERM, self.shutdown)
 
         super(CommandCenter, self).__init__([
-            (r'/assign', AssignHandler),
+            (r'/core/assign', AssignHandler),
             (r'/auth', AuthHandler),
             (r'/managers', AddManagerHandler),
             (r'/targets', TargetHandler),

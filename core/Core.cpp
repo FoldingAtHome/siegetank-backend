@@ -14,12 +14,15 @@
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
 #include <Poco/URI.h>
 #include <Poco/Net/Context.h>
 #include <Poco/Net/SSLException.h>
 #include <Poco/Net/X509Certificate.h>
 #include <Poco/UnicodeConverter.h>
 #include <Poco/Util/Application.h>
+#include <Poco/StreamCopier.h>
+#include <Poco/Dynamic/Var.h>
 
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
@@ -125,8 +128,37 @@ int main() {
         read_cert_into_ctx(ss, ctx);
 
 
-        cout << "creating session" << endl;
-        Poco::Net::HTTPSClientSession session("127.0.0.1", 8980, context);
+        cout << "creating cc session" << endl;
+        Poco::Net::HTTPSClientSession cc_session("127.0.0.1", 8980, context);
+        
+        string ws_uri;
+        string ws_token;
+        {
+        cout << "fetching an assignment" << endl;
+        Poco::Net::HTTPRequest request("POST", "/core/assign");
+        string body("{\"engine\": \"openmm\", \"engine_version\": \"6.0\"}");
+        request.setContentLength(body.length());
+        cc_session.sendRequest(request) << body;
+        cout << "obtaining response" << endl;
+        Poco::Net::HTTPResponse response;
+        istream &content_stream = cc_session.receiveResponse(response);
+        cout << response.getStatus() << endl;
+        string content;
+        Poco::StreamCopier::copyToString(content_stream, content);
+        Poco::JSON::Parser parser;
+        Poco::Dynamic::Var result = parser.parse(content);
+        Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
+        Poco::Dynamic::Var uri = object->get("uri");
+        ws_uri = uri.convert<std::string>();
+        Poco::Dynamic::Var token = object->get("token");
+        ws_token = token.convert<std::string>();
+        parser.reset();
+        }
+
+        cout << ws_uri << endl;
+        cout << ws_token << endl;
+
+        Poco::Net::HTTPSClientSession ws_session("127.0.0.1", 8960, context);
         /*
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/managers");
@@ -138,7 +170,6 @@ int main() {
         Poco::Net::HTTPResponse response;
         session.receiveResponse(response);
         cout << response.getStatus() << endl;
-        */
 
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/auth");
@@ -150,6 +181,9 @@ int main() {
         Poco::Net::HTTPResponse response;
         cout << session.receiveResponse(response).rdbuf() << endl;
         cout << response.getStatus() << endl;
+        */
+
+
 
         return 0;
 
