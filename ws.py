@@ -33,6 +33,7 @@ import tornado.httputil
 import tornado.httpserver
 import tornado.httpclient
 import tornado.options
+import tornado.process
 
 # Capacity
 
@@ -698,11 +699,14 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         ], debug=debug)
 
     def initialize_pulse(self):
-        frequency = tornado.options.options['pulse_frequency_in_ms']
-        self.pulse = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
-                                                     frequency)
-        self.pulse.start()
+        # check for heartbeats only on the 0th process.
+        if tornado.process.task_id() == 0:
+            frequency = tornado.options.options['pulse_frequency_in_ms']
+            self.pulse = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
+                                                         3000)
+            self.pulse.start()
 
+    # we really don't need all 8 processes to constantly check this...
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
             self.deactivate_stream(dead_stream)
@@ -729,6 +733,10 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
     # deactivates the stream on the workserver
     def deactivate_stream(self, stream_id):
+        print('deactivating_stream:', stream_id)
+        #if not ActiveStream.exists(stream_id, self.db):
+        #    print('stream not active!', stream_id)
+        #    return
         ActiveStream(stream_id, self.db).delete()
         self.db.zrem('heartbeats', stream_id)
         buffer_path = os.path.join(self.streams_folder,
