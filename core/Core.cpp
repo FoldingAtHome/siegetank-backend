@@ -66,11 +66,11 @@ void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
     }
 }
 
-extern "C" void registerSerializationProxies();
-extern "C" void registerOpenCLPlatform();
-extern "C" void registerCudaPlatform();
-extern "C" void registerCpuPlatform();
-extern "C" void registerCpuPmeKernelFactories();
+#include <iostream>
+#include <string>
+#include <fstream>
+
+using namespace std;
 
 static const std::string base64_chars = 
              "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -82,13 +82,13 @@ static inline bool is_base64(unsigned char c) {
   return (isalnum(c) || (c == '+') || (c == '/'));
 }
 
-std::basic_string<unsigned char> base64_decode(std::string const& encoded_string) {
+string base64_decode(std::string const& encoded_string) {
   size_t in_len = encoded_string.size();
   size_t i = 0;
   size_t j = 0;
   int in_ = 0;
   unsigned char char_array_4[4], char_array_3[3];
-  std::basic_string<unsigned char> ret;
+  std::string ret;
 
   while (in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
     char_array_4[i++] = encoded_string[in_]; in_++;
@@ -124,83 +124,30 @@ std::basic_string<unsigned char> base64_decode(std::string const& encoded_string
 }
 
 string decode_gz_b64(string encoded_string) {
-    /*
-    stringstream b64_stream(encoded_string);
-    Poco::Base64Decoder decoder(b64_stream);
-    string decoded_b64_string;
-    decoder >> decoded_b64_string;
-    cout << decoded_b64_string << endl;
-    */
-/*
-    cout << decoded_b64_string << endl;
-    istringstream gz_stream(decoded_b64_string, std::ios::binary);
-    cout << gz_stream.str() << endl;
-    Poco::InflatingInputStream inflater(gz_stream, 
+
+
+    string decoded_b64_string = base64_decode(encoded_string);
+    istringstream gzip_stream(decoded_b64_string, std::ios_base::binary);
+    Poco::InflatingInputStream inflater(gzip_stream, 
         Poco::InflatingStreamBuf::STREAM_GZIP);
-    cout << 3 << endl;
-    string data;
-    inflater >> data;
-    cout << data << endl;
-    //return data;
-    */
-    return "string";
+    std::string data((std::istreambuf_iterator<char>(inflater)),
+                     std::istreambuf_iterator<char>());
+    return data;
 }
 
 int main() {
 
-
-    /*
-    registerSerializationProxies();
-    registerOpenCLPlatform();
-    registerCpuPlatform();
-    registerCudaPlatform();
-    registerCpuPmeKernelFactories();
-    ifstream system_file("systems/DHFR_SYSTEM_EXPLICIT.xml");
-    ifstream integrator_file("systems/DHFR_INTEGRATOR_EXPLICIT.xml");
-    ifstream state_file("systems/DHFR_STATE_EXPLICIT.xml");
-    OpenMM::System *sys = OpenMM::XmlSerializer::deserialize<OpenMM::System>\
-        (system_file);
-    OpenMM::Integrator *integrator = OpenMM::XmlSerializer::deserialize\
-        <OpenMM::Integrator>(integrator_file);
-    OpenMM::State *state = OpenMM::XmlSerializer::deserialize\
-        <OpenMM::State>(state_file);
-
-    cout << "Creating context..." << endl;
-    OpenMM::Context* coreContext_ = new OpenMM::Context(*sys, *integrator, \
-                               OpenMM::Platform::getPlatformByName("CUDA"));
-    cout << "Context created..." << endl;
-
-    coreContext_->setState(*state);
-
-    cout << "Stepping..." << endl;
-    for(int i=0; i < 10000; i++) {
-        if( i % 100 == 0) {
-            cout << i << endl;
-        }
-        integrator->step(1);
-    }
-    */
-
     try {
+        string foo("H4sIAEnM6VIC//NIzcnJVwjPL8pJAQBWsRdKCwAAAA==");
 
-        //#string test_string = "eJwLycgsVgCi3MzsVIW80tyk1CKF/LxUHaBYnnqJQglIOlEhJ79EIT9NIa00zx4ArmAQ/A==";
-        //tring test_string2 = "H4sIACyY6VIC/wvJyCxWAKLczOxUhbzS3KTUIoX8vFQdoFieeolCCUg6USEnv0QhP00hrTTPHgB31Or0MQAAAA==";
-        //string t2 = "AAECAwQF";
-        //cout << decode_gz_b64(test_string) << endl;
-        
+        string result = decode_gz_b64(foo);
 
-        string foo("QGKc/44gj7jHdfNmai6U2bzQ49+IV8HEuRIbCS5mdQHEZeHj");
-
-        ofstream test_cpp("test_cpp", std::ios::binary);
-        basic_string<unsigned char> result = base64_decode(foo);
-
-        for(int i=0; i < result.size(); i++) {
-            test_cpp.put(*(char*)&result[i]);
+        if(result != "Hello World") {
+            cout << "BAD B64 DECODE" << endl;
+        } else {
+            cout << "GZ B64 DECODE OK" << endl;
         }
-        //test_cpp.write(result.c_str(), result.length());
-
-    //        decode_gz_b64(test_string2);
-
+        
 /*
         Poco::Net::Context::Ptr context = new Poco::Net::Context(Poco::Net::Context::CLIENT_USE, "", 
             Poco::Net::Context::VERIFY_NONE, 9, false);
@@ -290,7 +237,7 @@ int main() {
         cout << state_b64 << endl;
 
         cout << decode_gz_b64(system_b64) << endl;
-/*
+*/
 
 
 
