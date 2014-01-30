@@ -5,7 +5,7 @@
 // g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/home/yutong/poco152_install/include -L/home/yutong/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMMCUDA_static /usr/lib/nvidia-current/libcuda.so /usr/local/cuda/lib64/libcufft.so -lOpenMMCPU_static -lOpenMMPME_static -L/home/yutong/fftw_install/lib/ -lfftw3f -lfftw3f_threads -lOpenMM_static; ./a.out 
 
 // Linux:
-// g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/users/yutongzhao/poco152_install/include -L/users/yutongzhao/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMMCUDA_static /usr/lib/nvidia-current/libcuda.so /usr/local/cuda/lib64/libcufft.so -lOpenMMCPU_static -lOpenMMPME_static -L/home/yutong/fftw_install/lib/ -lfftw3f -lfftw3f_threads -lOpenMM_static; ./a.out 
+// g++ -I/Users/yutongzhao/openmm_install/include -I/usr/local/ssl/include -I/users/yutongzhao/poco152_install/include -L/users/yutongzhao/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/Users/yutongzhao/openmm_install/lib -lOpenMMCPU_static -L/Users/yutongzhao/openmm_install/lib/plugins -lOpenMM_static; ./a.out 
 
 //  ./configure --static --prefix=/home/yutong/poco152_install --omit=Data/MySQL,Data/ODBC
 
@@ -35,8 +35,9 @@
 #include <string>
 #include <streambuf>
 #include <sstream>
+#include <stdexcept>
 
-// #include <OpenMM.h>
+#include <OpenMM.h>
 
 using namespace std;
 using namespace Poco;
@@ -66,67 +67,14 @@ void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
     }
 }
 
-#include <iostream>
-#include <string>
-#include <fstream>
-
-using namespace std;
-
-static const std::string base64_chars = 
-             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-             "abcdefghijklmnopqrstuvwxyz"
-             "0123456789+/";
-
-
-static inline bool is_base64(unsigned char c) {
-  return (isalnum(c) || (c == '+') || (c == '/'));
-}
-
-string base64_decode(std::string const& encoded_string) {
-  size_t in_len = encoded_string.size();
-  size_t i = 0;
-  size_t j = 0;
-  int in_ = 0;
-  unsigned char char_array_4[4], char_array_3[3];
-  std::string ret;
-
-  while (in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
-    char_array_4[i++] = encoded_string[in_]; in_++;
-    if (i ==4) {
-      for (i = 0; i <4; i++)
-        char_array_4[i] = static_cast<unsigned char>(base64_chars.find(char_array_4[i]));
-
-      char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-      char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-      char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-      for (i = 0; (i < 3); i++)
-        ret += char_array_3[i];
-      i = 0;
-    }
-  }
-
-  if (i) {
-    for (j = i; j <4; j++)
-      char_array_4[j] = 0;
-
-    for (j = 0; j <4; j++)
-      char_array_4[j] = static_cast<unsigned char>(base64_chars.find(char_array_4[j]));
-
-    char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
-    char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
-    char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
-
-    for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
-  }
-
-  return ret;
-}
+extern "C" void registerSerializationProxies();
+extern "C" void registerCpuPlatform();
 
 string decode_gz_b64(string encoded_string) {
-
-
-    string decoded_b64_string = base64_decode(encoded_string);
+    istringstream encoded_stream(encoded_string, std::ios_base::binary);
+    Poco::Base64Decoder b64decoder(encoded_stream);
+    std::string decoded_b64_string((std::istreambuf_iterator<char>(b64decoder)),
+                     std::istreambuf_iterator<char>());
     istringstream gzip_stream(decoded_b64_string, std::ios_base::binary);
     Poco::InflatingInputStream inflater(gzip_stream, 
         Poco::InflatingStreamBuf::STREAM_GZIP);
@@ -148,7 +96,6 @@ int main() {
             cout << "GZ B64 DECODE OK" << endl;
         }
         
-/*
         Poco::Net::Context::Ptr context = new Poco::Net::Context(Poco::Net::Context::CLIENT_USE, "", 
             Poco::Net::Context::VERIFY_NONE, 9, false);
         SSL_CTX *ctx = context->sslContext();
@@ -175,6 +122,9 @@ int main() {
         cout << "obtaining response" << endl;
         Poco::Net::HTTPResponse response;
         istream &content_stream = cc_session.receiveResponse(response);
+        if(response.getStatus() != 200) {
+            throw std::runtime_error("Could not get an assignment from CC");
+        }
         cout << response.getStatus() << endl;
         string content;
         Poco::StreamCopier::copyToString(content_stream, content);
@@ -186,15 +136,7 @@ int main() {
         ws_token = token.convert<std::string>();
         parser.reset();
         }
-
-        cout << ws_uri << endl;
-        cout << ws_token << endl;
-
         Poco::URI wuri(ws_uri);
-        cout << wuri.getHost() << endl;
-        cout << wuri.getPort() << endl;
-        cout << wuri.getPath() << endl;
-
         Poco::Net::HTTPSClientSession ws_session(
             wuri.getHost(), wuri.getPort(), context);
 
@@ -205,16 +147,16 @@ int main() {
         string state_b64;
 
         {
-        cout << "starting a stream" << endl;
         Poco::Net::HTTPRequest request("GET", wuri.getPath());
         request.set("Authorization", ws_token);
         ws_session.sendRequest(request);
-        cout << "obtaining files" << endl;
         Poco::Net::HTTPResponse response;
         istream &content_stream = ws_session.receiveResponse(response);
+        if(response.getStatus() != 200) {
+            throw std::runtime_error("Could not get start a stream from WS");
+        }
         string content;
         Poco::StreamCopier::copyToString(content_stream, content);
-        cout << content << endl;
         Poco::Dynamic::Var result = parser.parse(content);
         Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();        
         stream_id = object->get("stream_id").convert<std::string>();
@@ -230,22 +172,31 @@ int main() {
         parser.reset();
         }
 
-        cout << stream_id << endl;
-        cout << target_id << endl;
-        cout << system_b64 << endl;
-        cout << integrator_b64 << endl;
-        cout << state_b64 << endl;
+        string system_xml_string = decode_gz_b64(system_b64);
+        string integrator_xml_string = decode_gz_b64(integrator_b64);
+        string state_xml_string = decode_gz_b64(state_b64);
 
-        cout << decode_gz_b64(system_b64) << endl;
-*/
+        istringstream system_xml_stream(system_xml_string);
+        istringstream integrator_xml_stream(integrator_xml_string);
+        istringstream state_xml_stream(state_xml_string);
 
+        registerSerializationProxies();
+        registerCpuPlatform();
 
+        OpenMM::System *sys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_xml_stream);
+        OpenMM::Integrator *integrator = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(integrator_xml_stream);
+        OpenMM::State *state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_xml_stream);
 
+        OpenMM::Context* coreContext = new OpenMM::Context(*sys, *integrator, \
+                               OpenMM::Platform::getPlatformByName("CPU"));
+        coreContext->setState(*state);
 
-
-
-
-
+        for(int i=0; i < 10000; i++) {
+            if( i % 100 == 0) {
+                cout << i << endl;
+            }
+            integrator->step(1);
+        }
 
         // first pass the files through the b64 decoder, then inflate it.
 
