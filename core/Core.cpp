@@ -10,6 +10,7 @@
 //  ./configure --static --prefix=/home/yutong/poco152_install --omit=Data/MySQL,Data/ODBC
 
 #include <iostream>
+
 #include <Poco/Net/HTTPSClientSession.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
@@ -23,9 +24,11 @@
 #include <Poco/Util/Application.h>
 #include <Poco/StreamCopier.h>
 #include <Poco/Dynamic/Var.h>
+
 #include <Poco/Base64Decoder.h>
 #include <Poco/Base64Encoder.h>
 #include <Poco/InflatingStream.h>
+#include <Poco/DeflatingStream.h>
 
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
@@ -38,6 +41,8 @@
 #include <stdexcept>
 
 #include <OpenMM.h>
+
+#include "XTCWriter.h"
 
 using namespace std;
 using namespace Poco;
@@ -69,6 +74,7 @@ void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
 
 extern "C" void registerSerializationProxies();
 extern "C" void registerCpuPlatform();
+extern "C" void registerOpenCLPlatform();
 
 string decode_gz_b64(string encoded_string) {
     istringstream encoded_stream(encoded_string, std::ios_base::binary);
@@ -113,7 +119,10 @@ int main() {
         
         string ws_uri;
         string ws_token;
+        int steps_per_frame;
+
         {
+
         cout << "fetching an assignment" << endl;
         Poco::Net::HTTPRequest request("POST", "/core/assign");
         string body("{\"engine\": \"openmm\", \"engine_version\": \"6.0\"}");
@@ -130,11 +139,11 @@ int main() {
         Poco::StreamCopier::copyToString(content_stream, content);
         Poco::Dynamic::Var result = parser.parse(content);
         Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-        Poco::Dynamic::Var uri = object->get("uri");
-        ws_uri = uri.convert<std::string>();
-        Poco::Dynamic::Var token = object->get("token");
-        ws_token = token.convert<std::string>();
+        ws_uri = object->get("uri").convert<std::string>();
+        ws_token = object->get("token").convert<std::string>();
+        steps_per_frame = object->get("steps_per_frame").convert<int>();
         parser.reset();
+
         }
         Poco::URI wuri(ws_uri);
         Poco::Net::HTTPSClientSession ws_session(
@@ -181,25 +190,77 @@ int main() {
         istringstream state_xml_stream(state_xml_string);
 
         registerSerializationProxies();
-        registerCpuPlatform();
+        registerOpenCLPlatform();
 
         OpenMM::System *sys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_xml_stream);
         OpenMM::Integrator *integrator = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(integrator_xml_stream);
         OpenMM::State *state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_xml_stream);
 
         OpenMM::Context* coreContext = new OpenMM::Context(*sys, *integrator, \
-                               OpenMM::Platform::getPlatformByName("CPU"));
+                               OpenMM::Platform::getPlatformByName("OpenCL"));
         coreContext->setState(*state);
 
-        for(int i=0; i < 10000; i++) {
-            if( i % 100 == 0) {
+        cout << "steps_per_frame: " << steps_per_frame << endl;
+
+        // Need to base 64 encode the binary frame before sending
+        int steps = 0;
+        float time = state->getTime();
+        // Nx3 vector
+
+        vector<OpenMM::Vec3> state_positions = state->getPositions();
+        vector<vector<float> > xtc_positions(state_positions.size(), vector<float>(3));
+        for(int i=0; i < state_positions.size(); i++) {
+            for(int j=0; j < 3; j++) {
+                xtc_positions[i][j] = state_positions[i][j];
+            }
+        }
+        
+        OpenMM::Vec3 a,b,c;
+        
+        state->getPeriodicBoxVectors(a,b,c);
+        vector<vector<float> > xtc_box(3, vector<float>(3));
+
+        xtc_box[0][0] = a[0];
+        xtc_box[0][1] = a[1];
+        xtc_box[0][2] = a[2];
+
+        xtc_box[1][0] = b[0];
+        xtc_box[1][1] = b[1];
+        xtc_box[1][2] = b[2];
+
+        xtc_box[2][0] = c[0];
+        xtc_box[2][1] = c[1];
+        xtc_box[2][2] = c[2];
+
+        // Append state as a binary
+        ostringstream frame_ostream(std::ios_base::binary);
+        XTCWriter xtc_writer(frame_ostream);
+        xtc_writer.append(steps, time, xtc_box, xtc_positions);
+        string frame_binary = frame_ostream.str();
+
+        // Base64 Encode
+        ofstream raw_binary("raw_frame_binary", std::ios_base::binary);
+        raw_binary.write(frame_binary.c_str(), frame_binary.length());
+        ostringstream frame_b64_ostream(std::ios_base::binary);
+        Poco::Base64Encoder b64encoder(frame_b64_ostream);
+        b64encoder << frame_binary;
+        b64encoder.close();
+        string buffer_s = frame_b64_ostream.str();
+        ofstream test("b64_encoded_frame", std::ios_base::binary);
+        test.write(buffer_s.c_str(), buffer_s.length());
+
+        //cout << "Sending frame... " << endl;
+
+
+/*
+        for(int i=0; i < 100000; i++) {
+            if( i % steps_per_frame == 0) {
                 cout << i << endl;
             }
             integrator->step(1);
         }
-
+*/
         // first pass the files through the b64 decoder, then inflate it.
-
 
         /*
         cout << "creating request" << endl;
@@ -225,13 +286,12 @@ int main() {
         cout << response.getStatus() << endl;
         */
 
-
         return 0;
 
-    } catch(Exception &e) {
+    } catch(exception &e) {
         cout << e.what() << endl;
-        cout << e.displayText() << endl;
-        cout << e.message() << endl;
+        //cout << e.displayText() << endl;
+        //cout << e.message() << endl;
     }
 
 }
