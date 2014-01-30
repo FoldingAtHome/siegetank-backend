@@ -337,8 +337,14 @@ class CoreStartHandler(BaseHandler):
                                  file2_name: file2.b64,
                                  ...
                                  }
-                'stream_id': str,
-                'target_id': str
+                #'stream_id': str,
+                #'target_id': str
+
+                # nested layout versus just dumping all files?
+                #"file1_name": file1.b64,
+                #"file2_name": file2.b64,
+                #"file3_name": file3.b64,
+
             }
 
         We need to be extremely careful about checkpoints and frames, as

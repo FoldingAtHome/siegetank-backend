@@ -25,6 +25,7 @@
 #include <Poco/Dynamic/Var.h>
 #include <Poco/Base64Decoder.h>
 #include <Poco/Base64Encoder.h>
+#include <Poco/InflatingStream.h>
 
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
@@ -71,21 +72,83 @@ extern "C" void registerCudaPlatform();
 extern "C" void registerCpuPlatform();
 extern "C" void registerCpuPmeKernelFactories();
 
+static const std::string base64_chars = 
+             "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+             "abcdefghijklmnopqrstuvwxyz"
+             "0123456789+/";
 
+
+static inline bool is_base64(unsigned char c) {
+  return (isalnum(c) || (c == '+') || (c == '/'));
+}
+
+std::basic_string<unsigned char> base64_decode(std::string const& encoded_string) {
+  size_t in_len = encoded_string.size();
+  size_t i = 0;
+  size_t j = 0;
+  int in_ = 0;
+  unsigned char char_array_4[4], char_array_3[3];
+  std::basic_string<unsigned char> ret;
+
+  while (in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
+    char_array_4[i++] = encoded_string[in_]; in_++;
+    if (i ==4) {
+      for (i = 0; i <4; i++)
+        char_array_4[i] = static_cast<unsigned char>(base64_chars.find(char_array_4[i]));
+
+      char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+      char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+      char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+      for (i = 0; (i < 3); i++)
+        ret += char_array_3[i];
+      i = 0;
+    }
+  }
+
+  if (i) {
+    for (j = i; j <4; j++)
+      char_array_4[j] = 0;
+
+    for (j = 0; j <4; j++)
+      char_array_4[j] = static_cast<unsigned char>(base64_chars.find(char_array_4[j]));
+
+    char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+    char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+    char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+    for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
+  }
+
+  return ret;
+}
+
+string decode_gz_b64(string encoded_string) {
+    /*
+    stringstream b64_stream(encoded_string);
+    Poco::Base64Decoder decoder(b64_stream);
+    string decoded_b64_string;
+    decoder >> decoded_b64_string;
+    cout << decoded_b64_string << endl;
+    */
 /*
-class Core: public Poco::Util::Application {
-
-public:
-    Core::Core();
-    Core::~Core();
-
-    void getJob(); 
-
-};
-*/
-
+    cout << decoded_b64_string << endl;
+    istringstream gz_stream(decoded_b64_string, std::ios::binary);
+    cout << gz_stream.str() << endl;
+    Poco::InflatingInputStream inflater(gz_stream, 
+        Poco::InflatingStreamBuf::STREAM_GZIP);
+    cout << 3 << endl;
+    string data;
+    inflater >> data;
+    cout << data << endl;
+    //return data;
+    */
+    return "string";
+}
 
 int main() {
+
+
     /*
     registerSerializationProxies();
     registerOpenCLPlatform();
@@ -119,6 +182,26 @@ int main() {
     */
 
     try {
+
+        //#string test_string = "eJwLycgsVgCi3MzsVIW80tyk1CKF/LxUHaBYnnqJQglIOlEhJ79EIT9NIa00zx4ArmAQ/A==";
+        //tring test_string2 = "H4sIACyY6VIC/wvJyCxWAKLczOxUhbzS3KTUIoX8vFQdoFieeolCCUg6USEnv0QhP00hrTTPHgB31Or0MQAAAA==";
+        //string t2 = "AAECAwQF";
+        //cout << decode_gz_b64(test_string) << endl;
+        
+
+        string foo("QGKc/44gj7jHdfNmai6U2bzQ49+IV8HEuRIbCS5mdQHEZeHj");
+
+        ofstream test_cpp("test_cpp", std::ios::binary);
+        basic_string<unsigned char> result = base64_decode(foo);
+
+        for(int i=0; i < result.size(); i++) {
+            test_cpp.put(*(char*)&result[i]);
+        }
+        //test_cpp.write(result.c_str(), result.length());
+
+    //        decode_gz_b64(test_string2);
+
+/*
         Poco::Net::Context::Ptr context = new Poco::Net::Context(Poco::Net::Context::CLIENT_USE, "", 
             Poco::Net::Context::VERIFY_NONE, 9, false);
         SSL_CTX *ctx = context->sslContext();
@@ -206,6 +289,20 @@ int main() {
         cout << integrator_b64 << endl;
         cout << state_b64 << endl;
 
+        cout << decode_gz_b64(system_b64) << endl;
+/*
+
+
+
+
+
+
+
+
+
+        // first pass the files through the b64 decoder, then inflate it.
+
+
         /*
         cout << "creating request" << endl;
         Poco::Net::HTTPRequest request("POST", "/managers");
@@ -229,7 +326,6 @@ int main() {
         cout << session.receiveResponse(response).rdbuf() << endl;
         cout << response.getStatus() << endl;
         */
-
 
 
         return 0;

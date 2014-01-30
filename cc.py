@@ -211,7 +211,9 @@ class AssignHandler(BaseHandler):
         Reply:
             {
                 "token": "6lk2j5-tpoi2p6-poipoi23",
-                "uri": 'https://raynor.stanford.edu:port/core/start'
+                "url": "raynor.stanford.edu",
+                "port" "1234",
+                "uri": "/core/start",
                 "steps_per_frame": 50000
             }
 
@@ -259,6 +261,9 @@ class AssignHandler(BaseHandler):
                 ws_port = workserver.hget('http_port')
                 body = {
                     'token': token,
+                    #'url': ws_url,
+                    #'port': ws_port,
+                    #'uri': '/core/start'
                     'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
                 }
                 self.write(json.dumps(body))
