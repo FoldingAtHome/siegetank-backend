@@ -1,5 +1,9 @@
 #include "XTCWriter.h"
 #include <cmath>
+#include <cstdlib>
+#include <stdexcept>
+#include <cstdio>
+#include <climits>
 
 /* -*- mode: c; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- 
  *

@@ -77,17 +77,19 @@ class WorkServer(apollo.Entity):
               'online': bool,  # denotes if the server is online or not
               }
 
+# note, some of these options are created lazily, ie. they don't take up space
+# until created. (yay for noSQL)
 
 class Target(apollo.Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
               'owner': str,  # owner of the target,
               'steps_per_frame': int,  # number of steps per frame
-              'files': {str},  # list of files needed by this target
+              'files': {str},  # files shared by all streams
               'creation_date': float,  # in linux time.time()
               'stage': str,  # disabled, beta, release
               'allowed_ws': {str},  # ws to allow striation on
-              'engine': str,  # openmm or gromacs
+              'engine': str,  # openmm or terachem
               'engine_versions': {str},  # allowed core_versions
               }
 
@@ -169,7 +171,7 @@ class AddManagerHandler(tornado.web.RequestHandler):
         password = content['password']
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-        db_body = {'_id': content   ['email'],
+        db_body = {'_id': content['email'],
                    'password_hash': hash_password,
                    'token': token
                    }
@@ -211,9 +213,7 @@ class AssignHandler(BaseHandler):
         Reply:
             {
                 "token": "6lk2j5-tpoi2p6-poipoi23",
-                "url": "raynor.stanford.edu",
-                "port" "1234",
-                "uri": "/core/start",
+                "url": "https://raynor.stanford.edu:1234/core/start",
                 "steps_per_frame": 50000
             }
 
@@ -250,6 +250,7 @@ class AssignHandler(BaseHandler):
             # pick a random target from available targets
             target_id = random.sample(available_targets, 1)[0]
             target = Target(target_id, self.db)
+            steps_per_frame = target.hget('steps_per_frame')
             # pick a random ws the target is striating over
             ws_name = target.srandmember('striated_ws')
             ws_db = self.application.get_ws_db(ws_name)
@@ -261,10 +262,8 @@ class AssignHandler(BaseHandler):
                 ws_port = workserver.hget('http_port')
                 body = {
                     'token': token,
-                    #'url': ws_url,
-                    #'port': ws_port,
-                    #'uri': '/core/start'
-                    'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
+                    'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start',
+                    'steps_per_frame': steps_per_frame
                 }
                 self.write(json.dumps(body))
                 return self.set_status(200)
