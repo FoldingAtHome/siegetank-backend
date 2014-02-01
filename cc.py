@@ -348,6 +348,11 @@ class PostStreamHandler(BaseHandler):
     def post(self):
         """ POST a new stream to the server
 
+        When a stream is POSTED, we do a check to make sure that the set of
+        {stream_files} U {target_files} is sufficient for the engine type.
+
+        It now becomes possible for streams to have different xml files
+
         Request:
             {
                 [required]

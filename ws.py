@@ -24,6 +24,7 @@ import hashlib
 import common
 import apollo
 import base64
+import gzip
 import functools
 
 import tornado.escape
@@ -321,8 +322,6 @@ class CoreStartHandler(BaseHandler):
         """ The core first goes to the CC to get an authorization token. The CC
         activates a stream, and maps the authorization token to the stream.
 
-        stream_id is passed in by the decorator from authenticate_core
-
         Request Header:
 
             Authorization - shared_token
@@ -330,6 +329,9 @@ class CoreStartHandler(BaseHandler):
         Reply:
 
             {
+                'frame': frame_count,
+                'stream_id': uuid,
+                'target_id': uuid,
                 'stream_files': {file1_name: file1.b64,
                                  file2_name: file2.b64,
                                  ...
@@ -338,14 +340,6 @@ class CoreStartHandler(BaseHandler):
                                  file2_name: file2.b64,
                                  ...
                                  }
-                #'stream_id': str,
-                #'target_id': str
-
-                # nested layout versus just dumping all files?
-                #"file1_name": file1.b64,
-                #"file2_name": file2.b64,
-                #"file3_name": file3.b64,
-
             }
 
         We need to be extremely careful about checkpoints and frames, as
@@ -404,33 +398,8 @@ class CoreFrameHandler(BaseHandler):
         """ Add a new frame.
 
         If the core posts to this method, then the WS assumes that the frame is
-        good.
-
-        Frames are written directly to a buffer file. When a checkpoint is sent
-        buffered_frames are renamed (safely) to a frameset file. renames are in
-        general very fast compared to copy & moves.
-
-        Example files on disk for a given stream:
-
-            10_frames.xtc (0-10]
-            15_frames.xtc (10-15]
-            29_frames.xtc (15-29]
-            39_frames.xtc (29-39] <- 39_state.xml.gz.b64 |  39
-            buffer.xtc                                     | ????
-
-        When a checkpoint is received, the following steps happen
-
-        nframes = stream.hget('frames')+active_stream.hget('buffer_frames')
-        buffer.xtc --> nframes+_frames.xtc (via os.rename())
-        checkpoint.json --> nframes+_state.xml.gz.b64
-        stream.hset('frames', nframes)
-        39_state.xml.gz.b64 file is safely removed
-
-        presence of k_frameset.xtc and k_state.xml.gz.b64 guarantees that the
-        frames up to k are valid.
-
-        If the WS crashes, we can directly read from the files to rebuild the
-        frames value in redis.
+        good. The data received is stored in a buffer until a checkpoint is
+        called.
 
         Request Header:
 
@@ -438,8 +407,19 @@ class CoreFrameHandler(BaseHandler):
 
         Request Body:
             {
-                'frame' : frame.xtc (b64 encoded)
+                "files" : {
+                    "filename.xtc.b64": file.b64,
+                    "frames.xtc.b64": file.b64,
+                    "coords.xyz.b64": file.b64,
+                    "log.gz.txt": file.gz.b64
+                }
             }
+
+        If the filename ends in b64, it is first b64 decoded. Afterwards, it is
+        written to disk with the name [buffer_frames]_b_filename, with the b64
+        suffix stripped if present.
+
+        Filenames cannot end in gz since binary cannot be transferred in JSON.
 
         Reply:
 
@@ -447,17 +427,27 @@ class CoreFrameHandler(BaseHandler):
 
         """
         active_stream = ActiveStream(stream_id, self.db)
-        content = json.loads(self.request.body.decode())
-        frame_bytes = base64.b64decode(content['frame'])
-        # see if this frame has been submitted before
-        frame_hash = hashlib.md5(frame_bytes).hexdigest()
-        if active_stream.hget('last_frame_md5') == frame_hash:
+        frame_hash = hashlib.md5(self.request.body).hexdigest()
+        if active_stream.hget('last_frame_hash') == frame_hash:
             return self.set_status(200)
-        active_stream.hset('last_frame_md5', frame_hash)
+        active_stream.hset('last_frame_hash', frame_hash)
+        content = json.loads(self.request.body.decode())
+        files = content['files']
         streams_folder = self.application.streams_folder
-        buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
-        with open(buffer_path, 'ab') as buffer_file:
-            buffer_file.write(frame_bytes)
+        bf_count = active_stream.hget('buffer_frames')
+        for filename, filedata in files.items():
+            f_root, f_ext = os.path.splitext(filename)
+            if f_ext == 'b64':
+                filename = f_root
+                filedata = base64.b64decode(filedata)
+                f_root, f_ext = os.path.splitext(filename)
+                if f_ext == 'gz':
+                    filename = f_root
+                    filedata = gzip.decompress(filedata)
+            buffer_filename = os.path.join(streams_folder, stream_id,
+                                           bf_count+'_'+filename)
+            with open(buffer_filename, 'wb') as buffer_handle:
+                buffer_handle.write(filedata)
         active_stream.hincrby('buffer_frames', 1)
         return self.set_status(200)
 
@@ -465,8 +455,19 @@ class CoreFrameHandler(BaseHandler):
 class CoreCheckpointHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Add a checkpoint. A checkpoint renames the buffer into a valid set
-        of frames.
+        """ Add a checkpoint. Invoking this handler renames the buffered files
+        into a valid filenames prefixed with the frame count.
+
+        Suppose we have the following files:
+
+        5_state.xml.gz.b64                         7_state.xml.gz.b64
+        5_frames.xtc            6_b_frame.xtc      7_b_frame.xtc
+
+        1. 7_state.xml.gz.b64 is written
+        2. 6_b_frame.xtc, 7_b_frame.xtc, are concatenated to 7_frames.xtc
+        3. 5_state.xml.gz.b64 is deleted
+
+        Checkpoint files are not written to disk. 
 
         Request Header:
 
@@ -475,7 +476,7 @@ class CoreCheckpointHandler(BaseHandler):
         Request Body:
             {
                 [required]
-                "last_frame_hash" : frame.xtc (b64 encoded)
+                "frame": 12345
                 "checkpoint" : checkpoint.xml.tar.gz (b64 encoded)
             }
 
@@ -486,11 +487,9 @@ class CoreCheckpointHandler(BaseHandler):
         """
         self.set_status(400)
         content = json.loads(self.request.body.decode())
-        last_frame_md5 = content['last_frame_hash']
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
-        if last_frame_md5 != active_stream.hget('last_frame_md5'):
-            return
+
         streams_folder = self.application.streams_folder
         buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
         checkpoint_bytes = content['checkpoint'].encode()
@@ -508,7 +507,7 @@ class CoreCheckpointHandler(BaseHandler):
                                        str(total_frames)+'_'+base_name)
         with open(checkpoint_path, 'wb') as handle:
             handle.write(checkpoint_bytes)
-        # rename buffer.xtc to [total_frames]_frameset.xtc
+        # rename buffer.xtc to [total_frames]_frames.xtc
         frames_path = os.path.join(streams_folder, stream_id,
                                    str(total_frames)+'_frames.xtc')
         os.rename(buffer_path, frames_path)
