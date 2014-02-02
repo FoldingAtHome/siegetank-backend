@@ -129,12 +129,13 @@ class Stream(apollo.Entity):
 
 class ActiveStream(apollo.Entity):
     prefix = 'active_stream'
-    fields = {'buffer_frames': int,     # number of frames in buffer.xtc
-              'auth_token': str,        # used by core to send requests
-              'donor': str,             # the donor assigned
-              'steps': int,             # number of steps completed
-              'start_time': float,      # time started
-              'last_frame_md5': str     # md5sum of the last completed frame
+    fields = {'start_frame': int,  # frame we started at.
+              'buffer_frames': int,  # number of frames in buffer.xtc
+              'auth_token': str,  # used by core to send requests
+              'donor': str,  # the donor assigned
+              'steps': int,  # number of steps completed
+              'start_time': float,  # time we started at
+              'last_frame_md5': str  # md5sum of the last completed frame
               }
 
 
@@ -143,7 +144,6 @@ class Target(apollo.Entity):
     fields = {'queue': apollo.zset(str),    # queue of inactive streams
               'stream_files': {str},        # set of filenames for the stream
               'target_files': {str},        # set of filenames for the target
-#              'cc': str                     # which cc the target belongs to
               }
 
 
@@ -401,6 +401,35 @@ class CoreFrameHandler(BaseHandler):
         good. The data received is stored in a buffer until a checkpoint is
         called.
 
+        There are four frequencies:
+
+        fwf = frame_write_frequency (PG Controlled)
+        fsf = frame_send_frequency (Core Controlled)
+        cwf = checkpoint_write_frequency (Core Controlled)
+        csf = checkpoint_send_frequency (Donor Controlled)
+
+        Obeying the following constraints:
+
+        fwf < fsf = cwf < csf
+        
+        and
+
+        fsf and cwf are a multiple of fwf , csf is determined by a timer.
+
+        Example:
+
+        OpenMM:
+
+        fwf = 50000
+        fsf = cwf = 50000
+        scf = 2x per day
+
+        Terachem:
+
+        fwf = 2
+        fsf = cwf = 100
+        scf = 2x per day
+
         Request Header:
 
             Authorization - core_token
@@ -416,10 +445,8 @@ class CoreFrameHandler(BaseHandler):
             }
 
         If the filename ends in b64, it is first b64 decoded. Afterwards, it is
-        written to disk with the name [buffer_frames]_b_filename, with the b64
-        suffix stripped if present.
-
-        Filenames cannot end in gz since binary cannot be transferred in JSON.
+        written to disk with the name buffer_filename, with the b64
+        suffix stripped if present. Sames holds for .gz.b64
 
         Reply:
 
@@ -458,6 +485,8 @@ class CoreCheckpointHandler(BaseHandler):
         """ Add a checkpoint. Invoking this handler renames the buffered files
         into a valid filenames prefixed with the frame count.
 
+        TODO: Need to be idempotent.
+
         Suppose we have the following files:
 
         5_state.xml.gz.b64                         7_state.xml.gz.b64
@@ -466,8 +495,6 @@ class CoreCheckpointHandler(BaseHandler):
         1. 7_state.xml.gz.b64 is written
         2. 6_b_frame.xtc, 7_b_frame.xtc, are concatenated to 7_frames.xtc
         3. 5_state.xml.gz.b64 is deleted
-
-        Checkpoint files are not written to disk. 
 
         Request Header:
 
