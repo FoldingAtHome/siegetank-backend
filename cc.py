@@ -77,9 +77,9 @@ class WorkServer(apollo.Entity):
               'online': bool,  # denotes if the server is online or not
               }
 
+
 # note, some of these options are created lazily, ie. they don't take up space
 # until created. (yay for noSQL)
-
 class Target(apollo.Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
@@ -386,6 +386,9 @@ class PostStreamHandler(BaseHandler):
         allowed_workservers = target.smembers('allowed_ws')
         if not allowed_workservers:
             allowed_workservers = WorkServer.members(self.db)
+        if not allowed_workservers:
+            self.set_status(400)
+            self.write(json.dumps({'error': 'no available workserver'}))
 
         # randomly pick from available workservers
         ws_id = random.sample(allowed_workservers, 1)[0]

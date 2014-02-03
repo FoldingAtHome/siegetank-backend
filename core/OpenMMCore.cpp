@@ -48,104 +48,11 @@
 using namespace std;
 using namespace Poco;
 
-static void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
-    // Add a stream of PEM formatted certificate strings to the trusted store
-    // of the ctx.
-    string line;
-    string buffer;
-    while(getline(some_stream, line)) {
-        buffer.append(line);
-        buffer.append("\n");
-        if(line == "-----END CERTIFICATE-----") {
-            BIO *bio;
-            X509 *certificate;
-            bio = BIO_new(BIO_s_mem());
-            BIO_puts(bio, buffer.c_str());
-            certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-            if(certificate == NULL)
-                throw std::runtime_error("could not add certificate to trusted\
-                                          CAs");
-            X509_STORE* store = SSL_CTX_get_cert_store(ctx);
-            int result = X509_STORE_add_cert(store, certificate);
-            BIO_free(bio);
-            buffer = "";
-        }
-    }
-}
-
 extern "C" void registerSerializationProxies();
 extern "C" void registerCpuPlatform();
 extern "C" void registerOpenCLPlatform();
 
-static string decode_gz_b64(string encoded_string) {
-    istringstream encoded_stream(encoded_string, std::ios_base::binary);
-    Poco::Base64Decoder b64decoder(encoded_stream);
-    std::string decoded_b64_string((std::istreambuf_iterator<char>(b64decoder)),
-                     std::istreambuf_iterator<char>());
-    istringstream gzip_stream(decoded_b64_string, std::ios_base::binary);
-    Poco::InflatingInputStream inflater(gzip_stream, 
-        Poco::InflatingStreamBuf::STREAM_GZIP);
-    std::string data((std::istreambuf_iterator<char>(inflater)),
-                     std::istreambuf_iterator<char>());
-    return data;
-}
-
-Core::Core() {
-
-    // initialize SSL
-    Poco::Net::Context::Ptr context = new Poco::Net::Context(
-        Poco::Net::Context::CLIENT_USE, "", 
-        Poco::Net::Context::VERIFY_NONE, 9, false);
-    SSL_CTX *ctx = context->sslContext();
-    std::ifstream t("rootcert.pem");
-    std::string str((std::istreambuf_iterator<char>(t)),
-                     std::istreambuf_iterator<char>());
-    stringstream ss;
-    ss << str;
-    read_cert_into_ctx(ss, ctx);
-
-    cout << "creating cc session" << endl;
-    _cc_session = new Poco::Net::HTTPSClientSession("127.0.0.1", 8980, context);
-
-    string ws_uri;
-    string ws_token;
-    
-    {
-
-    cout << "fetching an assignment" << endl;
-    Poco::Net::HTTPRequest request("POST", "/core/assign");
-    string body("{\"engine\": \"openmm\", \"engine_version\": \"6.0\"}");
-    request.setContentLength(body.length());
-    cc_session.sendRequest(request) << body;
-    cout << "obtaining response" << endl;
-    Poco::Net::HTTPResponse response;
-    istream &content_stream = cc_session.receiveResponse(response);
-    if(response.getStatus() != 200) {
-        throw std::runtime_error("Could not get an assignment from CC");
-    }
-    cout << response.getStatus() << endl;
-    string content;
-    Poco::StreamCopier::copyToString(content_stream, content);
-    Poco::Dynamic::Var result = parser.parse(content);
-    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-    ws_uri = object->get("uri").convert<std::string>();
-    ws_token = object->get("token").convert<std::string>();
-    _steps_per_frame = object->get("steps_per_frame").convert<int>();
-    parser.reset();
-
-    }
-
-    Poco::URI wuri(ws_uri);
-    _ws_session = new Poco::Net::HTTPSClientSession(wuri.getHost(), wuri.getPort(), context);
-
-}
-
-Core::~Core() {
-    delete _cc_session;
-    delete _ws_session;
-}
-
-int main() {
+void OpenMMCore::main() {
 
     try {
         string foo("H4sIAEnM6VIC//NIzcnJVwjPL8pJAQBWsRdKCwAAAA==");
@@ -319,39 +226,39 @@ int main() {
         ws_session.receiveResponse(response);
         cout << response.getStatus() << endl;
 
-/*
-        for(int i=0; i < 100000; i++) {
-            if( i % steps_per_frame == 0) {
-                cout << i << endl;
-            }
-            integrator->step(1);
-        }
-*/
-        // first pass the files through the b64 decoder, then inflate it.
 
-        /*
-        cout << "creating request" << endl;
-        Poco::Net::HTTPRequest request("POST", "/managers");
-        cout << "sending request" << endl;
-        string body("{\"email\":\"proteneer@gmail.com\", \"password\": \"foo\"}");
-        request.setContentLength(body.length());
-        session.sendRequest(request) << body;
-        cout << "obtaining response" << endl;
-        Poco::Net::HTTPResponse response;
-        session.receiveResponse(response);
-        cout << response.getStatus() << endl;
+        // for(int i=0; i < 100000; i++) {
+        //     if( i % steps_per_frame == 0) {
+        //         cout << i << endl;
+        //     }
+        //     integrator->step(1);
+        // }
 
-        cout << "creating request" << endl;
-        Poco::Net::HTTPRequest request("POST", "/auth");
-        cout << "sending request" << endl;
-        string body("{ \"email\": \"proteneer@gmail.com\", \"password\": \"foo\" }");
-        request.setContentLength(body.length());
-        session.sendRequest(request) << body;
-        cout << "obtaining response" << endl;
-        Poco::Net::HTTPResponse response;
-        cout << session.receiveResponse(response).rdbuf() << endl;
-        cout << response.getStatus() << endl;
-        */
+        // // first pass the files through the b64 decoder, then inflate it.
+
+        
+        // cout << "creating request" << endl;
+        // Poco::Net::HTTPRequest request("POST", "/managers");
+        // cout << "sending request" << endl;
+        // string body("{\"email\":\"proteneer@gmail.com\", \"password\": \"foo\"}");
+        // request.setContentLength(body.length());
+        // session.sendRequest(request) << body;
+        // cout << "obtaining response" << endl;
+        // Poco::Net::HTTPResponse response;
+        // session.receiveResponse(response);
+        // cout << response.getStatus() << endl;
+
+        // cout << "creating request" << endl;
+        // Poco::Net::HTTPRequest request("POST", "/auth");
+        // cout << "sending request" << endl;
+        // string body("{ \"email\": \"proteneer@gmail.com\", \"password\": \"foo\" }");
+        // request.setContentLength(body.length());
+        // session.sendRequest(request) << body;
+        // cout << "obtaining response" << endl;
+        // Poco::Net::HTTPResponse response;
+        // cout << session.receiveResponse(response).rdbuf() << endl;
+        // cout << response.getStatus() << endl;
+        
 
         return 0;
 
