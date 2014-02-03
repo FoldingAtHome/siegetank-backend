@@ -166,7 +166,7 @@ class Test(tornado.testing.AsyncTestCase):
             'engine': 'openmm',
             'engine_version': '6.0'
         }
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/assign'
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
         client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      body=json.dumps(body), method='POST')
         reply = self.wait()
@@ -199,11 +199,6 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(open(os.path.join(self.ws.streams_folder, stream_id,
                          'state.xml.gz.b64'), 'rb').read(),
                          stream_binaries[stream_id].encode())
-
-        # test posting frames
-        frame_bin = os.urandom(1024)
-
-        # test posting checkpoints
 
     @classmethod
     def tearDownClass(cls):
@@ -352,7 +347,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                 'engine': 'openmm',
                 'engine_version': '6.0'
             }
-            uri = 'https://'+url+':'+str(self.cc_hport)+'/assign'
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
             client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                          body=json.dumps(body), method='POST')
             reply = self.wait()

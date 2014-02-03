@@ -227,12 +227,12 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
         frame_buffer = bytes()
-        n_frames = 2
+        n_frames = 25
         active_stream = ws.ActiveStream(stream_id, self.ws.db)
 
         # PUT 25 frames
         for count in range(n_frames):
-            frame_bin = os.urandom(10)
+            frame_bin = os.urandom(1024)
             frame_buffer += frame_bin
             body = {
                 'files': {'frames.xtc.b64':
