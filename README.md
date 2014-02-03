@@ -44,6 +44,7 @@ Currently, the allowed RESTful requests are GET, PUT, and POST. GETs and PUTs ar
 
 [P] Unauthenticated requests  
 [A] Authenticated requests 
+[C] Core requests
 
 - [P] POST x.com/auth - Authenticate the user, returning an authorization token
 - [A] POST x.com/targets - add a target
@@ -57,6 +58,7 @@ Currently, the allowed RESTful requests are GET, PUT, and POST. GETs and PUTs ar
 - [P] GET x.com/streams/info/:stream_id - get information about specific stream
 - [A] PUT x.com/streams/delete/:stream_id - delete a stream
 - [A] PUT x.com/streams/stop/:stream_id - stop a stream
+- [C] POST x.com/core/assign - assign a stream to a core
 
 <h2> WS Methods </h2>
 
