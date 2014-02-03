@@ -112,7 +112,7 @@ void Core::initialize_session(Poco::URI &cc_uri) {
     Poco::JSON::Parser parser;
 
     {
-    cout << "getting assigned..." << flush;
+    cout << "getting assigned a ws..." << flush;
     Poco::Net::HTTPRequest request("POST", cc_uri.getPath());
     string body("{\"engine\": \"openmm\", \"engine_version\": \"6.0\"}");
     request.setContentLength(body.length());
