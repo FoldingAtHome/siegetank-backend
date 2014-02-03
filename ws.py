@@ -135,7 +135,8 @@ class ActiveStream(apollo.Entity):
               'donor': str,  # the donor assigned
               'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
-              'last_frame_md5': str  # md5sum of the last completed frame
+              'frame_hash': str,  # md5sum of the received frame
+              'buffer_files': {str},  # set of frame files sent
               }
 
 
@@ -395,40 +396,35 @@ class CoreStartHandler(BaseHandler):
 class CoreFrameHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Add a new frame.
+        """ Append a new frame.
 
         If the core posts to this method, then the WS assumes that the frame is
         good. The data received is stored in a buffer until a checkpoint is
-        called.
+        received.
 
-        There are four frequencies:
+        There are four interval :
 
-        fwf = frame_write_frequency (PG Controlled)
-        fsf = frame_send_frequency (Core Controlled)
-        cwf = checkpoint_write_frequency (Core Controlled)
-        csf = checkpoint_send_frequency (Donor Controlled)
+        fwi = frame_write_interval (PG Controlled)
+        fsi = frame_send_interval (Core Controlled)
+        cwi = checkpoint_write_interval (Core Controlled)
+        csi = checkpoint_send_interval (Donor Controlled)
 
-        Obeying the following constraints:
+        Where: fwi < k*fsi = cwi < j*csi | k, j are integers
 
-        fwf < fsf = cwf < csf
-        
-        and
-
-        fsf and cwf are a multiple of fwf , csf is determined by a timer.
-
-        Example:
+        When a set of frames is sent, the core is guaranteed to write a
+        corresponding checkpoint, so that the next checkpoint received is
+        guaranteed to correspond to the head of the buffered files.
 
         OpenMM:
 
-        fwf = 50000
-        fsf = cwf = 50000
-        scf = 2x per day
+        fwi = fsi = cwi = 50000
+        sci = 2x per day
 
         Terachem:
 
-        fwf = 2
-        fsf = cwf = 100
-        scf = 2x per day
+        fwi = 2
+        fsi = cwf = 100
+        sci = 2x per day
 
         Request Header:
 
@@ -440,13 +436,13 @@ class CoreFrameHandler(BaseHandler):
                     "filename.xtc.b64": file.b64,
                     "frames.xtc.b64": file.b64,
                     "coords.xyz.b64": file.b64,
-                    "log.gz.txt": file.gz.b64
+                    "log.txt.gz.b64": file.gz.b64
                 }
             }
 
-        If the filename ends in b64, it is first b64 decoded. Afterwards, it is
-        written to disk with the name buffer_filename, with the b64
-        suffix stripped if present. Sames holds for .gz.b64
+        If the filename ends in b64, it is b64 decoded. If the next suffix ends
+        in gz, it is gunzipped. Afterwards, the written to disk with the name
+        buffer_[filename], with the b64/gz suffixes stripped.
 
         Reply:
 
@@ -455,26 +451,30 @@ class CoreFrameHandler(BaseHandler):
         """
         active_stream = ActiveStream(stream_id, self.db)
         frame_hash = hashlib.md5(self.request.body).hexdigest()
-        if active_stream.hget('last_frame_hash') == frame_hash:
+        if active_stream.hget('frame_hash') == frame_hash:
             return self.set_status(200)
-        active_stream.hset('last_frame_hash', frame_hash)
+        active_stream.hset('frame_hash', frame_hash)
         content = json.loads(self.request.body.decode())
         files = content['files']
         streams_folder = self.application.streams_folder
-        bf_count = active_stream.hget('buffer_frames')
+
+        # empty the set
+        active_stream.sremall('buffer_files')
         for filename, filedata in files.items():
+            filedata = filedata.encode()
             f_root, f_ext = os.path.splitext(filename)
-            if f_ext == 'b64':
+            if f_ext == '.b64':
                 filename = f_root
                 filedata = base64.b64decode(filedata)
                 f_root, f_ext = os.path.splitext(filename)
-                if f_ext == 'gz':
+                if f_ext == '.gz':
                     filename = f_root
                     filedata = gzip.decompress(filedata)
             buffer_filename = os.path.join(streams_folder, stream_id,
-                                           bf_count+'_'+filename)
-            with open(buffer_filename, 'wb') as buffer_handle:
+                                           'buffer_'+filename)
+            with open(buffer_filename, 'ab') as buffer_handle:
                 buffer_handle.write(filedata)
+            active_stream.sadd('buffer_files', filename)
         active_stream.hincrby('buffer_frames', 1)
         return self.set_status(200)
 
@@ -483,18 +483,23 @@ class CoreCheckpointHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
         """ Add a checkpoint. Invoking this handler renames the buffered files
-        into a valid filenames prefixed with the frame count.
-
-        TODO: Need to be idempotent.
+        into a valid filenames prefixed with the corresponding frame count.
 
         Suppose we have the following files:
 
-        5_state.xml.gz.b64                         7_state.xml.gz.b64
-        5_frames.xtc            6_b_frame.xtc      7_b_frame.xtc
+        active_stream.hset('buffer_frames', 0)
 
-        1. 7_state.xml.gz.b64 is written
-        2. 6_b_frame.xtc, 7_b_frame.xtc, are concatenated to 7_frames.xtc
-        3. 5_state.xml.gz.b64 is deleted
+        total_frames = stream.hget('frames') +
+                       active_stream.hget('buffer_frames')
+                     = 9
+
+        5_state.xml.gz.b64
+        5_frames.xtc            buffer_frames.xtc
+        5_log.txt               buffer_log.txt
+
+        1. 1) write checkpoint: 9_state.xml.gz.b64 is written
+        2. 2) rename buffered files: buffer_frames.xtc -> 9_frames.xtc
+        3. 3) delete old checkpoint: 5_state.xml.gz.b64 is deleted
 
         Request Header:
 
@@ -502,9 +507,9 @@ class CoreCheckpointHandler(BaseHandler):
 
         Request Body:
             {
-                [required]
-                "frame": 12345
-                "checkpoint" : checkpoint.xml.tar.gz (b64 encoded)
+                "files": {
+                    "state.xml.gz.b64" : state.xml.gz.b64
+                }
             }
 
         Reply:
@@ -516,36 +521,37 @@ class CoreCheckpointHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
-
-        streams_folder = self.application.streams_folder
-        buffer_path = os.path.join(streams_folder, stream_id, 'buffer.xtc')
-        checkpoint_bytes = content['checkpoint'].encode()
-
         stream_frames = stream.hget('frames')
         buffer_frames = active_stream.hget('buffer_frames')
-        # if buffer is empty then this checkpoint does nothing
-        # (important for idempotency)
+
+        # important check for idempotency
         if buffer_frames == 0:
             return self.set_status(200)
-        total_frames = stream_frames + buffer_frames
-        base_name = 'state.xml.gz.b64'
-        # HACK: write checkpoint as a new state
-        checkpoint_path = os.path.join(streams_folder, stream_id,
-                                       str(total_frames)+'_'+base_name)
-        with open(checkpoint_path, 'wb') as handle:
-            handle.write(checkpoint_bytes)
-        # rename buffer.xtc to [total_frames]_frames.xtc
-        frames_path = os.path.join(streams_folder, stream_id,
-                                   str(total_frames)+'_frames.xtc')
-        os.rename(buffer_path, frames_path)
-        # clear the old buffer
-        with open(buffer_path, 'wb'):
-            pass
-        # delete the old state
-        old_state_path = os.path.join(streams_folder, stream_id,
-                                      str(stream_frames)+'_'+base_name)
-        if stream_frames > 0:
-            os.remove(old_state_path)
+        streams_folder = self.application.streams_folder
+        buffers_folder = os.path.join(streams_folder, stream_id)
+
+        # 1) write checkpoint
+        for filename, bytes in content['files'].items():
+            checkpoint_bytes = content['files'][filename].encode()
+            total_frames = stream_frames + buffer_frames
+            checkpoint_path = os.path.join(streams_folder, stream_id,
+                                           str(total_frames)+'_'+filename)
+            with open(checkpoint_path, 'wb') as handle:
+                handle.write(checkpoint_bytes)
+
+        # 2) rename buffered files
+        for filename in active_stream.smembers('buffer_files'):
+            dst = os.path.join(buffers_folder, str(total_frames)+'_'+filename)
+            src = os.path.join(buffers_folder, 'buffer_'+filename)
+            os.rename(src, dst)
+
+        # 3) delete old checkpoint
+        for filename, bytes in content['files'].items():
+            src = os.path.join(streams_folder, stream_id,
+                               str(stream_frames)+'_'+filename)
+            if stream_frames > 0:
+                os.remove(src)
+
         stream.hincrby('frames', buffer_frames)
         active_stream.hset('buffer_frames', 0)
         self.set_status(200)
@@ -555,6 +561,8 @@ class CoreStopHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
         """ Stop a stream from being ran by a core.
+
+        To do: add marker denoting if stream should be finished
 
         Request Header:
 
@@ -588,8 +596,8 @@ class CoreStopHandler(BaseHandler):
 
 
 class DownloadHandler(BaseHandler):
-    def get(self, stream_id):
-        """ Download a stream
+    def get(self, stream_id, filename):
+        """ Download the file filename from stream streamid
 
         This function concatenates the list of frames on the fly by reading
         the files and yielding chunks.
@@ -601,7 +609,8 @@ class DownloadHandler(BaseHandler):
             streams_folder = self.application.streams_folder
             stream_dir = os.path.join(streams_folder, stream_id)
             if stream.hget('frames') > 0:
-                files = [f for f in os.listdir(stream_dir) if 'frames' in f]
+                files = [f for f in os.listdir(stream_dir)
+                         if (filename in f and 'buffer_' not in f)]
                 files = sorted(files, key=lambda k: int(k.split('_')[0]))
                 buf_size = 4096
                 self.set_header('Content-Type', 'application/octet-stream')
@@ -717,7 +726,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
         super(WorkServer, self).__init__([
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
-            (r'/streams/download/(.*)', DownloadHandler),
+            (r'/streams/(.*)/(.*)', DownloadHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
             (r'/core/checkpoint', CoreCheckpointHandler),
@@ -759,17 +768,20 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
     # deactivates the stream on the workserver
     def deactivate_stream(self, stream_id):
-        print('deactivating_stream:', stream_id)
         #if not ActiveStream.exists(stream_id, self.db):
         #    print('stream not active!', stream_id)
         #    return
-        ActiveStream(stream_id, self.db).delete()
+        active_stream = ActiveStream(stream_id, self.db)
+
         self.db.zrem('heartbeats', stream_id)
-        buffer_path = os.path.join(self.streams_folder,
-                                   stream_id, 'buffer.xtc')
-        if os.path.exists(buffer_path):
-            with open(buffer_path, 'w'):
-                pass
+        buffer_files = active_stream.smembers('buffer_files')
+        for fname in buffer_files:
+            fname = 'buffer_'+fname
+            buffer_path = os.path.join(self.streams_folder, stream_id, fname)
+            if os.path.exists(buffer_path):
+                os.remove(buffer_path)
+
+        active_stream.delete()
         # push this stream back into queue
         stream = Stream(stream_id, self.db)
         frames_completed = stream.hget('frames')
