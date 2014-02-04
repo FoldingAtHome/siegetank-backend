@@ -22,9 +22,10 @@ dependencies:
     - ./configure --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC
     - make -j4
     - make install
-    - cd ..
-    - cd backend/core/
+    - cd /home/ubuntu/backend/core/
     - mkdir build
     - cd build
     - cmake ../ -DPOCOINSTALL_DIR=/home/ubuntu/poco152_install
     - make
+    - /home/ubuntu/backend/core/tests/start_services
+    - make test
