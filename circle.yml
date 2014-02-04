@@ -1,0 +1,10 @@
+checkout:
+  post:
+    - cd server
+    - cd wget https://github.com/proteneer/apollo/blob/master/apollo.py
+
+dependencies:
+  pre:
+    - pip install tornado
+    - pip install requests
+    - pip install redis
