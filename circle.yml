@@ -10,7 +10,7 @@ checkout:
     - if [[ ! -e redis/src/redis-server ]]; then cd redis/src && make -j4; fi
 
   cache_directories:
-    - redis
+    - "redis"
 
 dependencies:
   pre:
@@ -20,12 +20,12 @@ dependencies:
     - pip install bcrypt
     - pip install pymongo
     - if [[ ! -e poco-1.5.2-all ]]; then wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz && tar xvf poco-1.5.2-all.tar.gz; fi
-    - cd poco-1.5.2-all && ./configure --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC && make -j4 && make install;
+    - cd poco-1.5.2-all && ./configure --no-samples --no-tests --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC && make -j4 && make install;
     - cd core && mkdir build && cd build && cmake ../ -DPOCOINSTALL_DIR=/home/ubuntu/poco152_install && make
 
   cache_directories:
-    - poco-1.5.2-all
-    - ../poco152_install
+    - "poco-1.5.2-all"
+    - "../poco152_install"
 
 test:
   post:
