@@ -1,7 +1,7 @@
 checkout:
   post:
     - cd server
-    - cd wget https://github.com/proteneer/apollo/blob/master/apollo.py
+    - wget https://raw2.github.com/proteneer/apollo/master/apollo.py
 
 dependencies:
   pre:
