@@ -19,9 +19,10 @@ dependencies:
     - pip install redis
     - pip install bcrypt
     - pip install pymongo
+    - cmake --version
     - if [[ ! -e poco-1.5.2-all ]]; then wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz && tar xvf poco-1.5.2-all.tar.gz; fi
     - cd poco-1.5.2-all && ./configure --no-samples --no-tests --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC && make -j4 && make install;
-    - cd core && mkdir build && cd build && cmake ../ -DPOCO_INSTALL_DIR=/home/ubuntu/poco152_install && make
+    - cd core && mkdir build && cd build && cmake ../ -DPOCO_INSTALL_DIR=/home/ubuntu/poco152_install -DCMAKE_BUILD_TYPE=Release && make
 
   cache_directories:
     - "poco-1.5.2-all"
