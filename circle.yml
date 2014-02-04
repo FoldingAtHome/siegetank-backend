@@ -7,11 +7,12 @@ machine:
 
 checkout:
   post:
-    - cd server
-    - wget https://raw2.github.com/proteneer/apollo/master/apollo.py
+    - cd server; wget https://raw2.github.com/proteneer/apollo/master/apollo.py
+    - ls
 
 dependencies:
   pre:
     - pip install tornado
     - pip install requests
     - pip install redis
+    - pip install bcrypt
