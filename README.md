@@ -8,7 +8,6 @@ ST - Siege Tank
 CC - Command Center  
 WS - Work Server  
 
-
 <h1> Key goals </h1>
 
 The major goals in the development of Siege Tank are:
