@@ -2,8 +2,6 @@
 #include <Poco/Util/Application.h>
 #include <Poco/URI.h>
 
-#include <OpenMM.h>
-
 #include <string>
 #include <map>
 
