@@ -18,3 +18,13 @@ dependencies:
     - pip install pymongo
     - wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz
     - tar xvf poco-1.5.2-all.tar.gz
+    - cd poco-1.5.2-all
+    - /configure --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC
+    - make -j4
+    - make install
+    - cd ..
+    - cd backend/core/
+    - mkdir build
+    - cd build
+    - cmake ../ -DPOCOINSTALL_DIR=/home/ubuntu/poco152_install
+    - make

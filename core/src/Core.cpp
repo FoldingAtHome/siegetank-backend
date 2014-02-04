@@ -26,8 +26,6 @@
 #include <stdexcept>
 #include <algorithm>
 
-#include <OpenMM.h>
-
 #include "XTCWriter.h"
 #include "Core.h"
 
