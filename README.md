@@ -27,7 +27,7 @@ Everything aside from apollo can be pip-installed.
 2. redis
 3. bcrypt
 4. pymongo
-5. [apollo](https://github.com/proteneer/apollo)
+5. requests
 
 <h2> Core Dependencies </h2>
 
