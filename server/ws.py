@@ -804,7 +804,7 @@ tornado.options.define('heartbeat_increment', default=900, type=int)
 tornado.options.define('pulse_frequency_in_ms', default=3000, type=int)
 
 
-def start():
+def start(*args, **kwargs):
 
     #######################
     # WS Specific Options #
@@ -843,6 +843,3 @@ def start():
     ws_server.start(0)
     ws_instance.initialize_pulse()
     tornado.ioloop.IOLoop.instance().start()
-
-if __name__ == "__main__":
-    start()

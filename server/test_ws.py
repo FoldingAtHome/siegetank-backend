@@ -11,8 +11,6 @@ import time
 import base64
 from os.path import isfile
 
-import warnings
-warnings.simplefilter("ignore")
 
 class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     @classmethod
