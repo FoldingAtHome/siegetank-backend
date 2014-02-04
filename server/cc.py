@@ -27,14 +27,14 @@ import uuid
 import random
 import redis
 import signal
-import apollo
 import time
-import ws
 import functools
 import bcrypt
-import common
 import pymongo
 
+from server.common import RedisMixin, init_redis, is_domain
+from server.apollo import Entity, relate
+import server.ws
 
 # The command center manages several work servers in addition to managing the
 # stats system for each work server. A single command center manages a single
@@ -83,7 +83,8 @@ import pymongo
 
 # POST x.com/core/assign - get a stream to work on
 
-class WorkServer(apollo.Entity):
+
+class WorkServer(Entity):
     prefix = 'ws'
     fields = {'url': str,  # http request url (verify based on if IP or not)
               'http_port': int,  # ws http port
@@ -95,7 +96,7 @@ class WorkServer(apollo.Entity):
 
 # note, some of these options are created lazily, ie. they don't take up space
 # until created. (yay for noSQL)
-class Target(apollo.Entity):
+class Target(Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
               'owner': str,  # owner of the target,
@@ -110,7 +111,7 @@ class Target(apollo.Entity):
 
 # allow queries to find which targets have a matching engine version
 Target.add_lookup('engine_versions', injective=False)
-apollo.relate(Target, 'striated_ws', {WorkServer})
+relate(Target, 'striated_ws', {WorkServer})
 
 
 def authenticated(method):
@@ -270,7 +271,8 @@ class AssignHandler(BaseHandler):
             ws_name = target.srandmember('striated_ws')
             ws_db = self.application.get_ws_db(ws_name)
             token = str(uuid.uuid4())
-            stream_id = ws.WorkServer.activate_stream(target_id, token, ws_db)
+            stream_id = server.ws.WorkServer.activate_stream(
+                target_id, token, ws_db)
             if stream_id:
                 workserver = WorkServer(ws_name, self.db)
                 ws_url = workserver.hget('url')
@@ -339,7 +341,7 @@ class DeleteStreamHandler(BaseHandler):
         """
         for ws_name in WorkServer.members(self.db):
             db_client = self.application.get_ws_db(ws_name)
-            if ws.Stream.exists(stream_id, db_client):
+            if server.ws.Stream.exists(stream_id, db_client):
                 picked_ws = WorkServer(ws_name, self.db)
                 ws_url = picked_ws.hget('url')
                 ws_http_port = picked_ws.hget('http_port')
@@ -350,7 +352,7 @@ class DeleteStreamHandler(BaseHandler):
                 rep = yield client.fetch('https://'+str(ws_url)+':'
                                          +str(ws_http_port)+'/streams/delete',
                                          method='PUT', body=json.dumps(body),
-                                         validate_cert=common.is_domain(ws_url))
+                                         validate_cert=is_domain(ws_url))
                 return self.set_status(rep.code)
             else:
                 self.write(json.dumps({'error': 'stream not found'}))
@@ -423,7 +425,7 @@ class PostStreamHandler(BaseHandler):
         for filename, filebin in files.items():
             body['stream_files'][filename] = filebin
 
-        if not ws.Target.exists(target_id, ws_db):
+        if not server.ws.Target.exists(target_id, ws_db):
             target_files = target.smembers('files')
             body['target_files'] = {}
             for filename in target_files:
@@ -436,7 +438,7 @@ class PostStreamHandler(BaseHandler):
         rep = yield client.fetch('https://'+str(ws_url)+':'+str(ws_http_port)
                                  + '/streams', method='POST',
                                  body=json.dumps(body),
-                                 validate_cert=common.is_domain(ws_url))
+                                 validate_cert=is_domain(ws_url))
 
         self.set_status(rep.code)
         return self.write(rep.body)
@@ -499,11 +501,11 @@ class ListStreamsHandler(BaseHandler):
 
         for ws_name in striated_ws:
             ws_db = self.application.get_ws_db(ws_name)
-            ws_target = ws.Target(target_id, ws_db)
+            ws_target = server.ws.Target(target_id, ws_db)
             stream_ids = ws_target.smembers('streams')
             for stream_id in stream_ids:
                 body[stream_id] = []
-                stream = ws.Stream(stream_id, ws_db)
+                stream = server.ws.Stream(stream_id, ws_db)
                 body[stream_id].append(stream.hget('status'))
                 body[stream_id].append(stream.hget('frames'))
                 body[stream_id].append(ws_name)
@@ -649,7 +651,7 @@ class TargetHandler(BaseHandler):
     #     return
 
 
-class CommandCenter(tornado.web.Application, common.RedisMixin):
+class CommandCenter(tornado.web.Application, RedisMixin):
     def __init__(self, cc_name, redis_port, redis_pass=None,
                  cc_pass=None, targets_folder='targets', debug=False,
                  mdb_host='localhost', mdb_port=27017, mdb_password=None,
@@ -657,7 +659,7 @@ class CommandCenter(tornado.web.Application, common.RedisMixin):
         print('Starting up Command Center:', cc_name)
         self.cc_pass = cc_pass
         self.name = cc_name
-        self.db = common.init_redis(redis_port, redis_pass,
+        self.db = init_redis(redis_port, redis_pass,
                                     appendonly=appendonly,
                                     appendfilename='aof_'+self.name)
         self.ws_dbs = {}

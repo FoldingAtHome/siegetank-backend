@@ -21,8 +21,7 @@ import json
 import time
 import shutil
 import hashlib
-import common
-import apollo
+
 import base64
 import gzip
 import functools
@@ -35,6 +34,9 @@ import tornado.httpserver
 import tornado.httpclient
 import tornado.options
 import tornado.process
+
+from server.common import RedisMixin, init_redis, is_domain
+from server.apollo import Entity, zset, relate
 
 # Capacity
 
@@ -119,7 +121,7 @@ import tornado.process
 # the disk! This implies we don't actually need to save an rdb.
 
 
-class Stream(apollo.Entity):
+class Stream(Entity):
     prefix = 'stream'
     fields = {'frames': int,            # total number of frames completed
               'status': str,            # 'OK', 'DISABLED'
@@ -127,7 +129,7 @@ class Stream(apollo.Entity):
               }
 
 
-class ActiveStream(apollo.Entity):
+class ActiveStream(Entity):
     prefix = 'active_stream'
     fields = {'start_frame': int,  # frame we started at.
               'buffer_frames': int,  # number of frames in buffer.xtc
@@ -140,15 +142,15 @@ class ActiveStream(apollo.Entity):
               }
 
 
-class Target(apollo.Entity):
+class Target(Entity):
     prefix = 'target'
-    fields = {'queue': apollo.zset(str),    # queue of inactive streams
+    fields = {'queue': zset(str),    # queue of inactive streams
               'stream_files': {str},        # set of filenames for the stream
               'target_files': {str},        # set of filenames for the target
               }
 
 
-class CommandCenter(apollo.Entity):
+class CommandCenter(Entity):
     prefix = 'cc'
     fields = {'ip': str,        # ip of the command center
               'http_port': str  # http port
@@ -156,8 +158,8 @@ class CommandCenter(apollo.Entity):
 
 ActiveStream.add_lookup('auth_token')
 Target.add_lookup('owner')
-apollo.relate(Target, 'streams', {Stream}, 'target')
-apollo.relate(Target, 'active_streams', {ActiveStream})
+relate(Target, 'streams', {Stream}, 'target')
+relate(Target, 'active_streams', {ActiveStream})
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -650,7 +652,7 @@ class HeartbeatHandler(BaseHandler):
             self.set_status(400)
 
 
-class WorkServer(tornado.web.Application, common.RedisMixin):
+class WorkServer(tornado.web.Application, RedisMixin):
     def _cleanup(self):
         # clear active streams (and clear buffer)
         active_streams = ActiveStream.members(self.db)
@@ -683,7 +685,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
 
         self.targets_folder = targets_folder
         self.streams_folder = streams_folder
-        self.db = common.init_redis(redis_port, redis_pass,
+        self.db = init_redis(redis_port, redis_pass,
                                     appendonly=appendonly,
                                     appendfilename='aof_'+ws_name)
         if not os.path.exists(self.targets_folder):
@@ -716,7 +718,7 @@ class WorkServer(tornado.web.Application, common.RedisMixin):
             try:
                 rep = client.fetch(uri, method='PUT', connect_timeout=2,
                                    body=json.dumps(body), headers=headers,
-                                   validate_cert=common.is_domain(url))
+                                   validate_cert=is_domain(url))
                 if rep.code != 200:
                     print('Warning: not connect to CC '+cc_name)
             except Exception as e:

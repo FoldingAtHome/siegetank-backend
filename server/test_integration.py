@@ -5,18 +5,19 @@ import tornado.httpserver
 import tornado.testing
 import tornado.gen
 
+
 import unittest
 import os
 import shutil
-import ws
-import cc
+
+import server.ws as ws
+import server.cc as cc
+import server.common as common
 import sys
 import random
 import base64
 import json
 import time
-import common
-
 
 class Test(tornado.testing.AsyncTestCase):
 

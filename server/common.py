@@ -4,6 +4,7 @@ import sys
 import time
 import tornado
 import ipaddress
+import os
 
 
 def sum_time(time):
@@ -32,7 +33,9 @@ def init_redis(redis_port, redis_pass=None,
 
     '''
     redis_port = str(redis_port)
-    args = ["redis/src/redis-server", "--port", redis_port]
+    redis_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                              '..', 'redis', 'src', 'redis-server')
+    args = [redis_path, "--port", redis_port]
     if appendonly:
         args.append('--appendonly')
         args.append('yes')

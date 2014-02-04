@@ -1,5 +1,5 @@
 import tornado.testing
-import ws
+import server.ws as ws
 
 import unittest
 import os
@@ -9,9 +9,10 @@ import uuid
 import json
 import time
 import base64
-import hashlib
 from os.path import isfile
 
+import warnings
+warnings.simplefilter("ignore")
 
 class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     @classmethod

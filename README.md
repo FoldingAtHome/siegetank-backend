@@ -36,6 +36,12 @@ Everything aside from apollo can be pip-installed.
 2. [OpenMM 6.0](https://github.com/SimTk/openmm)
 3. [cmake](http://www.cmake.org/cmake/resources/software.html)
 
+<h1> Tests </h1>
+
+Tests for the server can be ran using:
+
+python -W ignore -m unittest
+
 <h1> API </h1>
 
 Currently, the allowed RESTful requests are GET, PUT, and POST. GETs and PUTs are guaranteed idempotent, that is, sending the same request 2+ times has the same effect as sending a single request. . Detailed request parameters are available in the source code. In general, with the exception of downloading the final trajectory, PG users work with the Command Center methods. 

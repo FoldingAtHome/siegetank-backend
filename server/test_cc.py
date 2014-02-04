@@ -1,14 +1,14 @@
 import tornado.testing
-import cc
 import os
 import shutil
 import unittest
 import sys
-import common
 import json
 import base64
 import bcrypt
 
+import server.cc as cc
+import server.common as common
 
 class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     @classmethod
