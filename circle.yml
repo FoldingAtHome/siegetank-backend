@@ -7,8 +7,7 @@ machine:
 
 checkout:
   post:
-    - cd server; wget https://raw2.github.com/proteneer/apollo/master/apollo.py
-    - ls
+    - cd redis/src; make -j4;
 
 dependencies:
   pre:
