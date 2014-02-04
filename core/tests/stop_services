@@ -6,8 +6,9 @@ import signal
 pids = open('pids.log').read().split(' ')
 
 for pid in pids:
-    os.killpg(int(pid), signal.SIGTERM)
+    try:
+        os.killpg(int(pid), signal.SIGTERM)
+    except Exception:
+        pass
 
 os.system('rm -rf aof_* streams targets')
-#os.system('pkill -9 redis-server')
-#os.system('pkill -9 Python')
