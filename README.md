@@ -4,7 +4,7 @@ The RESTful backend for Siege Tank.
 
 <h1> Components </h1>
 
-ST - Siege Public  
+ST - Siege Tank  
 CC - Command Center  
 WS - Work Server  
 
@@ -49,8 +49,8 @@ Currently, the allowed RESTful requests are GET, PUT, and POST. GETs and PUTs ar
 <h2> CC Methods </h2>
 
 [P] Unauthenticated requests  
-[A] Authenticated requests 
-[C] Core requests
+[A] Authenticated requests  
+[C] Core requests  
 
 - [P] POST x.com/auth - Authenticate the user, returning an authorization token
 - [A] POST x.com/targets - add a target
