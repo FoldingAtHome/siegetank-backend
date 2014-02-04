@@ -180,6 +180,7 @@ class AddManagerHandler(tornado.web.RequestHandler):
         }
 
         """
+        self.set_status(400)
         if self.request.remote_ip != '127.0.0.1':
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
@@ -194,8 +195,13 @@ class AddManagerHandler(tornado.web.RequestHandler):
 
         mdb = self.application.mdb
         managers = mdb.managers
-        managers.insert(db_body)
+        try:
+            managers.insert(db_body)
+        except pymongo.errors.DuplicateKeyError:
+            self.write(json.dumps({'error': content['email']+' exists'}))
+            return
 
+        self.set_status(200)
         self.write(json.dumps({'token': token}))
 
 
@@ -773,10 +779,11 @@ def start():
     tornado.options.define('internal_http_port', type=int)
     tornado.options.define('external_http_port', type=int)
     tornado.options.define('cc_pass', type=str)
-    tornado.options.parse_config_file('cc.conf')
+    tornado.options.define('config_file', default='cc.conf', type=str)
 
+    tornado.options.parse_command_line()
     options = tornado.options.options
-
+    tornado.options.parse_config_file(options.config_file)
     cc_name = options.name
     redis_port = options.redis_port
     redis_pass = options.redis_pass
@@ -789,8 +796,13 @@ def start():
                                 redis_pass=redis_pass,
                                 appendonly=True)
 
+    cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                             '..', 'certs', 'cc.crt')
+    key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            '..', 'certs', 'cc.key')
+
     cc_server = tornado.httpserver.HTTPServer(cc_instance, ssl_options={
-        'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
+        'certfile': cert_path, 'keyfile': key_path})
 
     cc_server.bind(internal_http_port)
     cc_server.start(0)

@@ -16,3 +16,5 @@ dependencies:
     - pip install redis
     - pip install bcrypt
     - pip install pymongo
+    - wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz
+    - tar xvf poco-1.5.2-all.tar.gz

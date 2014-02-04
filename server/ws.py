@@ -816,10 +816,11 @@ def start(*args, **kwargs):
     tornado.options.define('internal_http_port', type=int)
     tornado.options.define('external_http_port', type=int)
     tornado.options.define('command_centers', type=dict)
-    tornado.options.parse_config_file('ws.conf')
+    tornado.options.define('config_file', default='ws.conf', type=str)
 
+    tornado.options.parse_command_line()
     options = tornado.options.options
-
+    tornado.options.parse_config_file(options.config_file)
     ws_name = options.name
     redis_port = options.redis_port
     redis_pass = options.redis_pass
@@ -836,8 +837,13 @@ def start(*args, **kwargs):
                              ws_ext_http_port=external_http_port,
                              appendonly=True)
 
+    cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                             '..', 'certs', 'ws.crt')
+    key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                            '..', 'certs', 'ws.key')
+
     ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
-        'certfile': 'certs/ws.crt', 'keyfile': 'certs/ws.key'})
+        'certfile': cert_path, 'keyfile': key_path})
 
     ws_server.bind(internal_http_port)
     ws_server.start(0)
