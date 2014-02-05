@@ -779,7 +779,10 @@ def start():
     tornado.options.define('internal_http_port', type=int)
     tornado.options.define('external_http_port', type=int)
     tornado.options.define('cc_pass', type=str)
-    tornado.options.define('config_file', default='cc.conf', type=str)
+
+    conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                             '..', 'cc.conf')
+    tornado.options.define('config_file', default=conf_path, type=str)
 
     tornado.options.parse_command_line()
     options = tornado.options.options
