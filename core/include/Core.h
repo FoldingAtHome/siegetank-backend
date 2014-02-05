@@ -35,10 +35,10 @@ public:
     void send_checkpoint_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
 
     /* Disengage the core from the stream */
-    void stop_stream() const;
+    void stop_stream(std::string error_msg = "") const;
 
     /* Send a heartbeat */
-    void send_heartbeat(std::string error_msg = "");
+    void send_heartbeat() const;
 
     /* Main MD loop */
     virtual void main();

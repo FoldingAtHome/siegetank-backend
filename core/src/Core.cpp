@@ -263,11 +263,23 @@ void Core::stop_stream(string err_msg) const {
     request.set("Authorization", _auth_token);
     request.setContentLength(message.length());
     _session->sendRequest(request) << message;
-    cout << "sending message: " << message;
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::stop_stream bad status code");
+    }
+}
+
+void Core::send_heartbeat() const {
+    Poco::Net::HTTPRequest request("POST", "/core/heartbeat");
+    string message("{}");
+    request.set("Authorization", _auth_token);
+    request.setContentLength(message.length());
+    _session->sendRequest(request) << message;
+    Poco::Net::HTTPResponse response;
+    _session->receiveResponse(response);
+    if(response.getStatus() != 200) {
+        throw std::runtime_error("Core::send_heartbeat bad status code");
     }
 }
 
