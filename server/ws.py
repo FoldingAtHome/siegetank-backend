@@ -584,7 +584,6 @@ class CoreStopHandler(BaseHandler):
 
         """
         stream = Stream(stream_id, self.db)
-        print('DEBUG:', self.request.body)
         content = json.loads(self.request.body.decode())
         if 'error' in content:
             stream.hincrby('error_count', 1)
@@ -637,20 +636,25 @@ class DownloadHandler(BaseHandler):
             return self.write(json.dumps({'error': 'bad stream_id'}))
 
 
-class HeartbeatHandler(BaseHandler):
+class CoreHeartbeatHandler(BaseHandler):
     @authenticate_core
     def post(self, stream_id):
         ''' Cores POST to this handler to notify the WS that it is still
-            alive. WS executes a zadd initially as well'''
-        try:
-            content = json.loads(self.request.body.decode)
-            token_id = content['shared_token']
-            increment = tornado.options.options['heartbeat_increment']
-            stream_id = ActiveStream.lookup('shared_token', token_id, self.db)
-            self.db.zadd('heartbeats', stream_id, time.time()+increment)
-            self.set_status(200)
-        except KeyError:
-            self.set_status(400)
+        alive.
+
+        Request Header:
+
+            Authorization: token
+
+        Request:
+            {}
+
+        '''
+        increment = tornado.options.options['heartbeat_increment']
+        print('incrementing by ', increment)
+        self.db.zadd('heartbeats', stream_id, time.time()+increment)
+        print('final:', time.time()+increment)
+        self.set_status(200)
 
 
 class WorkServer(tornado.web.Application, RedisMixin):
@@ -734,6 +738,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
             (r'/core/frame', CoreFrameHandler),
             (r'/core/checkpoint', CoreCheckpointHandler),
             (r'/core/stop', CoreStopHandler),
+            (r'/core/heartbeat', CoreHeartbeatHandler)
         ], debug=debug)
 
     def initialize_pulse(self):
@@ -741,7 +746,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
         if tornado.process.task_id() == 0:
             frequency = tornado.options.options['pulse_frequency_in_ms']
             self.pulse = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
-                                                         3000)
+                                                         frequency)
             self.pulse.start()
 
     # we really don't need all 8 processes to constantly check this...

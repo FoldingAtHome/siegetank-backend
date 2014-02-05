@@ -510,7 +510,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(os.path.exists(buffer_path))
 
     def test_heartbeat(self):
-        # for sanity
         tornado.options.options.heartbeat_increment = 5
         target_id = str(uuid.uuid4())
         fn1 = 'system.xml.gz.b64'
@@ -530,6 +529,23 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(ws.ActiveStream.members(self.ws.db), test_set)
         increment_time = tornado.options.options['heartbeat_increment']
         time.sleep(increment_time+0.5)
+        self.ws.check_heartbeats()
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), set())
+
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), test_set)
+        time.sleep(3)
+        body = '{}'
+        headers = {'Authorization': token}
+        response = self.fetch('/core/heartbeat', method='POST',
+                              headers=headers, body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.ws.check_heartbeats()
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), test_set)
+        time.sleep(3)
+        self.ws.check_heartbeats()
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), test_set)
+        time.sleep(5)
         self.ws.check_heartbeats()
         self.assertEqual(ws.ActiveStream.members(self.ws.db), set())
 

@@ -249,7 +249,6 @@ void Core::send_frame_files(const map<string, string> &files, bool gzip) const {
     _send_files_to_uri("/core/frame", files, gzip);
 }
 
-
 void Core::send_checkpoint_files(const map<string, string> &files, bool gzip) const {
     _send_files_to_uri("/core/checkpoint", files, gzip);
 }
@@ -271,7 +270,6 @@ void Core::stop_stream(string err_msg) const {
         throw std::runtime_error("Core::stop_stream bad status code");
     }
 }
-
 
 void Core::main() {
 

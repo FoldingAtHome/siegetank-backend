@@ -38,7 +38,7 @@ public:
     void stop_stream() const;
 
     /* Send a heartbeat */
-    void send_heartbeat(string error_msg = "");
+    void send_heartbeat(std::string error_msg = "");
 
     /* Main MD loop */
     virtual void main();
