@@ -54,6 +54,7 @@ void test_initialize_and_start() {
     core.send_checkpoint_files(checkpoint_files);
     core.send_checkpoint_files(checkpoint_files, true);
 
+    core.stop_stream();
 
 }
 

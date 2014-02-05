@@ -254,6 +254,24 @@ void Core::send_checkpoint_files(const map<string, string> &files, bool gzip) co
     _send_files_to_uri("/core/checkpoint", files, gzip);
 }
 
+void Core::stop_stream(string err_msg) const {
+    Poco::Net::HTTPRequest request("PUT", "/core/stop");
+    string message;
+    message += "{";
+    if(err_msg.length() > 0)
+        message += "\"error\": \"" + err_msg + "\"";
+    message += "}";
+    request.set("Authorization", _auth_token);
+    request.setContentLength(message.length());
+    _session->sendRequest(request) << message;
+    cout << "sending message: " << message;
+    Poco::Net::HTTPResponse response;
+    _session->receiveResponse(response);
+    if(response.getStatus() != 200) {
+        throw std::runtime_error("Core::stop_stream bad status code");
+    }
+}
+
 
 void Core::main() {
 

@@ -34,8 +34,11 @@ public:
        encodes the file */
     void send_checkpoint_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
 
+    /* Disengage the core from the stream */
+    void stop_stream() const;
+
     /* Send a heartbeat */
-    void send_heartbeat();
+    void send_heartbeat(string error_msg = "");
 
     /* Main MD loop */
     virtual void main();

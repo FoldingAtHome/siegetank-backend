@@ -505,7 +505,7 @@ class CoreCheckpointHandler(BaseHandler):
 
         Request Header:
 
-            Authorization - core_token
+            Authorization: core_token
 
         Request Body:
             {
@@ -568,7 +568,7 @@ class CoreStopHandler(BaseHandler):
 
         Request Header:
 
-            Authorization : core_token
+            Authorization: core_token
 
         Request Body:
             {
@@ -584,6 +584,7 @@ class CoreStopHandler(BaseHandler):
 
         """
         stream = Stream(stream_id, self.db)
+        print('DEBUG:', self.request.body)
         content = json.loads(self.request.body.decode())
         if 'error' in content:
             stream.hincrby('error_count', 1)
