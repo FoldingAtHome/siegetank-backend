@@ -30,5 +30,5 @@ dependencies:
 
 test:
   post:
-    - /home/ubuntu/backend/core/tests/start_services
-    - cd /home/ubuntu/backend/core/build/; make test
+    - cd core/build; ./core/tests/start_services
+    - cd core/build; make test

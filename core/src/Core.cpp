@@ -215,16 +215,20 @@ void Core::send_frame_files(const map<string, string> &files) const {
         it != files.end(); it++) {
         string filename = it->first;
         string filedata = encode_b64(it->second);
+        if(it != files.begin())
+            message += ",";
         message += "\""+filename+".b64\"";
         message += ":";
         message += "\""+filedata+"\"";
-        message += ",";
     }
-    //message += "}}"
-    //request.set("Authorization", _auth_token);
-    //request.
-    //session
-
+    message += "}}";
+    request.set("Authorization", _auth_token);
+    request.setContentLength(message.length());
+    _session->sendRequest(request) << message;
+    Poco::Net::HTTPResponse response;
+    _session->receiveResponse(response);
+    if(response.getStatus() != 200)
+        throw std::runtime_error("Core::send_frame_files() returned 400");
 }
 
 

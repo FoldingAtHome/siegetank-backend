@@ -1,5 +1,7 @@
 #include <Core.h>
 #include <map>
+#include <string>
+#include <stdexcept>
 #include <iostream>
 
 using namespace std;
@@ -16,9 +18,24 @@ void test_initialize_and_start() {
 
     core.start_stream(stream_id, target_id, target_files, stream_files);
 
-    cout << target_files["system.xml"] << endl;
-    cout << target_files["integrator.xml"] << endl;
-    cout << stream_files["state.xml"] << endl;
+    if(target_files.find("system.xml") == target_files.end())
+        throw std::runtime_error("system.xml not in target_files!");
+    if(target_files.find("integrator.xml") == target_files.end())
+        throw std::runtime_error("integrator.xml not in target_files!");
+    if(stream_files.find("state.xml") == stream_files.end())
+        throw std::runtime_error("state.xml not in stream_files!");
+
+    for(int i=0; i < 10; i++) {
+        string filename1("frames.xtc");
+        string filedata1("8gdjrp24u6pjasdfpoi2345");
+        string filename2("log.txt");
+        string filedata2("derpderp.txt");
+        map<string, string> frame_files;
+        frame_files[filename1] = filedata1;
+        frame_files[filename2] = filedata2;
+        core.send_frame_files(frame_files);
+    }
+
 }
 
 int main() {

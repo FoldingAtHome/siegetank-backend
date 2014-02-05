@@ -20,8 +20,6 @@ The major goals in the development of Siege Tank are:
 
 <h2> Server Dependencies </h2>
 
-Everything aside from apollo can be pip-installed. 
-
 1. python 3.3
 2. redis
 3. bcrypt
