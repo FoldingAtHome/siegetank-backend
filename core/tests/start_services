@@ -67,9 +67,6 @@ if __name__ == '__main__':
     ws_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', '..', 'ws')
 
-    cc_path = cc_path+'  --config_file=../../cc.conf'
-    ws_path = ws_path+'  --config_file=../../ws.conf'
-
     pid1 = subprocess.Popen(cc_path, stdout=subprocess.PIPE, shell=True,
                             preexec_fn=lambda: os.setpgid(0, 0))
     time.sleep(1)

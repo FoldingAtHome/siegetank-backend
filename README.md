@@ -1,5 +1,5 @@
 <h1> Backend </h1>
-![build status](https://circleci.com/gh/circleci/mongofinil.png?circle-token=7768b2d45d7b388b2da07c80616b6ed068c1eb34)
+![build status](https://circleci.com/gh/proteneer/backend.png?circle-token=7768b2d45d7b388b2da07c80616b6ed068c1eb34)
 
 <h1> Components </h1>
 
