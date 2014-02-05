@@ -25,7 +25,8 @@ public:
                       std::map<std::string, std::string> &target_files,
                       std::map<std::string, std::string> &stream_files) const;
 
-    /* Send frame files to the WS */
+    /* Send frame files to the WS. This function will automatically base64
+       encode the file. */
     void send_frame_files(const std::map<std::string, std::string> &files) const;
 
     /* Send checkpoint files to the WS */
