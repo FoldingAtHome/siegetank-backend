@@ -95,7 +95,8 @@ static string decode_gz_b64(const string &encoded_string) {
 
 Core::Core(int frame_send_interval, int checkpoint_send_interval) :
     _frame_send_interval(frame_send_interval),
-    _checkpoint_send_interval(checkpoint_send_interval) {
+    _checkpoint_send_interval(checkpoint_send_interval),
+    _session(NULL) {
 
 }
 
@@ -103,7 +104,7 @@ Core::~Core() {
     delete _session;
 }
 
-void Core::initialize_session(Poco::URI &cc_uri) {
+void Core::_initialize_session(const Poco::URI &cc_uri) {
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
         Poco::Net::Context::CLIENT_USE, "", 
         Poco::Net::Context::VERIFY_NONE, 9, false);
@@ -154,9 +155,12 @@ void Core::initialize_session(Poco::URI &cc_uri) {
         _ws_uri.getPort(), context);
 }
 
-void Core::start_stream(std::string &stream_id, std::string &target_id,
+void Core::start_stream(const Poco::URI &cc_uri, 
+                        std::string &stream_id, std::string &target_id,
                         map<string, string> &target_files,
-                        map<string, string> &stream_files) const {   
+                        map<string, string> &stream_files) {
+    if(_session == NULL)
+        _initialize_session(cc_uri);
     Poco::Net::HTTPRequest request("GET", _ws_uri.getPath());
     request.set("Authorization", _auth_token);
     _session->sendRequest(request);
@@ -253,7 +257,7 @@ void Core::send_checkpoint_files(const map<string, string> &files, bool gzip) co
     _send_files_to_uri("/core/checkpoint", files, gzip);
 }
 
-void Core::stop_stream(string err_msg) const {
+void Core::stop_stream(string err_msg) {
     Poco::Net::HTTPRequest request("PUT", "/core/stop");
     string message;
     message += "{";
@@ -268,6 +272,8 @@ void Core::stop_stream(string err_msg) const {
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::stop_stream bad status code");
     }
+    delete _session;
+    _session = NULL;
 }
 
 void Core::send_heartbeat() const {

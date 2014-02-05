@@ -52,6 +52,11 @@ extern "C" void registerSerializationProxies();
 extern "C" void registerCpuPlatform();
 extern "C" void registerOpenCLPlatform();
 
+OpenMMCore::OpenMMCore(int frame_send_interval, int checkpoint_send_interval):
+    Core(frame_send_interval, checkpoint_send_interval) {
+
+}
+
 void OpenMMCore::main() {
 
     try {
