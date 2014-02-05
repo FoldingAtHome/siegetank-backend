@@ -46,11 +46,11 @@ void test_initialize_and_start() {
         core.send_frame_files(frame_files, true);
     }
 
-    string c_filename("state.xml.gz.b64");
+    string c_filename("state.xml");
     string c_filedata("<XML>");
     map<string, string> checkpoint_files;
     checkpoint_files[c_filename] = c_filedata;
-    core.send_checkpoint_files(checkpoint_files);
+//    core.send_checkpoint_files(checkpoint_files);
     core.send_checkpoint_files(checkpoint_files, true);
 
     core.stop_stream();

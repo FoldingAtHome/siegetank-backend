@@ -229,8 +229,10 @@ void Core::_send_files_to_uri(const string &path,
         it != files.end(); it++) {
         string filename = it->first;
         string filedata = it->second;
-        if(gzip)
+        if(gzip) {
             filedata = encode_gz(filedata);
+            filename += ".gz";
+        }
         filedata = encode_b64(filedata);
         if(it != files.begin())
             message += ",";

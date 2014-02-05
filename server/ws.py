@@ -372,9 +372,8 @@ class CoreStartHandler(BaseHandler):
         # if target is OpenMM engine type, use the following recipe:
         base_name = 'state.xml.gz.b64'
         frame_count = stream.hget('frames')
-        if frame_count == 0:
-            filename = 'state.xml.gz.b64'
-        else:
+        filename = 'state.xml.gz.b64'
+        if frame_count > 0:
             filename = str(stream.hget('frames'))+'_'+filename
         file_path = os.path.join(self.application.streams_folder,
                                  stream_id, filename)
