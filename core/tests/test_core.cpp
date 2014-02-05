@@ -36,6 +36,25 @@ void test_initialize_and_start() {
         core.send_frame_files(frame_files);
     }
 
+    for(int i=0; i < 10; i++) {
+        string filename1("frames.xtc");
+        string filedata1("8gdjrp24u6pjasdfpoi2345");
+        string filename2("log.txt");
+        string filedata2("derpderp.txt");
+        map<string, string> frame_files;
+        frame_files[filename1] = filedata1;
+        frame_files[filename2] = filedata2;
+        core.send_frame_files(frame_files, true);
+    }
+
+    string c_filename("state.xml.gz.b64");
+    string c_filedata("<XML>");
+    map<string, string> checkpoint_files;
+    checkpoint_files[c_filename] = c_filedata;
+    core.send_checkpoint_files(checkpoint_files);
+    core.send_checkpoint_files(checkpoint_files, true);
+
+
 }
 
 int main() {

@@ -1,4 +1,5 @@
 #include <Poco/Net/HTTPSClientSession.h>
+#include <Poco/Net/HTTPResponse.h>
 #include <Poco/Util/Application.h>
 #include <Poco/URI.h>
 
@@ -25,12 +26,13 @@ public:
                       std::map<std::string, std::string> &target_files,
                       std::map<std::string, std::string> &stream_files) const;
 
-    /* Send frame files to the WS. This function will automatically base64
-       encode the file. */
-    void send_frame_files(const std::map<std::string, std::string> &files) const;
+    /* Send frame files to the WS. This method automatically base64 encodes
+       the file */
+    void send_frame_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
 
-    /* Send checkpoint files to the WS */
-    void send_checkpoint_files(const std::map<std::string, std::string> &files) const;
+    /* Send checkpoint files to the WS. This method automatically base64
+       encodes the file */
+    void send_checkpoint_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
 
     /* Send a heartbeat */
     void send_heartbeat();
@@ -43,6 +45,9 @@ protected:
     Poco::Net::HTTPSClientSession* _session;
 
 private:
+
+    void _send_files_to_uri(const std::string &path, 
+        const std::map<std::string, std::string> &files, bool gzip) const;
 
     Poco::URI _ws_uri;
 

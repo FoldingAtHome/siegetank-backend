@@ -57,11 +57,20 @@ static void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
 }
 
 static string encode_b64(const string &binary) {
-    ostringstream frame_b64_ostream(std::ios_base::binary);
-    Poco::Base64Encoder b64encoder(frame_b64_ostream);
+    ostringstream binary_ostream(std::ios_base::binary);
+    Poco::Base64Encoder b64encoder(binary_ostream);
     b64encoder << binary;
     b64encoder.close();
-    return frame_b64_ostream.str();
+    return binary_ostream.str();
+}
+
+static string encode_gz(const string &binary) {
+    ostringstream binary_ostream(std::ios_base::binary);
+    Poco::DeflatingOutputStream deflater(binary_ostream,
+        Poco::DeflatingStreamBuf::STREAM_GZIP);
+    deflater << binary;
+    deflater.close();
+    return binary_ostream.str();
 }
 
 static string decode_b64(const string &encoded_string) {
@@ -207,14 +216,18 @@ void Core::start_stream(std::string &stream_id, std::string &target_id,
     }
 }
 
-void Core::send_frame_files(const map<string, string> &files) const {
-    Poco::Net::HTTPRequest request("PUT", "/core/frame");
+void Core::_send_files_to_uri(const string &path, 
+    const std::map<std::string, std::string> &files, bool gzip) const {
+    Poco::Net::HTTPRequest request("PUT", path);
     string message;
     message += "{\"files\":{";
     for(map<string, string>::const_iterator it=files.begin();
         it != files.end(); it++) {
         string filename = it->first;
-        string filedata = encode_b64(it->second);
+        string filedata = it->second;
+        if(gzip)
+            filedata = encode_gz(filedata);
+        filedata = encode_b64(filedata);
         if(it != files.begin())
             message += ",";
         message += "\""+filename+".b64\"";
@@ -227,13 +240,18 @@ void Core::send_frame_files(const map<string, string> &files) const {
     _session->sendRequest(request) << message;
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
-    if(response.getStatus() != 200)
-        throw std::runtime_error("Core::send_frame_files() returned 400");
+    if(response.getStatus() != 200) {
+        throw std::runtime_error("Core::_send_files_to_uri bad status code");
+    }
+}
+
+void Core::send_frame_files(const map<string, string> &files, bool gzip) const {
+    _send_files_to_uri("/core/frame", files, gzip);
 }
 
 
-void Core::send_checkpoint_files(const map<string, string> &files) const {
-
+void Core::send_checkpoint_files(const map<string, string> &files, bool gzip) const {
+    _send_files_to_uri("/core/checkpoint", files, gzip);
 }
 
 
