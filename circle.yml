@@ -7,7 +7,7 @@ machine:
 
 checkout:
   post:
-    - if [[ ! -e redis/src/redis-server ]]; then cd redis/src && make -j4; fi
+    - cd redis/src && make -j4
 
   cache_directories:
     - "redis"
@@ -30,5 +30,5 @@ dependencies:
 
 test:
   post:
-    - cd core/build; ./core/tests/start_services
+    - cd core/build; ../tests/start_services
     - cd core/build; make test
