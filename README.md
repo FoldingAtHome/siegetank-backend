@@ -18,7 +18,7 @@ The major goals in the development of Siege Tank are:
 5. Scalability on both generic servers and AWS  
 6. Emphasize convention over configuration  
 
-<h2> Server Dependencies </h2>
+<h1> Server Dependencies </h1>
 
 1. python 3.3
 2. redis
@@ -26,8 +26,8 @@ The major goals in the development of Siege Tank are:
 4. pymongo
 5. requests
 
-<h2> Core Dependencies </h2>
-
+<h1> Core Dependencies </h1>
+OpenMM Core:  
 1. [POCO Complete Edition](http://pocoproject.org/)
 2. [OpenMM 6.0](https://github.com/SimTk/openmm)
 3. [cmake](http://www.cmake.org/cmake/resources/software.html)

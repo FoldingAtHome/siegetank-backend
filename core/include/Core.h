@@ -20,7 +20,11 @@ public:
     virtual void main();
 
     /* Start the stream and fetch files. If the files end in .gz or .gz.b64
-    then the suffixes and stripped, and the contents are processed for you. */
+    then the suffixes and stripped, and the contents are processed for you. 
+    
+    The workserver will automatically gunzip and decode files as needed.
+
+    */
     void start_stream(const Poco::URI &cc_uri,
                       std::string &stream_id, std::string &target_id,
                       std::map<std::string, std::string> &target_files,
@@ -31,7 +35,17 @@ public:
     void send_frame_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
 
     /* Send checkpoint files to the WS. This method automatically base64
-       encodes the file */
+       encodes the files, and adds '.b64' to the suffix. If gzip is true, the 
+       files will first be gzipped, with a '.gz' suffix appendde, and then b64
+       encoded. Note that the workserver does not automatically gunzip files
+       on the WS side, but it will automatically decode base64.
+
+       ex: if gzip == true:
+            'state.xml' -> 'state.xml.gz.b64'
+           else:
+            'state.xml' -> 'state.xml.b64'
+
+       */
     void send_checkpoint_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
 
     /* Disengage the core from the stream and destroys the session */
@@ -39,6 +53,9 @@ public:
 
     /* Send a heartbeat */
     void send_heartbeat() const;
+
+    /* Returns true if the core should exit */
+    bool exit() const;
 
 protected:
 
@@ -69,17 +86,15 @@ private:
 
 };
 
-/* General usage:
+/* Example implementation of main():
 
 void OpenMMCore::main() {
-    core.start_stream();
-    
+    core.start_stream(&files);
     while(true && !core.exit()) {
         
     }
     core.stop_stream();
 }
-
 
 int main() {
     OpenMMCore core(15,25);

@@ -3,8 +3,31 @@
 #include <string>
 #include <stdexcept>
 #include <iostream>
+#include <signal.h>
 
 using namespace std;
+
+void test_sigint_signal() {
+    Core core(25, 150);
+    if(core.exit() == true) {
+        throw std::runtime_error("exit() returned true before signal");
+    }
+    raise(SIGINT);
+    if(core.exit() == false) {
+        throw std::runtime_error("exit() returned false before signal");
+    }
+}
+
+void test_sigterm_signal() {
+    Core core(25, 150);
+    if(core.exit() == true) {
+        throw std::runtime_error("exit() returned true before signal");
+    }
+    raise(SIGTERM);
+    if(core.exit() == false) {
+        throw std::runtime_error("exit() returned false before signal");
+    }
+}
 
 void test_initialize_and_start() { 
     Core core(25, 150);
@@ -58,6 +81,8 @@ void test_initialize_and_start() {
 }
 
 int main() {
+    test_sigint_signal();
+    test_sigterm_signal();
     test_initialize_and_start();
     return 0;
 }

@@ -26,10 +26,18 @@
 #include <stdexcept>
 #include <algorithm>
 
+#include <signal.h>
+
 #include "XTCWriter.h"
 #include "Core.h"
 
 using namespace std;
+
+static sig_atomic_t _global_exit = false;
+
+static void exit_signal_handler(int param) {
+    _global_exit = true;
+}
 
 static void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
     // Add a stream of PEM formatted certificate strings to the trusted store
@@ -98,10 +106,18 @@ Core::Core(int frame_send_interval, int checkpoint_send_interval) :
     _checkpoint_send_interval(checkpoint_send_interval),
     _session(NULL) {
 
+    _global_exit = false;
+
+    signal(SIGINT, exit_signal_handler);
+    signal(SIGTERM, exit_signal_handler);
 }
 
 Core::~Core() {
     delete _session;
+}
+
+bool Core::exit() const {
+    return _global_exit;
 }
 
 void Core::_initialize_session(const Poco::URI &cc_uri) {
