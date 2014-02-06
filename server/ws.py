@@ -774,7 +774,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
         target = Target(target_id, db)
         stream_id = target.zrevrange('queue', 0, 0)[0]
         if stream_id:
-            assert target.zremrangebyrank('queue', 0, 0) == 1
+            assert target.zrem('queue', stream_id) == 1
             active_stream = ActiveStream.create(stream_id, db)
             active_stream.hset('buffer_frames', 0)
             active_stream.hset('auth_token', token)
