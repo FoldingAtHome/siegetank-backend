@@ -2,6 +2,7 @@
 #include <unistd.h> /* read() */
 #include <cstring>
 #include <iostream>
+#include <sys/select.h>
 
 /* Usage:
 
