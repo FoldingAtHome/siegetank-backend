@@ -21,7 +21,7 @@ string gen_random(const int len) {
 }
 
 void test_sigint_signal() {
-    Core core(25, 150);
+    Core core(25, 150, "openmm", "6.0");
     if(core.exit() == true) {
         throw std::runtime_error("exit() returned true before signal");
     }
@@ -32,7 +32,7 @@ void test_sigint_signal() {
 }
 
 void test_sigterm_signal() {
-    Core core(25, 150);
+    Core core(25, 150, "openmm", "6.0");
     if(core.exit() == true) {
         throw std::runtime_error("exit() returned true before signal");
     }
@@ -43,7 +43,7 @@ void test_sigterm_signal() {
 }
 
 void test_initialize_and_start() { 
-    Core core(25, 150);
+    Core core(25, 150, "openmm", "6.0");
     Poco::URI uri("https://127.0.0.1:8980/core/assign");
 
     map<string, string> target_files;

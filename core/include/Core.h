@@ -12,7 +12,10 @@ public:
 
     // frame_send_interval is in number of frames written
     // int checkpoint_send_interval is in number of times per day (user config)
-    Core(int frame_send_interval, int checkpoint_send_interval);
+    Core(int frame_send_interval, 
+         int checkpoint_send_interval,
+         std::string engine,
+         std::string engine_version);
 
     ~Core();
 
@@ -83,6 +86,9 @@ private:
 
     /* every request must be validated by the authorization token */
     std::string _auth_token;
+
+    const std::string _engine;
+    const std::string _engine_version;
 
 };
 

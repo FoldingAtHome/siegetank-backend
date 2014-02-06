@@ -12,9 +12,9 @@
 #include <iostream>
 
 #include <OpenMM.h>
-
 #include "XTCWriter.h"
 #include "OpenMMCore.h"
+#include "kbhit.h"
 
 using namespace std;
 using namespace Poco;
@@ -24,14 +24,48 @@ extern "C" void registerCpuPlatform();
 extern "C" void registerOpenCLPlatform();
 
 OpenMMCore::OpenMMCore(int frame_send_interval, int checkpoint_send_interval):
-    Core(frame_send_interval, checkpoint_send_interval) {
+    _core_context(NULL),
+    _ref_context(NULL),
+    Core(frame_send_interval, checkpoint_send_interval, "openmm", "6.0") {
 
 }
 
 void OpenMMCore::main() {
+    Poco::URI uri("https://127.0.0.1:8980/core/assign");
+    string stream_id;
+    string target_id;
+    map<string, string> target_files;
+    map<string, string> stream_files;
 
-    for(int i=0; i < 100000; i++) {
+    try {
+        start_stream(uri, stream_id, target_id, target_files, stream_files);
+        // step();
+        for(int i=1; i < 100000; i++) {
+            if(exit()) {
+                // send checkpoint
+                break;
+            }
+            if(kbhit()) {
+                // handle keyboard events
+                // c sends the previous checkpoints 
+                // n sends the next available checkpoint
+                cout << "keyboard event: " << char(getchar()) << endl;
+            }
+            if(i % _frame_write_interval == 0) {
+                // write frame
+            }
+            if(i % _frame_send_interval == 0) {
+                // get state
+                // write checkpoint
+                // send frame
+            }
+            if(i % _checkpoint_send_interval == 0) {
 
+            }
+        }
+
+    } catch(exception &e) {
+        cout << e.what() << endl;
     }
-
+    stop_stream();
 }

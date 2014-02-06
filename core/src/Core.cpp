@@ -107,15 +107,20 @@ static string decode_gz_b64(const string &encoded_string) {
     return decode_gz(decode_b64(encoded_string));
 }
 
-Core::Core(int frame_send_interval, int checkpoint_send_interval) :
+Core::Core(int frame_send_interval, 
+           int checkpoint_send_interval,
+           string engine,
+           string engine_version) :
     _frame_send_interval(frame_send_interval),
     _checkpoint_send_interval(checkpoint_send_interval),
-    _session(NULL) {
+    _session(NULL),
+    _engine(engine),
+    _engine_version(engine_version) {
 
     _global_exit = false;
-
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
+    changemode(1);
 }
 
 Core::~Core() {
@@ -152,7 +157,12 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     {
     cout << "getting assigned a ws..." << flush;
     Poco::Net::HTTPRequest request("POST", cc_uri.getPath());
-    string body("{\"engine\": \"openmm\", \"engine_version\": \"6.0\"}");
+    string body;
+    body += "{\"engine\": \""+_engine+"\",";
+    body += "\"engine_version\": \""+_engine_version+"\",";
+    stringstream core_version;
+    core_version << CORE_VERSION;
+    body += "\"core_version\": \""+core_version.str()+"\"}";
     request.setContentLength(body.length());
     cc_session.sendRequest(request) << body;
     Poco::Net::HTTPResponse response;

@@ -1,4 +1,5 @@
 #include "Core.h"
+#include <OpenMM.h>
 
 class OpenMMCore : public Core {
 
@@ -8,5 +9,10 @@ public:
     ~OpenMMCore();
 
     virtual void main();
+
+private:
+
+    OpenMM::Context* _core_context;
+    OpenMM::Context* _ref_context;
 
 };
