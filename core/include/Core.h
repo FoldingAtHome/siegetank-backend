@@ -90,7 +90,28 @@ private:
 
 void OpenMMCore::main() {
     core.start_stream(&files);
-    while(true && !core.exit()) {
+    int steps = 0;
+    integrator->step();
+    steps++;
+    while(true) {
+        if(exit()) {
+            send_checkpoint();
+            break;
+        }
+        if(user_checkpoint()) {
+            send_checkpoint();
+        }
+        if(steps % _checkpoint_send_interval == 0) {
+            send_checkpoint(); 
+        }
+        if(steps % _frame_write_interval == 0) {
+            // write frame
+        }
+        if(steps % _frame_send_interval == 0) {
+            send_frames();
+        }
+
+
         
     }
     core.stop_stream();
