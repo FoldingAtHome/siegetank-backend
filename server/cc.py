@@ -567,10 +567,15 @@ class TargetHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         files = content['files']
-        if content['engine'] != 'openmm':
-            return self.write(json.dumps({'error': 'engine must be openmm'}))
-        if content['engine_versions'] != ['6.0']:
-            return self.write(json.dumps({'error': 'version must be 6.0'}))
+
+        if content['engine'] == 'openmm':
+            if content['engine_versions'] != ['6.0']:
+                return self.write(json.dumps({'error': 'version must be 6.0'}))
+        elif content['engine'] == 'terachem':
+            if content['engine_versions'] != ['1.0']:
+                return self.write(json.dumps({'error': 'version msut be 1.0'}))
+        else:
+            return self.write(json.dumps({'error': 'unsupported engine'}))
 
         #----------------#
         # verify request #

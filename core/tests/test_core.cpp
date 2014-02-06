@@ -60,6 +60,10 @@ void test_initialize_and_start() {
     if(stream_files.find("state.xml") == stream_files.end())
         throw std::runtime_error("state.xml not in stream_files!");
 
+    // its important we actually use a valid state.xml here to not break the
+    // other openmm tests
+    string test_state = stream_files["state.xml"];
+
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
         string filedata1 = gen_random(100);
@@ -70,6 +74,8 @@ void test_initialize_and_start() {
         frame_files[filename2] = filedata2;
         core.send_frame_files(frame_files, 1);
     }
+
+    core.send_heartbeat();
 
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
@@ -82,13 +88,12 @@ void test_initialize_and_start() {
         core.send_frame_files(frame_files, 1, true);
     }
 
-    string c_filename("state.xml");
-    string c_filedata("<XML>");
-    map<string, string> checkpoint_files;
-    checkpoint_files[c_filename] = c_filedata;
-//    core.send_checkpoint_files(checkpoint_files);
-    core.send_checkpoint_files(checkpoint_files, true);
+    core.send_heartbeat();
 
+    string c_filename("state.xml");
+    map<string, string> checkpoint_files;
+    checkpoint_files[c_filename] = test_state;
+    core.send_checkpoint_files(checkpoint_files, true);
 
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
@@ -101,6 +106,8 @@ void test_initialize_and_start() {
         int count = (rand()%100)+1;
         core.send_frame_files(frame_files, count);
     }
+
+    core.send_heartbeat();
 
     core.send_checkpoint_files(checkpoint_files, true);
 

@@ -62,6 +62,12 @@ def post_streams(target_id, state_xml, auth_token):
     return json.loads(reply.content.decode())['stream_id']
 
 if __name__ == '__main__':
+    # if a pids.log exists, that means we need to do some cleanup!
+    #if os.path.exists('pids.log'):
+    #    stop_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+    #                             'stop_services')
+    #    os.system(stop_path)
+
     cc_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', '..', 'cc')
     ws_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),

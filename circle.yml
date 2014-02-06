@@ -32,5 +32,9 @@ dependencies:
 
 test:
   post:
+    - cd core/build; make
     - cd core/build; ../tests/start_services
-    - cd core/build; make test
+    - cd core/build; ./tests/test_core
+    - cd core/build; ../tests/stop_services; ../tests/start_services;
+    - cd core/build; ./tests/test_openmm_core
+    - cd core/build; ../tests/stop_services

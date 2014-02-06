@@ -11,4 +11,4 @@ for pid in pids:
     except Exception:
         pass
 
-os.system('rm -rf aof_* streams targets')
+os.system('rm -rf pids.log aof_* streams targets')

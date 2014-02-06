@@ -33,7 +33,7 @@ OpenMMCore::OpenMMCore(int frame_send_interval, int checkpoint_send_interval):
 }
 
 OpenMMCore::~OpenMMCore() {
-
+    changemode(0);
 }
 
 static vector<string> setupForceGroups(OpenMM::System *sys) {
