@@ -69,7 +69,12 @@ static string encode_b64(const string &binary) {
     Poco::Base64Encoder b64encoder(binary_ostream);
     b64encoder << binary;
     b64encoder.close();
-    return binary_ostream.str();
+    string b64_string(binary_ostream.str());
+    // POCO B64 adds "\r\n" when the line buffer is full - we can either remove
+    // it, or manually escape. We choose the former. 
+    b64_string.erase(std::remove(b64_string.begin(), b64_string.end(), '\n'), b64_string.end());
+    b64_string.erase(std::remove(b64_string.begin(), b64_string.end(), '\r'), b64_string.end());
+    return b64_string;
 }
 
 static string encode_gz(const string &binary) {
@@ -267,12 +272,72 @@ void Core::_send_files_to_uri(const string &path,
     }
 }
 
-void Core::send_frame_files(const map<string, string> &files, bool gzip) const {
-    _send_files_to_uri("/core/frame", files, gzip);
+void Core::send_frame_files(const map<string, string> &files, 
+    int frame_count, bool gzip) const {
+
+    Poco::Net::HTTPRequest request("PUT", "/core/frame");
+    stringstream frame_count_str;
+    frame_count_str << frame_count;
+    string message;
+    message += "{";
+    message += "\"frames\":"+frame_count_str.str()+",";
+    message += "\"files\":{";
+    for(map<string, string>::const_iterator it=files.begin();
+        it != files.end(); it++) {
+        string filename = it->first;
+        string filedata = it->second;
+        if(gzip) {
+            filedata = encode_gz(filedata);
+            filename += ".gz";
+        }
+        filedata = encode_b64(filedata);
+        if(it != files.begin())
+            message += ",";
+        message += "\""+filename+".b64\"";
+        message += ":";
+        message += "\""+filedata+"\"";
+    }
+    message += "}}";
+    request.set("Authorization", _auth_token);
+    request.setContentLength(message.length());
+    _session->sendRequest(request) << message;
+    Poco::Net::HTTPResponse response;
+    _session->receiveResponse(response);
+    if(response.getStatus() != 200) {
+        throw std::runtime_error("Core::_send_files_to_uri bad status code");
+    }
 }
 
-void Core::send_checkpoint_files(const map<string, string> &files, bool gzip) const {
-    _send_files_to_uri("/core/checkpoint", files, gzip);
+void Core::send_checkpoint_files(const map<string, string> &files, 
+    bool gzip) const {
+
+    Poco::Net::HTTPRequest request("PUT", "/core/checkpoint");
+    string message;
+    message += "{\"files\":{";
+    for(map<string, string>::const_iterator it=files.begin();
+        it != files.end(); it++) {
+        string filename = it->first;
+        string filedata = it->second;
+        if(gzip) {
+            filedata = encode_gz(filedata);
+            filename += ".gz";
+        }
+        filedata = encode_b64(filedata);
+        if(it != files.begin())
+            message += ",";
+        message += "\""+filename+".b64\"";
+        message += ":";
+        message += "\""+filedata+"\"";
+    }
+    message += "}}";
+    request.set("Authorization", _auth_token);
+    request.setContentLength(message.length());
+    _session->sendRequest(request) << message;
+    Poco::Net::HTTPResponse response;
+    _session->receiveResponse(response);
+    if(response.getStatus() != 200) {
+        throw std::runtime_error("Core::_send_files_to_uri bad status code");
+    }
 }
 
 void Core::stop_stream(string err_msg) {

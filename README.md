@@ -12,9 +12,9 @@ WS - Work Server
 The major goals in the development of Siege Tank are:
 
 1. Striated workservers for load-balancing  
-2. Significantly improved ease of use in creating, storing, and accessing jobs  
+2. Significantly improved ease of use in creating, storing, and querying jobs  
 3. Adopt modern technologies and libraries  
-4. Common RESTful Web API with Python bindings  
+4. Common RESTful Web API with Python and JS clients  
 5. Scalability on both generic servers and AWS  
 6. Emphasize convention over configuration  
 
@@ -28,6 +28,7 @@ The major goals in the development of Siege Tank are:
 
 <h1> Core Dependencies </h1>
 OpenMM Core:  
+
 1. [POCO Complete Edition](http://pocoproject.org/)
 2. [OpenMM 6.0](https://github.com/SimTk/openmm)
 3. [cmake](http://www.cmake.org/cmake/resources/software.html)

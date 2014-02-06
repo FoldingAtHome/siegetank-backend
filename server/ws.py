@@ -433,12 +433,18 @@ class CoreFrameHandler(BaseHandler):
 
         Request Body:
             {
+
+                [optional]
+                "frames": 25,  # number of frames this contains
+
                 "files" : {
                     "filename.xtc.b64": file.b64,
                     "frames.xtc.b64": file.b64,
                     "coords.xyz.b64": file.b64,
                     "log.txt.gz.b64": file.gz.b64
                 }
+
+
             }
 
         If the filename ends in b64, it is b64 decoded. If the next suffix ends
@@ -450,12 +456,20 @@ class CoreFrameHandler(BaseHandler):
             200 - OK
 
         """
+        self.set_status(400)
         active_stream = ActiveStream(stream_id, self.db)
         frame_hash = hashlib.md5(self.request.body).hexdigest()
         if active_stream.hget('frame_hash') == frame_hash:
             return self.set_status(200)
         active_stream.hset('frame_hash', frame_hash)
         content = json.loads(self.request.body.decode())
+        if 'frames' in content:
+            frame_count = content['frames']
+            if frame_count < 1:
+                self.set_status(400)
+                return self.write(json.dumps({'error': 'frames < 1'}))
+        else:
+            frame_count = 1
         files = content['files']
         streams_folder = self.application.streams_folder
 
@@ -476,7 +490,7 @@ class CoreFrameHandler(BaseHandler):
             with open(buffer_filename, 'ab') as buffer_handle:
                 buffer_handle.write(filedata)
             active_stream.sadd('buffer_files', filename)
-        active_stream.hincrby('buffer_frames', 1)
+        active_stream.hincrby('buffer_frames', frame_count)
         return self.set_status(200)
 
 
@@ -650,9 +664,7 @@ class CoreHeartbeatHandler(BaseHandler):
 
         '''
         increment = tornado.options.options['heartbeat_increment']
-        print('incrementing by ', increment)
         self.db.zadd('heartbeats', stream_id, time.time()+increment)
-        print('final:', time.time()+increment)
         self.set_status(200)
 
 

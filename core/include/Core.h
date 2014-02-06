@@ -32,7 +32,7 @@ public:
 
     /* Send frame files to the WS. This method automatically base64 encodes
        the file */
-    void send_frame_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
+    void send_frame_files(const std::map<std::string, std::string> &files, int frame_count = 1, bool gzip=false) const;
 
     /* Send checkpoint files to the WS. This method automatically base64
        encodes the files, and adds '.b64' to the suffix. If gzip is true, the 

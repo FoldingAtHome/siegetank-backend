@@ -9,6 +9,7 @@ import uuid
 import json
 import time
 import base64
+import random
 from os.path import isfile
 
 
@@ -289,6 +290,66 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
         # download the frames
+        response = self.fetch('/streams/'+stream_id+'/frames.xtc')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body, frame_buffer)
+
+    def test_put_frame_variadic(self):
+        target_id = str(uuid.uuid4())
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        token = str(uuid.uuid4())
+        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+
+        active_stream = ws.ActiveStream(stream_id, self.ws.db)
+        stream = ws.Stream(stream_id, self.ws.db)
+
+        # PUT 20 frames
+        frame_buffer = bytes()
+        n_puts = 25
+        n_counts = []
+        for count in range(n_puts):
+            frame_bin = os.urandom(1024)
+            frame_buffer += frame_bin
+            count = random.randrange(1, 150)
+            n_counts.append(count)
+            body = {
+                'frames': count,
+                'files': {'frames.xtc.b64':
+                          base64.b64encode(frame_bin).decode()}
+                }
+            response = self.fetch('/core/frame', headers=headers,
+                                  body=json.dumps(body), method='PUT')
+            self.assertEqual(response.code, 200)
+
+        self.assertEqual(active_stream.hget('buffer_frames'), sum(n_counts))
+        streams_dir = self.ws.streams_folder
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer_frames.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # add a checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        body = {'files': {'state.xml.gz.b64': checkpoint_bin.decode()}}
+        response = self.fetch('/core/checkpoint', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(active_stream.hget('buffer_frames'), 0)
+        self.assertEqual(stream.hget('frames'), sum(n_counts))
+        self.assertFalse(os.path.exists(buffer_path))
+
+        # test downloading the frames again
         response = self.fetch('/streams/'+stream_id+'/frames.xtc')
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)

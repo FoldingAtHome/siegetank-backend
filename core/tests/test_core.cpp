@@ -7,6 +7,19 @@
 
 using namespace std;
 
+string gen_random(const int len) {
+    static const char alphanum[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+
+    string s(len, '0');
+    for (int i = 0; i < s.length(); ++i) {
+        s[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+    }
+    return s;
+}
+
 void test_sigint_signal() {
     Core core(25, 150);
     if(core.exit() == true) {
@@ -49,24 +62,24 @@ void test_initialize_and_start() {
 
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
-        string filedata1("8gdjrp24u6pjasdfpoi2345");
+        string filedata1 = gen_random(100);
         string filename2("log.txt");
         string filedata2("derpderp.txt");
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.send_frame_files(frame_files);
+        core.send_frame_files(frame_files, 1);
     }
 
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
-        string filedata1("8gdjrp24u6pjasdfpoi2345");
+        string filedata1 = gen_random(100);
         string filename2("log.txt");
         string filedata2("derpderp.txt");
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.send_frame_files(frame_files, true);
+        core.send_frame_files(frame_files, 1, true);
     }
 
     string c_filename("state.xml");
@@ -74,6 +87,21 @@ void test_initialize_and_start() {
     map<string, string> checkpoint_files;
     checkpoint_files[c_filename] = c_filedata;
 //    core.send_checkpoint_files(checkpoint_files);
+    core.send_checkpoint_files(checkpoint_files, true);
+
+
+    for(int i=0; i < 10; i++) {
+        string filename1("frames.xtc");
+        string filedata1 = gen_random(100);
+        string filename2("log.txt");
+        string filedata2("derpderp.txt");
+        map<string, string> frame_files;
+        frame_files[filename1] = filedata1;
+        frame_files[filename2] = filedata2;
+        int count = (rand()%100)+1;
+        core.send_frame_files(frame_files, count);
+    }
+
     core.send_checkpoint_files(checkpoint_files, true);
 
     core.stop_stream();
