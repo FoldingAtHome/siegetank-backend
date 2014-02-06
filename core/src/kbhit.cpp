@@ -1,20 +1,16 @@
-/*****************************************************************************
-kbhit() and getch() for Linux/UNIX
-Chris Giese <geezer@execpc.com>	http://my.execpc.com/~geezer
-Release date: ?
-This code is public domain (no copyright).
-You can do whatever you want with it.
-*****************************************************************************/
-#if !defined(linux)
+#ifdef _WIN32
 #include <conio.h> /* kbhit(), getch() */
-
 #else
 #include <sys/time.h> /* struct timeval, select() */
 /* ICANON, ECHO, TCSANOW, struct termios */
 #include <termios.h> /* tcgetattr(), tcsetattr() */
-#include <stdlib.h> /* atexit(), exit() */
+#include <cstdlib> /* atexit(), exit() */
 #include <unistd.h> /* read() */
-#include <stdio.h> /* printf() */
+#include <cstdio> /* printf() */
+#include <cstring>
+#include <iostream>
+
+using namespace std;
 
 static struct termios g_old_kbd_mode;
 /*****************************************************************************
@@ -47,24 +43,35 @@ static void raw(void)
 }
 /*****************************************************************************
 *****************************************************************************/
-static int kbhit(void)
+void changemode(int dir)
 {
-	struct timeval timeout;
-	fd_set read_handles;
-	int status;
-
-	raw();
-/* check stdin (fd 0) for activity */
-	FD_ZERO(&read_handles);
-	FD_SET(0, &read_handles);
-	timeout.tv_sec = timeout.tv_usec = 0;
-	status = select(0 + 1, &read_handles, NULL, NULL, &timeout);
-	if(status < 0)
-	{
-		printf("select() failed in kbhit()\n");
-		exit(1);
-	}
-	return status;
+  static struct termios oldt, newt;
+ 
+  if ( dir == 1 )
+  {
+    tcgetattr( STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~( ICANON | ECHO );
+    tcsetattr( STDIN_FILENO, TCSANOW, &newt);
+  }
+  else
+    tcsetattr( STDIN_FILENO, TCSANOW, &oldt);
+}
+ 
+int kbhit (void)
+{
+  struct timeval tv;
+  fd_set rdfs;
+ 
+  tv.tv_sec = 0;
+  tv.tv_usec = 0;
+ 
+  FD_ZERO(&rdfs);
+  FD_SET (STDIN_FILENO, &rdfs);
+ 
+  select(STDIN_FILENO+1, &rdfs, NULL, NULL, &tv);
+  return FD_ISSET(STDIN_FILENO, &rdfs);
+ 
 }
 /*****************************************************************************
 *****************************************************************************/
@@ -79,3 +86,13 @@ static int getch(void)
 	return temp;
 }
 #endif
+
+int main() {
+	changemode(1);
+	while(true) {
+		cout << "loop" << endl;
+		if(kbhit()) {
+			cout << "keyboard event: " << char(getch()) << endl;
+		}
+	}
+}
