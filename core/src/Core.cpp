@@ -30,6 +30,7 @@
 
 #include "XTCWriter.h"
 #include "Core.h"
+#include "kbhit.h"
 
 using namespace std;
 
