@@ -27,10 +27,7 @@
 #include <algorithm>
 
 #include <signal.h>
-
-#include "XTCWriter.h"
 #include "Core.h"
-#include "kbhit.h"
 
 using namespace std;
 
@@ -113,14 +110,13 @@ Core::Core(int frame_send_interval,
            string engine_version) :
     _frame_send_interval(frame_send_interval),
     _checkpoint_send_interval(checkpoint_send_interval),
+    _logstream(std::cout),
     _session(NULL),
     _engine(engine),
     _engine_version(engine_version) {
-
     _global_exit = false;
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
-    changemode(1);
 }
 
 Core::~Core() {

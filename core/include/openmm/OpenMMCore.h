@@ -12,7 +12,6 @@ public:
 
 private:
 
-    OpenMM::Context* _core_context;
-    OpenMM::Context* _ref_context;
+    void _setup_system(OpenMM::System *system, int randomSeed) const;
 
 };

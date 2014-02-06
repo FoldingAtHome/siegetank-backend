@@ -5,6 +5,7 @@
 
 #include <string>
 #include <map>
+#include <ostream>
 
 class Core {
 
@@ -70,6 +71,8 @@ protected:
 
     // number of steps we take before writing out a frame
     int _frame_write_interval;
+
+    std::ostream& _logstream;
 
 private:
 
