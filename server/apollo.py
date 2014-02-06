@@ -465,6 +465,12 @@ class Entity(metaclass=_entity_metaclass):
         return self._db.zrange(self.prefix+':'+self.id+':'+field, start, stop)
 
     @check_field
+    def zrevrange(self, field, start, stop):
+        assert type(self.fields[field] == zset)
+        return self._db.zrevrange(self.prefix+':'+self.id+':'+field,
+                                  start, stop)
+
+    @check_field
     def zremrangebyrank(self, field, start, stop):
         assert type(self.fields[field] == zset)
         return self._db.zremrangebyrank(self.prefix+':'+self.id+':'+field,
