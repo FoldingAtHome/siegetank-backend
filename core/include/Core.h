@@ -13,8 +13,7 @@ public:
 
     // frame_send_interval is in number of frames written
     // int checkpoint_send_interval is in number of times per day (user config)
-    Core(int frame_send_interval, 
-         int checkpoint_send_interval,
+    Core(int checkpoint_send_interval,
          std::string engine,
          std::string engine_version);
 
@@ -24,10 +23,10 @@ public:
     virtual void main();
 
     /* Start the stream and fetch files. If the files end in .gz or .gz.b64
-    then the suffixes and stripped, and the contents are processed for you. 
+    then the suffixes and stripped, and the contents are processed for you. The
+    method also initializes the _frame_write_interval.
     
     The workserver will automatically gunzip and decode files as needed.
-
     */
     void start_stream(const Poco::URI &cc_uri,
                       std::string &stream_id, std::string &target_id,
@@ -48,8 +47,7 @@ public:
             'state.xml' -> 'state.xml.gz.b64'
            else:
             'state.xml' -> 'state.xml.b64'
-
-       */
+    */
     void send_checkpoint_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
 
     /* Disengage the core from the stream and destroys the session */
@@ -61,16 +59,22 @@ public:
     /* Returns true if the core should exit */
     bool exit() const;
 
+    int get_frame_send_interval() const;
+
+    int get_frame_write_interval() const;
+
+    int get_checkpoint_send_interval() const;
+
 protected:
 
     /* how often we send frames in steps */
-    const int _frame_send_interval;
+    int _frame_send_interval;
+
+    /* number of steps we take before writing out a frame */
+    int _frame_write_interval;
 
     /* how often we send checkpoints in steps */
     const int _checkpoint_send_interval;
-
-    // number of steps we take before writing out a frame
-    int _frame_write_interval;
 
     std::ostream& _logstream;
 

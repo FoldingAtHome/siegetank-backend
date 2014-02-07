@@ -6,8 +6,9 @@
 #include <signal.h>
 
 void test_main_loop() {
-    OpenMMCore core(15,25);
-    core.main();
+    OpenMMCore core(25);
+    core.initialize();
+    //core.main();
 }
 
 int main() {

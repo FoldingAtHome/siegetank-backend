@@ -104,11 +104,10 @@ static string decode_gz_b64(const string &encoded_string) {
     return decode_gz(decode_b64(encoded_string));
 }
 
-Core::Core(int frame_send_interval, 
-           int checkpoint_send_interval,
+Core::Core(int checkpoint_send_interval,
            string engine,
            string engine_version) :
-    _frame_send_interval(frame_send_interval),
+    _frame_send_interval(0),
     _checkpoint_send_interval(checkpoint_send_interval),
     _logstream(std::cout),
     _session(NULL),
@@ -381,4 +380,16 @@ void Core::send_heartbeat() const {
 
 void Core::main() {
 
+}
+
+int Core::get_frame_send_interval() const {
+    return _frame_send_interval;
+}
+
+int Core::get_frame_write_interval() const {
+    return _frame_write_interval;
+}
+
+int Core::get_checkpoint_send_interval() const {
+    return _checkpoint_send_interval;
 }

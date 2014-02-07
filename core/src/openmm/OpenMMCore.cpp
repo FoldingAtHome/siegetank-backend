@@ -19,7 +19,6 @@
 #include <kbhit.h>
 
 using namespace std;
-using namespace Poco;
 
 #define OPENMM_CPU
 
@@ -27,12 +26,13 @@ extern "C" void registerSerializationProxies();
 extern "C" void registerCpuPlatform();
 extern "C" void registerOpenCLPlatform();
 
-OpenMMCore::OpenMMCore(int frame_send_interval, int checkpoint_send_interval):
-    Core(frame_send_interval, checkpoint_send_interval, "openmm", "6.0") {
+OpenMMCore::OpenMMCore(int checkpoint_send_interval):
+    Core(checkpoint_send_interval, "openmm", "6.0") {
 
 }
 
 OpenMMCore::~OpenMMCore() {
+    // renable proper keyboard input
     changemode(0);
 }
 
@@ -87,14 +87,17 @@ void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
     _logstream << "    Found: " << numAtoms << " atoms, " << sys->getNumForces() << " forces." << std::endl;
 }
 
-void OpenMMCore::main() {
+void OpenMMCore::initialize() {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
     registerCpuPlatform();
+    string platform_name("CPU");
 #elif OPENMM_CUDA
     registerCudaPlatform();
+    string platform_name("CUDA");
 #elif OPENMM_OPENCL
     registerOpenCLPlatform();
+    string platform_name("OpenCL");
 #else
     BAD DEFINE
 #endif
@@ -106,7 +109,9 @@ void OpenMMCore::main() {
     map<string, string> stream_files;
 
     start_stream(uri, stream_id, target_id, target_files, stream_files);
-
+    // eg. _frame_send_interval = 50000 for OpenMM simulations
+    _frame_send_interval = _frame_write_interval;
+        
     OpenMM::System *shared_system;
     OpenMM::State *initial_state;
     OpenMM::Integrator *ref_intg;
@@ -154,41 +159,100 @@ void OpenMMCore::main() {
     int random_seed = time(NULL);
     _setup_system(shared_system, random_seed);
 
-    // allow for kbhit's keyboard inputs
-    changemode(1);
+    cout << "creating referece context..." << endl;
+    _ref_context = new OpenMM::Context(*shared_system, *ref_intg, OpenMM::Platform::getPlatformByName("Reference"));
+    
+    cout << "creating core context..." << endl;
+    _core_context = new OpenMM::Context(*shared_system, *core_intg, OpenMM::Platform::getPlatformByName(platform_name));
 
-/*
+    _ref_context->setState(*initial_state);
+    _core_context->setState(*initial_state);
+
+    cout << "resetting terminal mode" << endl;
+    changemode(0);
+}
+
+void OpenMMCore::send_saved_checkpoint() {
+    // do not send a checkpoint if there's nothing there
+    if(_checkpoint_xml.size() == 0)
+        return;
+    map<string, string> checkpoint_files;
+    checkpoint["system.xml"] = _checkpoint_xml;
+    send_checkpoint_files(checkpoint_files);
+    _checkpoint_xml.clear();
+}
+
+void OpenMMCore::check_step(int current_step) {
+    if(current_step % _frame_write_interval == 0) {
+        cout << "checking_step" << endl;
+        OpenMM::State state = _core_context->getState(
+            OpenMM::State::Positions | 
+            OpenMM::State::Velocities | 
+            OpenMM::State::Parameters | 
+            OpenMM::State::Energy | 
+            OpenMM::State::Forces);
+
+        // todo: check against reference context.
+        state.getTime();
+        OpenMM::Vec3 a,b,c;
+        state.getPeriodicBoxVectors(a,b,c);
+        vector<vector<float> > box(3, vector<float>(3, 0));
+        box[0][0] = a[0]; box[0][1] = a[1]; box[0][2] = a[2];
+        box[1][0] = b[0]; box[1][1] = b[1]; box[1][2] = b[2];
+        box[2][0] = c[0]; box[2][1] = c[1]; box[2][2] = b[2];
+        vector<OpenMM::Vec3> state_positions = state.getPositions();
+        vector<vector<float> > positions(state_positions.size(),
+                                         vector<float>(3,0));
+        for(int i=0; i<state_positions.size(); i++) {
+            for(int j=0; j<3; j++) {
+                positions[i][j] = state_positions[i][j];
+            }
+        }
+        // write frame
+        ostringstream frame_stream;
+        XTCWriter xtcwriter(frame_stream);
+        xtcwriter.append(current_step, state.getTime(), box, positions);
+        map<string, string> frame_files;
+        frame_files["frames.xtc"] = frame_stream.str();
+        send_frame_files(frame_files);
+        // write checkpoint
+        ostringstream checkpoint;
+        OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
+        _checkpoint_xml = checkpoint.str();
+    }
+    if(current_step % _checkpoint_send_interval == 0) {
+       send_saved_checkpoint();
+    }
+}
+
+void OpenMMCore::main() {
+    cout << "foo" << endl;
+    cout << "fsi, fwi, csi" << _frame_send_interval << " " << _frame_write_interval << " " << _checkpoint_send_interval << endl;
     try {
-        start_stream(uri, stream_id, target_id, target_files, stream_files);
         // take ostep();
-        long long step = 0;
+        long long current_step = 0;
+        changemode(1);
         while(true) {
+
+            cout << "\r step: " << current_step << flush; 
             if(exit()) {
+                cout << "exit detected" << endl;
+                changemode(0);
                 // send checkpoint
                 break;
             }
             if(kbhit()) {
                 // handle keyboard events
-                // c sends the previous checkpoints 
-                // n sends the next available checkpoint
+                // c sends the previous checkpoints
                 cout << "keyboard event: " << char(getchar()) << endl;
             }
-            if(step % _frame_write_interval == 0) {
-                // write frame
-            }
-            if(step % _frame_send_interval == 0) {
-                // get state
-                // write checkpoint
-                // send frame
-            }
-            if(step % _checkpoint_send_interval == 0) {
 
-            }
+            check_step(current_step);
+            _core_context->getIntegrator().step(1);
+            current_step++;
         }
-
     } catch(exception &e) {
         cout << e.what() << endl;
     }
     stop_stream();
-*/
 }
