@@ -5,12 +5,14 @@
 #include <iostream>
 #include <signal.h>
 
-void test_main_loop() {
+void test_openmm_core() {
     OpenMMCore core(25);
     core.initialize();
-    //core.main();
+    for(int i=9995; i < 10010; i++) {
+        core.check_step(i);
+    }
 }
 
 int main() {
-    test_main_loop();
+    test_openmm_core();
 }

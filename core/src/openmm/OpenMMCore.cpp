@@ -20,8 +20,6 @@
 
 using namespace std;
 
-#define OPENMM_CPU
-
 extern "C" void registerSerializationProxies();
 extern "C" void registerCpuPlatform();
 extern "C" void registerOpenCLPlatform();
@@ -49,7 +47,7 @@ static vector<string> setupForceGroups(OpenMM::System *sys) {
                 nonbonded.setReciprocalSpaceForceGroup(2);
                 forceGroupNames[2]="Nonbonded Reciprocal Space";
             }
-        } catch(const std::bad_cast &c) {
+        } catch(const std::bad_cast &c  ) {
             force.setForceGroup(0);
         }
     }
@@ -116,8 +114,6 @@ void OpenMMCore::initialize() {
     OpenMM::State *initial_state;
     OpenMM::Integrator *ref_intg;
     OpenMM::Integrator *core_intg;
-
-    cout << "system" << endl;
     if(target_files.find("system.xml") != target_files.end()) {
         istringstream system_stream(target_files["system.xml"]);
         shared_system = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
@@ -127,8 +123,6 @@ void OpenMMCore::initialize() {
     } else {
         throw std::runtime_error("Cannot find system.xml");
     }
-
-    cout << "state" << endl;
     if(target_files.find("state.xml") != target_files.end()) {
         istringstream state_stream(target_files["state.xml"]);
         initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
@@ -138,8 +132,6 @@ void OpenMMCore::initialize() {
     } else {
         throw std::runtime_error("Cannot find state.xml");
     }
-
-    cout << "integrator" << endl;
     if(target_files.find("integrator.xml") != target_files.end()) {
         istringstream core_integrator_stream(target_files["integrator.xml"]);
         core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
@@ -153,13 +145,10 @@ void OpenMMCore::initialize() {
     } else {
         throw std::runtime_error("Cannot find integrator.xml");
     }
-
-    cout << "setting up system" << endl;
-
     int random_seed = time(NULL);
     _setup_system(shared_system, random_seed);
 
-    cout << "creating referece context..." << endl;
+    cout << "creating reference context..." << endl;
     _ref_context = new OpenMM::Context(*shared_system, *ref_intg, OpenMM::Platform::getPlatformByName("Reference"));
     
     cout << "creating core context..." << endl;
@@ -174,17 +163,20 @@ void OpenMMCore::initialize() {
 
 void OpenMMCore::_send_saved_checkpoint() {
     // do not send a checkpoint if there's nothing there
-    if(_checkpoint_xml.size() == 0)
+    if(_checkpoint_xml.size() == 0) {
+        cout << " non available" << flush;
         return;
+    }
     map<string, string> checkpoint_files;
     checkpoint_files["system.xml"] = _checkpoint_xml;
     send_checkpoint_files(checkpoint_files);
+    cout << " sent successfully" << flush;
     // flush
     _checkpoint_xml.clear();
 }
 
 void OpenMMCore::check_step(int current_step) {
-    if(current_step % _frame_write_interval == 0) {
+    if(current_step > 0 && current_step % _frame_write_interval == 0) {
         cout << "checking_step" << endl;
         OpenMM::State state = _core_context->getState(
             OpenMM::State::Positions | 
@@ -227,26 +219,31 @@ void OpenMMCore::check_step(int current_step) {
 }
 
 void OpenMMCore::main() {
-    cout << "foo" << endl;
-    cout << "fsi, fwi, csi" << _frame_send_interval << " " << _frame_write_interval << " " << _checkpoint_send_interval << endl;
+
+    /*
+     TPF - progress to frame
+    [3:23][---------------> ][ sending frame ... ok ]
+    */
+
     try {
         // take ostep();
         long long current_step = 0;
         changemode(1);
         while(true) {
-            cout << "\r step: " << current_step << flush; 
+            cout << "\r                                  " << flush;
+            cout << "\rsteps: " << current_step << flush;
             if(exit()) {
-                cout << "exit detected" << endl;
                 changemode(0);
-                // send checkpoint
                 break;
             }
             if(kbhit()) {
                 // handle keyboard events
                 // c sends the previous checkpoints
-                cout << "keyboard event: " << char(getchar()) << endl;
+                if('c' == char(getchar())) {
+                    cout << "\rsending checkpoint" << flush;
+                    _send_saved_checkpoint();
+                }
             }
-
             check_step(current_step);
             _core_context->getIntegrator().step(1);
             current_step++;

@@ -65,9 +65,7 @@ public:
 
     int get_checkpoint_send_interval() const;
 
-    /* return true if current time > _next_checkpoint_time, and sets
-    _next_checkpoint_time = current_time + _check_point_send_interval
-    */
+    /* return true if we should automatically checkpoint */
     bool should_checkpoint();
 
 protected:

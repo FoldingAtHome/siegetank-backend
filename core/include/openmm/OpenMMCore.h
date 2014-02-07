@@ -11,8 +11,8 @@ public:
 
     virtual void main();
 
-    /* check the step and determine if we need to 1) write a frame, or
-    2) send a frame, or 3) send a checkpoint */
+    /* check the step and determine if we need to 1) write frame/send  frame, 
+    or 2) send a checkpoint */
     void check_step(int current_step);
 
     void initialize();
