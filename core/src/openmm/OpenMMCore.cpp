@@ -85,7 +85,7 @@ void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
     _logstream << "    Found: " << numAtoms << " atoms, " << sys->getNumForces() << " forces." << std::endl;
 }
 
-void OpenMMCore::initialize() {
+void OpenMMCore::initialize(string cc_uri) {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
     registerCpuPlatform();
@@ -100,7 +100,7 @@ void OpenMMCore::initialize() {
     BAD DEFINE
 #endif
 
-    Poco::URI uri("https://127.0.0.1:8980/core/assign");
+    Poco::URI uri(cc_uri);
     string stream_id;
     string target_id;
     map<string, string> target_files;

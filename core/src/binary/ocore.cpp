@@ -2,6 +2,6 @@
 
 int main() {
     OpenMMCore core(25);
-    core.initialize();
+    core.initialize("https://127.0.0.1:8980/core/assign");
     core.main();
 }

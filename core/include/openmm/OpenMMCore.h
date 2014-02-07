@@ -15,11 +15,9 @@ public:
     or 2) send a checkpoint */
     void check_step(int current_step);
 
-    void initialize();
-
+    void initialize(std::string uri);
 
 private:
-
 
     /* send _checkpoint_xml to the server safely. This method is idempotent.
 
