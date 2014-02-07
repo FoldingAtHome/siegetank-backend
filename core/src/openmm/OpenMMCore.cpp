@@ -172,13 +172,14 @@ void OpenMMCore::initialize() {
     changemode(0);
 }
 
-void OpenMMCore::send_saved_checkpoint() {
+void OpenMMCore::_send_saved_checkpoint() {
     // do not send a checkpoint if there's nothing there
     if(_checkpoint_xml.size() == 0)
         return;
     map<string, string> checkpoint_files;
     checkpoint_files["system.xml"] = _checkpoint_xml;
     send_checkpoint_files(checkpoint_files);
+    // flush
     _checkpoint_xml.clear();
 }
 
@@ -220,8 +221,8 @@ void OpenMMCore::check_step(int current_step) {
         OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
         _checkpoint_xml = checkpoint.str();
     }
-    if(current_step % _checkpoint_send_interval == 0) {
-       send_saved_checkpoint();
+    if(should_checkpoint()) {
+       _send_saved_checkpoint();
     }
 }
 
@@ -233,7 +234,6 @@ void OpenMMCore::main() {
         long long current_step = 0;
         changemode(1);
         while(true) {
-
             cout << "\r step: " << current_step << flush; 
             if(exit()) {
                 cout << "exit detected" << endl;

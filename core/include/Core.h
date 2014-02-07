@@ -65,6 +65,11 @@ public:
 
     int get_checkpoint_send_interval() const;
 
+    /* return true if current time > _next_checkpoint_time, and sets
+    _next_checkpoint_time = current_time + _check_point_send_interval
+    */
+    bool should_checkpoint();
+
 protected:
 
     /* how often we send frames in steps */
@@ -73,8 +78,10 @@ protected:
     /* number of steps we take before writing out a frame */
     int _frame_write_interval;
 
-    /* how often we send checkpoints in steps */
+    /* how often we send checkpoints in seconds */
     const int _checkpoint_send_interval;
+
+    int _next_checkpoint_time;
 
     std::ostream& _logstream;
 

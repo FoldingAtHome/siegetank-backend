@@ -28,6 +28,7 @@
 
 #include <signal.h>
 #include "Core.h"
+#include <ctime>
 
 using namespace std;
 
@@ -116,6 +117,8 @@ Core::Core(int checkpoint_send_interval,
     _global_exit = false;
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
+    time_t current_time = time(NULL);
+    _next_checkpoint_time = current_time + _checkpoint_send_interval;
 }
 
 Core::~Core() {
@@ -392,4 +395,14 @@ int Core::get_frame_write_interval() const {
 
 int Core::get_checkpoint_send_interval() const {
     return _checkpoint_send_interval;
+}
+
+bool Core::should_checkpoint() {
+    time_t current_time = time(NULL);
+    if(current_time > _next_checkpoint_time) {
+        _next_checkpoint_time = current_time + _checkpoint_send_interval;
+        return true;
+    } else {
+        return false;
+    }
 }

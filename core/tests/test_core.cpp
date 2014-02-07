@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <signal.h>
+#include <ctime>
 
 using namespace std;
 
@@ -39,6 +40,26 @@ void test_sigterm_signal() {
     raise(SIGTERM);
     if(core.exit() == false) {
         throw std::runtime_error("exit() returned false before signal");
+    }
+}
+
+void test_should_checkpoint() {
+    int checkpoint_increment = 6;
+    Core core(checkpoint_increment, "openmm", "6.0");
+    time_t current_time = time(0);
+    if(core.should_checkpoint()) {
+        throw std::runtime_error("1. should_checkpoint() returned true");
+    }
+    sleep(checkpoint_increment+2);
+    if(!core.should_checkpoint()) {
+        throw std::runtime_error("2. should_checkpoint() returned false");
+    }
+    if(core.should_checkpoint()) {
+        throw std::runtime_error("3. should_checkpoint() returned true");
+    }
+    sleep(checkpoint_increment+2);
+    if(!core.should_checkpoint()) {
+        throw std::runtime_error("2. should_checkpoint() returned false");
     }
 }
 
@@ -118,6 +139,7 @@ void test_initialize_and_start() {
 int main() {
     test_sigint_signal();
     test_sigterm_signal();
+    test_should_checkpoint();
     test_initialize_and_start();
     return 0;
 }
