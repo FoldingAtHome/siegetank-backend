@@ -43,22 +43,22 @@ void test_sigterm_signal() {
     }
 }
 
-void test_should_checkpoint() {
+void test_should_send_checkpoint() {
     int checkpoint_increment = 6;
     Core core(checkpoint_increment, "openmm", "6.0");
     time_t current_time = time(0);
-    if(core.should_checkpoint()) {
+    if(core.should_send_checkpoint()) {
         throw std::runtime_error("1. should_checkpoint() returned true");
     }
     sleep(checkpoint_increment+2);
-    if(!core.should_checkpoint()) {
+    if(!core.should_send_checkpoint()) {
         throw std::runtime_error("2. should_checkpoint() returned false");
     }
-    if(core.should_checkpoint()) {
+    if(core.should_send_checkpoint()) {
         throw std::runtime_error("3. should_checkpoint() returned true");
     }
     sleep(checkpoint_increment+2);
-    if(!core.should_checkpoint()) {
+    if(!core.should_send_checkpoint()) {
         throw std::runtime_error("2. should_checkpoint() returned false");
     }
 }
@@ -139,7 +139,7 @@ void test_initialize_and_start() {
 int main() {
     test_sigint_signal();
     test_sigterm_signal();
-    test_should_checkpoint();
+    test_should_send_checkpoint();
     test_initialize_and_start();
     return 0;
 }

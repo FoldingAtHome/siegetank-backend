@@ -65,8 +65,8 @@ public:
 
     int get_checkpoint_send_interval() const;
 
-    /* return true if we should automatically checkpoint */
-    bool should_checkpoint();
+    /* return true if we should automatically send checkpoint */
+    bool should_send_checkpoint();
 
 protected:
 

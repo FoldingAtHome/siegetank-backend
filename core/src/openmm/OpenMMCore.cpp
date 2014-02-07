@@ -213,7 +213,7 @@ void OpenMMCore::check_step(int current_step) {
         OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
         _checkpoint_xml = checkpoint.str();
     }
-    if(should_checkpoint()) {
+    if(should_send_checkpoint()) {
        _send_saved_checkpoint();
     }
 }

@@ -397,7 +397,7 @@ int Core::get_checkpoint_send_interval() const {
     return _checkpoint_send_interval;
 }
 
-bool Core::should_checkpoint() {
+bool Core::should_send_checkpoint() {
     time_t current_time = time(NULL);
     if(current_time > _next_checkpoint_time) {
         _next_checkpoint_time = current_time + _checkpoint_send_interval;
