@@ -32,13 +32,7 @@ static void write_spoiler(ostream &outstream) {
     outstream << "                                  version "<< CORE_VERSION << "                   " << std::endl;
 }
 
-extern "C" void registerCpuPmeKernelFactories();
-
 int main(int argc, const char * argv[]) {
-
-#ifdef USE_PME_PLUGIN
-    registerCpuPmeKernelFactories();
-#endif
 
     // parse options here
     ez::ezOptionParser opt;

@@ -23,6 +23,9 @@ using namespace std;
 extern "C" void registerSerializationProxies();
 extern "C" void registerCpuPlatform();
 extern "C" void registerOpenCLPlatform();
+#ifdef USE_PME_PLUGIN
+    extern "C" void registerCpuPmeKernelFactories();
+#endif
 
 OpenMMCore::OpenMMCore(int checkpoint_send_interval):
     Core(checkpoint_send_interval, "openmm", "6.0") {
@@ -142,6 +145,9 @@ void OpenMMCore::initialize(string cc_uri) {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
     registerCpuPlatform();
+#ifdef USE_PME_PLUGIN
+    registerCpuPmeKernelFactories();
+#endif
     string platform_name("CPU");
 #elif OPENMM_CUDA
     registerCudaPlatform();
