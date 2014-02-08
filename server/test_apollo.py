@@ -2,9 +2,10 @@ import unittest
 import server.apollo as apollo
 import redis
 import sys
+import server.common as common
 
-redis_client = redis.Redis(decode_responses=True)
-redis_client.ping()
+#redis_client = redis.Redis(decode_responses=True)
+#redis_client.ping()
 
 class Person(apollo.Entity):
     prefix = 'person'
@@ -37,7 +38,7 @@ class TestApollo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # startup a simple redis server
-        cls.db = redis_client
+        cls.db = common.init_redis(redis_port=29387)
         cls.db.flushdb()
 
     def tearDown(self):
