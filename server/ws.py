@@ -774,7 +774,14 @@ class WorkServer(tornado.web.Application, RedisMixin):
 
         """
         target = Target(target_id, db)
-        stream_id = target.zrevrange('queue', 0, 0)[0]
+
+        # note, it is critical that zrevrange and the subsequent zrem be done
+        # atomically so as to not have a race condition when multiple clients
+        # attempt to activate a stream (remember that the CC runs on mutiple
+        # processes!).
+
+        stream_id = target.zrevpop('queue')
+        #stream_id = target.zrevrange('queue', 0, 0)[0]
         if stream_id:
             assert target.zrem('queue', stream_id) == 1
             active_stream = ActiveStream.create(stream_id, db)

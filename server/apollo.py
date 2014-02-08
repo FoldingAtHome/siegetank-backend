@@ -479,12 +479,16 @@ class Entity(metaclass=_entity_metaclass):
     @check_field
     def zrevpop(self, field):
         lua = """
-        val = redis.call('zrange', KEYS[1], -1, -1)
+        local val = redis.call('zrange', KEYS[1], -1, -1)
         if val then redis.call('zremrangebyrank', KEYS[1], -1, -1) end
         return val
         """
         multiply = self._db.register_script(lua)
-        return multiply(keys=[self.prefix+':'+self.id+':'+field])
+        result = multiply(keys=[self.prefix+':'+self.id+':'+field])
+        if result:
+            return result[0]
+        else:
+            return None
 
     @check_field
     def zadd(self, field, *args, **kwargs):

@@ -43,6 +43,7 @@ class TestApollo(unittest.TestCase):
     def tearDown(self):
         if self.db.keys('*') != []:
             self.db.flushdb()
+            print(self.db.keys('*'))
             self.assertTrue(0)
 
     def test_sismember(self):
@@ -430,7 +431,7 @@ class TestApollo(unittest.TestCase):
 
         joe.delete()
 
-    def zrevpop(self):
+    def test_zrevpop(self):
         joe = Person.create('joe', self.db)
         joe.zadd('tasks', 'sleep', 5)
         joe.zadd('tasks', 'eat', 1)
@@ -438,9 +439,10 @@ class TestApollo(unittest.TestCase):
         joe.zadd('tasks', 'work', 0)
 
         self.assertEqual(joe.zrevpop('tasks'), 'sleep')
-        self.assertEqual(joe.zrevpop('tasks'), 'eat')
         self.assertEqual(joe.zrevpop('tasks'), 'drink')
+        self.assertEqual(joe.zrevpop('tasks'), 'eat')
         self.assertEqual(joe.zrevpop('tasks'), 'work')
+        self.assertEqual(joe.zrevpop('tasks'), None)
 
         joe.delete()
 
