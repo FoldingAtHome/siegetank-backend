@@ -32,7 +32,12 @@ static void write_spoiler(ostream &outstream) {
     outstream << "                                  version "<< CORE_VERSION << "                   " << std::endl;
 }
 
+extern "C" void registerCpuPmeKernelFactories();
+
 int main(int argc, const char * argv[]) {
+
+    // hack
+    registerCpuPmeKernelFactories();
 
     // parse options here
 
@@ -76,7 +81,7 @@ int main(int argc, const char * argv[]) {
         0,
         0,
         0,
-        "Hide spoiler",
+        "Hide startup spoiler",
         "--nospoiler"
     );
 

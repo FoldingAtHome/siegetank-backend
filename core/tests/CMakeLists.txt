@@ -15,8 +15,6 @@ foreach(test_prog ${test_progs})
     add_test(${test_root} ${Core_BINARY_DIR}/${test_root})
 endforeach()
 
-
-
 set(test_openmm_progs "test_openmm_core.cpp")
 foreach(test_prog ${test_openmm_progs})
     get_filename_component(test_root ${test_prog} NAME_WE)

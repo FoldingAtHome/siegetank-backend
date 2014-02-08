@@ -56,7 +56,7 @@ static vector<string> setupForceGroups(OpenMM::System *sys) {
 
 void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
     vector<string> forceGroupNames;
-    cout << "setup system" << endl;
+    _logstream << "setup system" << endl;
     forceGroupNames = setupForceGroups(sys);
     for(int i=0;i<forceGroupNames.size();i++) {
         _logstream << "    Group " << i << ": " << forceGroupNames[i] << endl;
@@ -128,6 +128,7 @@ static void update_status(string target_id, string stream_id, int seconds_per_fr
 }
 
 static void status_header(ostream &out) {
+    out << "\r";
     out << setw(10) << "target"
         << setw(10) << "stream"
         << setw(10) << "tpf"
@@ -199,11 +200,12 @@ void OpenMMCore::initialize(string cc_uri) {
     }
     int random_seed = time(NULL);
     _setup_system(shared_system, random_seed);
-    cout << "creating contexts: reference... " << flush;
+    cout << "\r                                                             " << flush;
+    cout << "\rcreating contexts: reference... " << flush;
     _ref_context = new OpenMM::Context(*shared_system, *ref_intg, OpenMM::Platform::getPlatformByName("Reference"));
     cout << "core..." << flush;
     _core_context = new OpenMM::Context(*shared_system, *core_intg, OpenMM::Platform::getPlatformByName(platform_name));
-    cout << "ok" << endl;
+    cout << "ok";
     _ref_context->setState(*initial_state);
     _core_context->setState(*initial_state);
     changemode(0);
@@ -212,20 +214,17 @@ void OpenMMCore::initialize(string cc_uri) {
 void OpenMMCore::_send_saved_checkpoint() {
     // do not send a checkpoint if there's nothing there
     if(_checkpoint_xml.size() == 0) {
-        cout << " non available" << flush;
         return;
     }
     map<string, string> checkpoint_files;
     checkpoint_files["system.xml"] = _checkpoint_xml;
     send_checkpoint_files(checkpoint_files);
-    cout << " sent successfully" << flush;
     // flush
     _checkpoint_xml.clear();
 }
 
 void OpenMMCore::check_step(int current_step) {
     if(current_step > 0 && current_step % _frame_write_interval == 0) {
-        cout << "checking_step" << endl;
         OpenMM::State state = _core_context->getState(
             OpenMM::State::Positions | 
             OpenMM::State::Velocities | 
@@ -281,11 +280,6 @@ float OpenMMCore::ns_per_day(long long steps_completed) const {
     double time_step = _core_context->getIntegrator().getStepSize();
     return (double(steps_completed)/time_diff)*(time_step/1e3)*86400;
 }
-
-/*
-static void update_status(string target_id, string stream_id, int seconds_per_frame, 
-                          float ns_per_day, int frames, int steps, ostream &out) {
-*/
 
 void OpenMMCore::main() {
     try {

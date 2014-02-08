@@ -110,7 +110,7 @@ Core::Core(int checkpoint_send_interval,
            string engine_version) :
     _frame_send_interval(0),
     _checkpoint_send_interval(checkpoint_send_interval),
-    _logstream(std::cout),
+    _logstream(_logstring),
     _session(NULL),
     _engine(engine),
     _engine_version(engine_version),
@@ -166,7 +166,7 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     if(response.getStatus() != 200) {
         throw std::runtime_error("Could not get an assignment from CC");
     }
-    cout << "ok" << endl;
+    cout << "ok" << flush;
 
     string content;
     Poco::StreamCopier::copyToString(content_stream, content);

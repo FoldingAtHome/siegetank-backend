@@ -9,6 +9,7 @@
 #include <string>
 #include <map>
 #include <ostream>
+#include <sstream>
 
 class Core {
 
@@ -81,6 +82,8 @@ protected:
 
     /* how often we send checkpoints in seconds */
     const int _checkpoint_send_interval;
+
+    std::ostringstream _logstring;
 
     std::ostream& _logstream;
 
