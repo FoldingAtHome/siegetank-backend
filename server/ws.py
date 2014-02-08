@@ -770,6 +770,8 @@ class WorkServer(tornado.web.Application, RedisMixin):
         """ Activate and return the highest priority stream belonging to target
         target_id. This is called directly by the CC to start a stream.
 
+        TODO: zrevrange and zrem needs to be handled atomically and locked. 
+
         """
         target = Target(target_id, db)
         stream_id = target.zrevrange('queue', 0, 0)[0]

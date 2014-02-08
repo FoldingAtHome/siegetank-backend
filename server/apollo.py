@@ -477,6 +477,16 @@ class Entity(metaclass=_entity_metaclass):
                                         start, stop)
 
     @check_field
+    def zrevpop(self, field):
+        lua = """
+        val = redis.call('zrange', KEYS[1], -1, -1)
+        if val then redis.call('zremrangebyrank', KEYS[1], -1, -1) end
+        return val
+        """
+        multiply = self._db.register_script(lua)
+        return multiply(keys=[self.prefix+':'+self.id+':'+field])
+
+    @check_field
     def zadd(self, field, *args, **kwargs):
         assert type(self.fields[field] == zset)
         assert not field in self.lookups
