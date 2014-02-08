@@ -288,13 +288,16 @@ void OpenMMCore::main() {
         changemode(1);
         status_header(cout);
         while(true) {
-            update_status(_target_id, _stream_id, tpf(current_step), ns_per_day(current_step),
-                          current_step/_frame_write_interval, current_step,
-                          cout);
+            if(current_step % 10 == 0) {
+                update_status(_target_id, _stream_id, tpf(current_step), ns_per_day(current_step),
+                              current_step/_frame_write_interval, current_step,
+                              cout);
+            }
             if(exit()) {
                 changemode(0);
                 break;
             }
+            /*
             if(kbhit()) {
                 // handle keyboard events
                 // c sends the previous checkpoints
@@ -303,6 +306,7 @@ void OpenMMCore::main() {
                     _send_saved_checkpoint();
                 }
             }
+            */
             check_step(current_step);
             _core_context->getIntegrator().step(1);
             current_step++;

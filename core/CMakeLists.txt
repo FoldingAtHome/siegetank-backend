@@ -30,9 +30,13 @@ set(poco_libraries PocoNetSSL PocoCrypto PocoUtil PocoJSON PocoXML PocoNet PocoF
 link_directories(${OPENMM_INSTALL_DIR}/lib)
 link_directories(${OPENMM_INSTALL_DIR}/lib/plugins)
 set(openmm_libraries OpenMMCPU_static OpenMM_static)
-set(openmm_pme_plugin OpenMMPME_static)
-link_directories(${FFTW_INSTALL_DIR}/lib)
-set(fftw_libraries fftw3f fftw3f_threads)
+
+if(FFTW_INSTALL_DIR)
+    set(openmm_pme_plugin OpenMMPME_static)
+    link_directories(${FFTW_INSTALL_DIR}/lib)
+    set(fftw_libraries fftw3f fftw3f_threads)
+    add_definitions(-DUSE_FFTW)
+endif(FFTW_INSTALL_DIR)
 
 enable_testing()
 add_subdirectory(tests)

@@ -36,11 +36,11 @@ extern "C" void registerCpuPmeKernelFactories();
 
 int main(int argc, const char * argv[]) {
 
-    // hack
+#ifdef USE_PME_PLUGIN
     registerCpuPmeKernelFactories();
+#endif
 
     // parse options here
-
     ez::ezOptionParser opt;
 
     opt.overview = "Demo of pretty printing everything parsed.";
