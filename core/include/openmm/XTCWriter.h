@@ -1,3 +1,6 @@
+#ifndef XTC_WRITER_H_
+#define XTC_WRITER_H_
+
 #include <iostream>
 #include <vector>
 
@@ -32,3 +35,5 @@ private:
 	const float precision_;
 
 };
+
+#endif

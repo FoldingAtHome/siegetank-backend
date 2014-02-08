@@ -145,8 +145,6 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     Poco::Net::HTTPSClientSession cc_session(cc_uri.getHost(),
                                              cc_uri.getPort(),
                                              context);
-    cout << "ok" << endl;
-
     string ws_uri;
     string ws_token;
     

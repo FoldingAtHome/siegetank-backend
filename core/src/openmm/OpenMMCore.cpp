@@ -101,6 +101,9 @@ void OpenMMCore::initialize(string cc_uri) {
 #endif
 
     Poco::URI uri(cc_uri);
+
+    cout << uri.getHost() << ":" << uri.getPort() << uri.getPath() << endl;
+
     string stream_id;
     string target_id;
     map<string, string> target_files;
@@ -221,8 +224,8 @@ void OpenMMCore::check_step(int current_step) {
 void OpenMMCore::main() {
 
     /*
-     TPF - progress to frame
-    [3:23][---------------> ][ sending frame ... ok ]
+     TPF  - progress to frame -        status
+    [3:23] [---------------->] [ sending frame ... ok ]
     */
 
     try {

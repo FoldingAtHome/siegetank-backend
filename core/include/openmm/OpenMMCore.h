@@ -1,3 +1,6 @@
+#ifndef OPENMM_CORE_HH_
+#define OPENMM_CORE_HH_
+
 #include "Core.h"
 #include <OpenMM.h>
 #include <sstream>
@@ -36,3 +39,5 @@ private:
     void _setup_system(OpenMM::System *system, int randomSeed) const;
 
 };
+
+#endif

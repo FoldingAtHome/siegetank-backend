@@ -1,3 +1,6 @@
+#ifndef CORE_H_
+#define CORE_H_
+
 #include <Poco/Net/HTTPSClientSession.h>
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/Util/Application.h>
@@ -143,3 +146,5 @@ int main() {
 }
 
 */
+
+#endif
