@@ -20,6 +20,12 @@ public:
 
     void initialize(std::string uri);
 
+    /* get time per frame in seconds */
+    int tpf(long long steps_completed) const;
+
+    /* get nanoseconds per day of the current simulation */
+    float ns_per_day(long long steps_completed) const;
+
 private:
 
     /* send _checkpoint_xml to the server safely. This method is idempotent.

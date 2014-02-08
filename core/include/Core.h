@@ -82,11 +82,19 @@ protected:
     /* how often we send checkpoints in seconds */
     const int _checkpoint_send_interval;
 
-    int _next_checkpoint_time;
-
     std::ostream& _logstream;
 
+    /* time the job started */
+    const int _start_time;
+
+    std::string _target_id;
+    
+    std::string _stream_id;
+
 private:
+
+    /* used by should_send_checkpoint() to determine if we need to checkpoint*/
+    int _next_checkpoint_time;
 
     /* Get an assignment from the command center, and initializes _session so
     we can start the stream the from the workserver */

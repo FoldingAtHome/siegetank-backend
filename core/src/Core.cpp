@@ -113,12 +113,12 @@ Core::Core(int checkpoint_send_interval,
     _logstream(std::cout),
     _session(NULL),
     _engine(engine),
-    _engine_version(engine_version) {
+    _engine_version(engine_version),
+    _start_time(time(NULL)) {
     _global_exit = false;
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
-    time_t current_time = time(NULL);
-    _next_checkpoint_time = current_time + _checkpoint_send_interval;
+    _next_checkpoint_time = _start_time + _checkpoint_send_interval;
 }
 
 Core::~Core() {
@@ -204,8 +204,8 @@ void Core::start_stream(const Poco::URI &cc_uri,
     Poco::JSON::Parser parser;
     Poco::Dynamic::Var result = parser.parse(content);
     Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();        
-    stream_id = object->get("stream_id").convert<std::string>();
-    target_id = object->get("target_id").convert<std::string>();
+    _stream_id = object->get("stream_id").convert<std::string>();
+    _target_id = object->get("target_id").convert<std::string>();
 
     // extract target files
     {

@@ -10,7 +10,7 @@
 //  ./configure --static --prefix=/home/yutong/poco152_install --omit=Data/MySQL,Data/ODBC
 
 #include <iostream>
-
+#include <iomanip>
 #include <ctime>
 #include <sstream>
 #include <OpenMM.h>
@@ -85,6 +85,58 @@ void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
     _logstream << "    Found: " << numAtoms << " atoms, " << sys->getNumForces() << " forces." << std::endl;
 }
 
+static void update_status(string target_id, string stream_id, int seconds_per_frame, 
+                          float ns_per_day, int frames, long long steps, ostream &out) {
+
+    int hours = seconds_per_frame/(60*60);
+    int minutes = (seconds_per_frame-hours*60*60)/60;
+    int seconds = seconds_per_frame%60;
+
+    stringstream tpf;
+    // hours are added conditionally
+    if(hours > 0) {
+        tpf << hours << ":";
+    }
+    // always add minutes
+    if(minutes > 0) {
+        if(minutes < 10) {
+            tpf << "0" << minutes << ":";
+        } else {
+            tpf << minutes << ":";
+        }
+    } else {
+        tpf << "00:";
+    }
+    // always add seconds
+    if(seconds > 0) {
+        if(seconds < 10) {
+            tpf << "0" << seconds;
+        } else {
+            tpf << seconds;
+        }
+    } else {
+        tpf << "00";
+    }
+    out << "\r";
+    out << setw(10) << target_id.substr(0,8) 
+        << setw(10) << stream_id.substr(0,8)
+        << setw(10) << tpf.str() << "  "
+        << setw(7) << std::fixed << std::setprecision(3) << ns_per_day
+        << setw(8) << frames
+        << setw(11) << steps;
+    out << flush;
+}
+
+static void status_header(ostream &out) {
+    out << setw(10) << "target"
+        << setw(10) << "stream"
+        << setw(10) << "tpf"
+        << setw(9) << "ns/day"
+        << setw(8) << "frames"
+        << setw(11) << "steps";
+    out << "\n";
+}
+
 void OpenMMCore::initialize(string cc_uri) {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
@@ -101,9 +153,6 @@ void OpenMMCore::initialize(string cc_uri) {
 #endif
 
     Poco::URI uri(cc_uri);
-
-    cout << uri.getHost() << ":" << uri.getPort() << uri.getPath() << endl;
-
     string stream_id;
     string target_id;
     map<string, string> target_files;
@@ -150,17 +199,13 @@ void OpenMMCore::initialize(string cc_uri) {
     }
     int random_seed = time(NULL);
     _setup_system(shared_system, random_seed);
-
-    cout << "creating reference context..." << endl;
+    cout << "creating contexts: reference... " << flush;
     _ref_context = new OpenMM::Context(*shared_system, *ref_intg, OpenMM::Platform::getPlatformByName("Reference"));
-    
-    cout << "creating core context..." << endl;
+    cout << "core..." << flush;
     _core_context = new OpenMM::Context(*shared_system, *core_intg, OpenMM::Platform::getPlatformByName(platform_name));
-
+    cout << "ok" << endl;
     _ref_context->setState(*initial_state);
     _core_context->setState(*initial_state);
-
-    cout << "resetting terminal mode" << endl;
     changemode(0);
 }
 
@@ -221,20 +266,37 @@ void OpenMMCore::check_step(int current_step) {
     }
 }
 
+int OpenMMCore::tpf(long long steps_completed) const {
+    int time_diff = time(NULL)-_start_time;
+    if(steps_completed == 0)
+        return 0;
+    return int(double(_frame_write_interval)*(time_diff)/steps_completed);
+}
+
+float OpenMMCore::ns_per_day(long long steps_completed) const {
+    int time_diff = time(NULL)-_start_time;
+    if(time_diff == 0)
+        return 0;
+    // time_step is in picoseconds
+    double time_step = _core_context->getIntegrator().getStepSize();
+    return (double(steps_completed)/time_diff)*(time_step/1e3)*86400;
+}
+
+/*
+static void update_status(string target_id, string stream_id, int seconds_per_frame, 
+                          float ns_per_day, int frames, int steps, ostream &out) {
+*/
+
 void OpenMMCore::main() {
-
-    /*
-     TPF  - progress to frame -        status
-    [3:23] [---------------->] [ sending frame ... ok ]
-    */
-
     try {
         // take ostep();
         long long current_step = 0;
         changemode(1);
+        status_header(cout);
         while(true) {
-            cout << "\r                                  " << flush;
-            cout << "\rsteps: " << current_step << flush;
+            update_status(_target_id, _stream_id, tpf(current_step), ns_per_day(current_step),
+                          current_step/_frame_write_interval, current_step,
+                          cout);
             if(exit()) {
                 changemode(0);
                 break;
