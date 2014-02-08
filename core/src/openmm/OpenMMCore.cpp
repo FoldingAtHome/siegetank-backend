@@ -223,7 +223,7 @@ void OpenMMCore::_send_saved_checkpoint() {
         return;
     }
     map<string, string> checkpoint_files;
-    checkpoint_files["system.xml"] = _checkpoint_xml;
+    checkpoint_files["state.xml"] = _checkpoint_xml;
     send_checkpoint_files(checkpoint_files);
     // flush
     _checkpoint_xml.clear();
