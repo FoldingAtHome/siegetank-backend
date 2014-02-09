@@ -75,20 +75,20 @@ from server.apollo import Entity, zset, relate
 # CC/PG Interface #
 ###################
 
-# POST x.com/streams              - add a new stream
-# PUT x.com/streams/delete        - delete a stream
-# GET x.com/streams/stream_id     - download a stream
+# POST x.com/streams  - add a new stream
+# PUT x.com/streams/delete  - delete a stream
+# GET x.com/streams/stream_id  - download a stream
 
 ##################
 # CORE Interface #
 ##################
 
-# GET x.com/core/start            - start a stream (given an auth token)
-# PUT x.com/core/frame            - add a frame to a stream (idempotent)
-# PUT x.com/core/stop             - stop a stream
-# PUT x.com/core/checkpoint       - send a checkpoint file corresponding
-#                                   to the last frame received
-# POST x.com/core/heartbeat       - send a heartbeat
+# GET x.com/core/start  - start a stream (given an auth token)
+# PUT x.com/core/frame  - add a frame to a stream (idempotent)
+# PUT x.com/core/stop  - stop a stream
+# PUT x.com/core/checkpoint  - send a checkpoint file corresponding
+#                              to the last frame received
+# POST x.com/core/heartbeat  - send a heartbeat
 
 # checkpointing technique
 # if x.com/core/checkpoint is sent, message is:
@@ -97,7 +97,11 @@ from server.apollo import Entity, zset, relate
 #      }
 # this is how we can verify
 
-##################
+####################
+# PUBLIC Interface #
+####################
+
+# GET x.com/public/:target_id/active_streams - return a list of active streams
 
 # In general, we should try and use PUTs whenever possible. Idempotency
 # is an incredibly useful way of dealing with failures. Suppose a core
@@ -131,7 +135,7 @@ class Stream(Entity):
 
 class ActiveStream(Entity):
     prefix = 'active_stream'
-    fields = {'start_frame': int,  # frame we started at.
+    fields = {'total_frames': int,  # total frames completed.
               'buffer_frames': int,  # number of frames in buffer.xtc
               'auth_token': str,  # used by core to send requests
               'donor': str,  # the donor assigned
@@ -491,6 +495,7 @@ class CoreFrameHandler(BaseHandler):
                 buffer_handle.write(filedata)
             active_stream.sadd('buffer_files', filename)
         active_stream.hincrby('buffer_frames', frame_count)
+        active_stream.hincrby('total_frames', total_frames)
 
         return self.set_status(200)
 
