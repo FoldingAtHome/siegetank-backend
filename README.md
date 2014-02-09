@@ -19,12 +19,13 @@ The major goals in the development of Siege Tank are:
 6. Emphasize convention over configuration  
 
 <h1> Server Dependencies </h1>
+Python requirements:  
 
 1. python 3.3
-2. redis
-3. bcrypt
-4. pymongo
-5. requests
+2. redis (pip)
+3. bcrypt (pip)
+4. pymongo (pip)
+5. requests (pip)
 
 <h1> Core Dependencies </h1>
 OpenMM Core:  
@@ -34,10 +35,17 @@ OpenMM Core:
 3. [cmake](http://www.cmake.org/cmake/resources/software.html)
 
 <h1> Tests </h1>
-
 Tests for the server can be ran using:
 
+```
 python -W ignore -m unittest
+```
+
+Tests for the core can be ran using:
+
+```
+cd core; mkdir build; cd build; make; ../tests/start_services; make tests
+```
 
 <h1> API </h1>
 

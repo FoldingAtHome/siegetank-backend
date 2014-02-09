@@ -781,7 +781,6 @@ class WorkServer(tornado.web.Application, RedisMixin):
         # processes!).
 
         stream_id = target.zrevpop('queue')
-        #stream_id = target.zrevrange('queue', 0, 0)[0]
         if stream_id:
             active_stream = ActiveStream.create(stream_id, db)
             active_stream.hset('buffer_frames', 0)
@@ -795,9 +794,6 @@ class WorkServer(tornado.web.Application, RedisMixin):
 
     # deactivates the stream on the workserver
     def deactivate_stream(self, stream_id):
-        #if not ActiveStream.exists(stream_id, self.db):
-        #    print('stream not active!', stream_id)
-        #    return
         active_stream = ActiveStream(stream_id, self.db)
 
         self.db.zrem('heartbeats', stream_id)
@@ -816,10 +812,6 @@ class WorkServer(tornado.web.Application, RedisMixin):
         # TODO: to a check to make sure the stream's status is OK. Check the
         # error count, if it's too high, then the stream is stopped
         target.zadd('queue', stream_id, frames_completed)
-
-    def push_stream_to_cc(stream_id):
-        pass
-
 
 #########################
 # Defined once globally #
