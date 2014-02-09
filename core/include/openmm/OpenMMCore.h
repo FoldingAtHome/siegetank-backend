@@ -26,6 +26,8 @@ public:
     /* get nanoseconds per day of the current simulation */
     float ns_per_day(long long steps_completed) const;
 
+    void check_state(const OpenMM::State &core_state) const;
+
 private:
 
     /* send _checkpoint_xml to the server safely. This method is idempotent.

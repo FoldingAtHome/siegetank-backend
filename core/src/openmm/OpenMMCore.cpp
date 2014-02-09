@@ -17,6 +17,7 @@
 #include <XTCWriter.h>
 #include <OpenMMCore.h>
 #include <kbhit.h>
+#include <StateTests.h>
 
 using namespace std;
 
@@ -89,7 +90,7 @@ void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
 }
 
 static void update_status(string target_id, string stream_id, int seconds_per_frame, 
-                          float ns_per_day, int frames, long long steps, ostream &out) {
+                          float ns_per_day, int frames, long long steps, ostream &out = cout) {
 
     int hours = seconds_per_frame/(60*60);
     int minutes = (seconds_per_frame-hours*60*60)/60;
@@ -229,6 +230,20 @@ void OpenMMCore::_send_saved_checkpoint() {
     _checkpoint_xml.clear();
 }
 
+
+void OpenMMCore::check_state(const OpenMM::State &core_state) const {
+
+    _ref_context->setState(core_state);
+    OpenMM::State reference_state = _ref_context->getState(
+        OpenMM::State::Energy | 
+        OpenMM::State::Forces);
+
+    StateTests::checkForNans(core_state);
+    StateTests::checkForDiscrepancies(core_state);
+    StateTests::compareForcesAndEnergies(reference_state, core_state);
+
+}
+
 void OpenMMCore::check_step(int current_step) {
     if(current_step > 0 && current_step % _frame_write_interval == 0) {
         OpenMM::State state = _core_context->getState(
@@ -239,6 +254,8 @@ void OpenMMCore::check_step(int current_step) {
             OpenMM::State::Forces);
 
         // todo: check against reference context.
+        check_state(state);
+
         state.getTime();
         OpenMM::Vec3 a,b,c;
         state.getPeriodicBoxVectors(a,b,c);
@@ -296,8 +313,7 @@ void OpenMMCore::main() {
         while(true) {
             if(current_step % 10 == 0) {
                 update_status(_target_id, _stream_id, tpf(current_step), ns_per_day(current_step),
-                              current_step/_frame_write_interval, current_step,
-                              cout);
+                              current_step/_frame_write_interval, current_step);
             }
             if(exit()) {
                 changemode(0);
@@ -317,8 +333,10 @@ void OpenMMCore::main() {
             _core_context->getIntegrator().step(1);
             current_step++;
         }
+        stop_stream();
     } catch(exception &e) {
+        stop_stream(e.what());
         cout << e.what() << endl;
     }
-    stop_stream();
+
 }
