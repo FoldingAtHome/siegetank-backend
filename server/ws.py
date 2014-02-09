@@ -491,6 +491,7 @@ class CoreFrameHandler(BaseHandler):
                 buffer_handle.write(filedata)
             active_stream.sadd('buffer_files', filename)
         active_stream.hincrby('buffer_frames', frame_count)
+
         return self.set_status(200)
 
 

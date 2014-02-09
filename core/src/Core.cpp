@@ -110,6 +110,7 @@ Core::Core(int checkpoint_send_interval,
            string engine_version) :
     _frame_send_interval(0),
     _checkpoint_send_interval(checkpoint_send_interval),
+    _heartbeat_interval(15),
     _logstream(_logstring),
     _session(NULL),
     _engine(engine),
@@ -119,6 +120,7 @@ Core::Core(int checkpoint_send_interval,
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
     _next_checkpoint_time = _start_time + _checkpoint_send_interval;
+    _next_heartbeat_time = _start_time + _heartbeat_interval;
 }
 
 Core::~Core() {
@@ -399,6 +401,16 @@ bool Core::should_send_checkpoint() {
     time_t current_time = time(NULL);
     if(current_time > _next_checkpoint_time) {
         _next_checkpoint_time = current_time + _checkpoint_send_interval;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool Core::should_heartbeat() {
+    time_t current_time = time(NULL);
+    if(current_time > _next_heartbeat_time) {
+        _next_heartbeat_time = current_time + _heartbeat_interval;
         return true;
     } else {
         return false;

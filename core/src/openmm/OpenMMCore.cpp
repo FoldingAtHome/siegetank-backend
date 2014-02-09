@@ -244,7 +244,7 @@ void OpenMMCore::check_state(const OpenMM::State &core_state) const {
 
 }
 
-void OpenMMCore::check_step(int current_step) {
+void OpenMMCore::check_frame_write(int current_step) {
     if(current_step > 0 && current_step % _frame_write_interval == 0) {
         OpenMM::State state = _core_context->getState(
             OpenMM::State::Positions | 
@@ -283,9 +283,6 @@ void OpenMMCore::check_step(int current_step) {
         OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
         _checkpoint_xml = checkpoint.str();
     }
-    if(should_send_checkpoint()) {
-       _send_saved_checkpoint();
-    }
 }
 
 int OpenMMCore::tpf(long long steps_completed) const {
@@ -319,7 +316,6 @@ void OpenMMCore::main() {
                 changemode(0);
                 break;
             }
-            /*
             if(kbhit()) {
                 // handle keyboard events
                 // c sends the previous checkpoints
@@ -328,8 +324,13 @@ void OpenMMCore::main() {
                     _send_saved_checkpoint();
                 }
             }
-            */
-            check_step(current_step);
+            check_frame_write(current_step);
+            if(should_heartbeat()) {
+                send_heartbeat();
+            }
+            if(should_send_checkpoint()) {
+               _send_saved_checkpoint();
+            }
             _core_context->getIntegrator().step(1);
             current_step++;
         }

@@ -63,6 +63,10 @@ void test_should_send_checkpoint() {
     }
 }
 
+void test_should_heartbeat() {
+    
+}
+
 void test_initialize_and_start() { 
     Core core(150, "openmm", "6.0");
     Poco::URI uri("https://127.0.0.1:8980/core/assign");

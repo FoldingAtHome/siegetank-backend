@@ -72,6 +72,9 @@ public:
     /* return true if we should automatically send checkpoint */
     bool should_send_checkpoint();
 
+    /* return true if we should automatically send heartbeat */
+    bool should_heartbeat();
+
 protected:
 
     /* how often we send frames in steps */
@@ -79,9 +82,6 @@ protected:
 
     /* number of steps we take before writing out a frame */
     int _frame_write_interval;
-
-    /* how often we send checkpoints in seconds */
-    const int _checkpoint_send_interval;
 
     std::ostringstream _logstring;
 
@@ -96,8 +96,17 @@ protected:
 
 private:
 
-    /* used by should_send_checkpoint() to determine if we need to checkpoint*/
+    /* used by should_send_checkpoint() to determine if we need to checkpoint */
     int _next_checkpoint_time;
+
+    /* used by should_heartbeat() to determine when we should send a heartbeat */
+    int _next_heartbeat_time;
+
+    /* how often we send checkpoints in seconds */
+    const int _checkpoint_send_interval;
+
+    /* how often we send heartbeats in seconds */
+    const int _heartbeat_interval;
 
     /* Get an assignment from the command center, and initializes _session so
     we can start the stream the from the workserver */
