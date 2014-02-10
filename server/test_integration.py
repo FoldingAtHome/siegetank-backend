@@ -41,13 +41,13 @@ class Test(tornado.testing.AsyncTestCase):
         self.cc_httpserver = tornado.httpserver.HTTPServer(
             self.cc,
             io_loop=self.io_loop,
-            ssl_options={'certfile': 'certs/cc.crt',
-                         'keyfile': 'certs/cc.key'})
+            ssl_options={'certfile': 'certs/public.crt',
+                         'keyfile': 'certs/private.pem'})
         self.ws_httpserver = tornado.httpserver.HTTPServer(
             self.ws,
             io_loop=self.io_loop,
-            ssl_options={'certfile': 'certs/ws.crt',
-                         'keyfile': 'certs/ws.key'})
+            ssl_options={'certfile': 'certs/public.crt',
+                         'keyfile': 'certs/private.pem'})
         self.cc_httpserver.listen(self.cc_hport)
         self.ws_httpserver.listen(self.ws_hport)
 
@@ -254,15 +254,15 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             v['httpserver'] = tornado.httpserver.HTTPServer(
                 v['ws'],
                 io_loop=self.io_loop,
-                ssl_options={'certfile': 'certs/ws.crt',
-                             'keyfile': 'certs/ws.key'})
+                ssl_options={'certfile': 'certs/public.crt',
+                             'keyfile': 'certs/private.pem'})
             v['httpserver'].listen(v['hport'])
 
         self.cc_httpserver = tornado.httpserver.HTTPServer(
             self.cc,
             io_loop=self.io_loop,
-            ssl_options={'certfile': 'certs/cc.crt',
-                         'keyfile': 'certs/cc.key'})
+            ssl_options={'certfile': 'certs/public.crt',
+                         'keyfile': 'certs/private.pem'})
         self.cc_httpserver.listen(self.cc_hport)
 
     def tearDown(self):
