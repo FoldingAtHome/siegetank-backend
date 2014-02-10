@@ -24,14 +24,14 @@ def is_domain(url):
 
 def init_redis(redis_port, redis_pass=None,
                appendonly=False, appendfilename=None):
-    ''' Spawn a redis subprocess port and returns a redis client.
+    """ Spawn a redis subprocess port and returns a redis client.
 
         Parameters:
         redis_port - port of the redis server
         redis_pass - authenticate token. All other cilents must use
                      this token before they can send messages
 
-    '''
+    """
     redis_port = str(redis_port)
     redis_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                               '..', 'redis', 'src', 'redis-server')

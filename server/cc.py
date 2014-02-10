@@ -671,8 +671,8 @@ class CommandCenter(tornado.web.Application, RedisMixin):
         self.cc_pass = cc_pass
         self.name = cc_name
         self.db = init_redis(redis_port, redis_pass,
-                                    appendonly=appendonly,
-                                    appendfilename='aof_'+self.name)
+                             appendonly=appendonly,
+                             appendfilename='aof_'+self.name)
         self.ws_dbs = {}
         self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
 
@@ -784,7 +784,9 @@ def start():
     tornado.options.define('internal_http_port', type=int)
     tornado.options.define('external_http_port', type=int)
     tornado.options.define('cc_pass', type=str)
-
+    tornado.options.define('ssl_certfile', type=str)
+    tornado.options.define('ssl_key', type=str)
+    tornado.options.define('ssl_ca_certs', type=str)
     conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', 'cc.conf')
     tornado.options.define('config_file', default=conf_path, type=str)
@@ -805,12 +807,14 @@ def start():
                                 appendonly=True)
 
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                             '..', 'certs', 'cc.crt')
+                             '..', options.ssl_certfile)
     key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                            '..', 'certs', 'cc.key')
+                            '..', options.ssl_key)
+    ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                           '..', options.ssl_ca_certs)
 
     cc_server = tornado.httpserver.HTTPServer(cc_instance, ssl_options={
-        'certfile': cert_path, 'keyfile': key_path})
+        'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
 
     cc_server.bind(internal_http_port)
     cc_server.start(0)

@@ -833,6 +833,9 @@ def start(*args, **kwargs):
     tornado.options.define('url', type=str)
     tornado.options.define('internal_http_port', type=int)
     tornado.options.define('external_http_port', type=int)
+    tornado.options.define('ssl_certfile', type=str)
+    tornado.options.define('ssl_key', type=str)
+    tornado.options.define('ssl_ca_certs', type=str)
     tornado.options.define('command_centers', type=dict)
     conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', 'ws.conf')
@@ -858,12 +861,14 @@ def start(*args, **kwargs):
                              appendonly=True)
 
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                             '..', 'certs', 'ws.crt')
+                             '..', options.ssl_certfile)
     key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                            '..', 'certs', 'ws.key')
+                            '..', options.ssl_key)
+    ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                           '..', options.ssl_ca_certs)
 
     ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
-        'certfile': cert_path, 'keyfile': key_path})
+        'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
 
     ws_server.bind(internal_http_port)
     ws_server.start(0)
