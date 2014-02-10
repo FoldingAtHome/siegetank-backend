@@ -37,7 +37,7 @@ int main(int argc, const char * argv[]) {
     // parse options here
     ez::ezOptionParser opt;
 
-    opt.overview = "Demo of pretty printing everything parsed.";
+    opt.overview = "Folding@Home OpenMM Core";
     opt.syntax = "ocore [OPTIONS]";
     opt.example = "ocore --cc https://127.0.0.1:8980/core/assign --checkpoint 600\n";
 

@@ -125,7 +125,7 @@ static void update_status(string target_id, string stream_id, int seconds_per_fr
     out << setw(10) << target_id.substr(0,8) 
         << setw(10) << stream_id.substr(0,8)
         << setw(10) << tpf.str() << "  "
-        << setw(7) << std::fixed << std::setprecision(3) << ns_per_day
+        << setw(7) << std::fixed << std::setprecision(2) << ns_per_day
         << setw(8) << frames
         << setw(11) << steps;
     out << flush;
