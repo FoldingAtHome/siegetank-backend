@@ -25,6 +25,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <locale>
 
 #include <signal.h>
 #include "Core.h"
@@ -131,16 +132,35 @@ bool Core::exit() const {
     return _global_exit;
 }
 
+// see if host is a domain name or an ip address by checking the last char
+static bool is_domain(string host) {
+    char c = *host.rbegin();
+    if(isdigit(c))
+        return false;
+    else
+        return true;
+}
+
 void Core::_initialize_session(const Poco::URI &cc_uri) {
+    Poco::Net::Context::VerificationMode verify_mode;
+    if(is_domain(cc_uri.getHost())) {
+        cout << "USING SSL:" << " " << cc_uri.getHost() << endl;
+        verify_mode = Poco::Net::Context::VERIFY_RELAXED;
+    } else {
+        verify_mode = Poco::Net::Context::VERIFY_NONE;
+    }
+
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
         Poco::Net::Context::CLIENT_USE, "", 
-        Poco::Net::Context::VERIFY_NONE, 9, false);
+        verify_mode, 9, false);
     SSL_CTX *ctx = context->sslContext();
-    std::ifstream t("rootcert.pem");
-    std::string str((std::istreambuf_iterator<char>(t)),
-                     std::istreambuf_iterator<char>());
+    std::string ssl_string;
+
+    // hacky as hell :)
+    #include <root_certs.h>
+
     stringstream ss;
-    ss << str;
+    ss << ssl_string;
     read_cert_into_ctx(ss, ctx);
 
     cout << "connecting to cc..." << flush;
@@ -151,38 +171,44 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     string ws_token;
     
     Poco::JSON::Parser parser;
+    try {
+        cout << "being assigned a ws..." << flush;
+        Poco::Net::HTTPRequest request("POST", cc_uri.getPath());
+        string body;
+        body += "{\"engine\": \""+_engine+"\",";
+        body += "\"engine_version\": \""+_engine_version+"\",";
+        stringstream core_version;
+        core_version << CORE_VERSION;
+        body += "\"core_version\": \""+core_version.str()+"\"}";
+        request.setContentLength(body.length());
+        cc_session.sendRequest(request) << body;
+        Poco::Net::HTTPResponse response;
+        istream &content_stream = cc_session.receiveResponse(response);
+        if(response.getStatus() != 200) {
+            throw std::runtime_error("Could not get an assignment from CC");
+        }
+        cout << "ok" << flush;
 
-    {
-    cout << "getting assigned a ws..." << flush;
-    Poco::Net::HTTPRequest request("POST", cc_uri.getPath());
-    string body;
-    body += "{\"engine\": \""+_engine+"\",";
-    body += "\"engine_version\": \""+_engine_version+"\",";
-    stringstream core_version;
-    core_version << CORE_VERSION;
-    body += "\"core_version\": \""+core_version.str()+"\"}";
-    request.setContentLength(body.length());
-    cc_session.sendRequest(request) << body;
-    Poco::Net::HTTPResponse response;
-    istream &content_stream = cc_session.receiveResponse(response);
-    if(response.getStatus() != 200) {
-        throw std::runtime_error("Could not get an assignment from CC");
-    }
-    cout << "ok" << flush;
-
-    string content;
-    Poco::StreamCopier::copyToString(content_stream, content);
-    Poco::Dynamic::Var result = parser.parse(content);
-    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-    ws_uri = object->get("uri").convert<std::string>();
-    _auth_token = object->get("token").convert<std::string>();
-    _frame_write_interval = object->get("steps_per_frame").convert<int>();
-    parser.reset();
-    }
+        {
+        string content;
+        Poco::StreamCopier::copyToString(content_stream, content);
+        Poco::Dynamic::Var result = parser.parse(content);
+        Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
+        ws_uri = object->get("uri").convert<std::string>();
+        _auth_token = object->get("token").convert<std::string>();
+        _frame_write_interval = object->get("steps_per_frame").convert<int>();
+        parser.reset();
+        }
     
     _ws_uri = Poco::URI(ws_uri);
     _session = new Poco::Net::HTTPSClientSession(_ws_uri.getHost(), 
         _ws_uri.getPort(), context);
+
+
+    } catch(Poco::Net::SSLException &e) {
+        cout << e.displayText() << endl;
+        throw;
+    }
 }
 
 void Core::start_stream(const Poco::URI &cc_uri, 
