@@ -142,7 +142,7 @@ static void status_header(ostream &out) {
     out << "\n";
 }
 
-void OpenMMCore::initialize(string cc_uri) {
+void OpenMMCore::initialize(string cc_uri, string donor_id="") {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
     registerCpuPlatform();

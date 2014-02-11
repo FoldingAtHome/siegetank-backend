@@ -52,9 +52,126 @@ class Test(tornado.testing.AsyncTestCase):
         self.ws_httpserver.listen(self.ws_hport)
 
     def tearDown(self):
+        self.ws.db.flushdb()
+        self.cc.db.flushdb()
         self.cc_httpserver.stop()
         self.ws_httpserver.stop()
         self.cc.mdb.managers.drop()
+        self.cc.mdb.donors.drop()
+
+    def test_donor_token_assign(self):
+        # register a manager account
+        client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
+        url = '127.0.0.1'
+        email = 'proteneer@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password
+        }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=common.is_domain(url))
+        rep = self.wait()
+        self.assertEqual(rep.code, 200)
+        auth = json.loads(rep.body.decode())['token']
+        headers = {'Authorization': auth}
+
+        fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
+                              for i in range(4))
+        description = "Diwakar and John's top secret project"
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
+            }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=common.is_domain(url), headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
+        target_id = json.loads(reply.body.decode())['target_id']
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        target_ids = set(json.loads(reply.body.decode())['targets'])
+        self.assertEqual(target_ids, {target_id})
+
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
+        # test POSTing 5 streams
+        post_streams = set()
+
+        stream_binaries = {}
+
+        for i in range(5):
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
+            rand_bin = base64.b64encode(os.urandom(1024)).decode()
+            body = {'target_id': target_id,
+                    'files': {"state.xml.gz.b64": rand_bin}
+                    }
+
+            client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                         validate_cert=common.is_domain(url),
+                         headers=headers)
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            stream_id = json.loads(reply.body.decode())['stream_id']
+            post_streams.add(stream_id)
+            stream_binaries[stream_id] = rand_bin
+
+        ######################################
+        # test assigning using a donor token #
+        ######################################
+
+        # register a donor account
+        client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
+        username = 'random_donor'
+        email = 'random_email@gmail.com'
+        password = 'test_password'
+        body = {
+            'username': username,
+            'email': email,
+            'password': password
+        }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/donors'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=common.is_domain(url))
+        rep = self.wait()
+        self.assertEqual(rep.code, 200)
+        auth = json.loads(rep.body.decode())['token']
+        # test good donor token
+        body = {
+            'donor_token': auth,
+            'engine': 'openmm',
+            'engine_version': '6.0'
+        }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     body=json.dumps(body), method='POST')
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
+        # test bad donor token
+        body = {
+            'donor_token': '23p5oi235opigibberish',
+            'engine': 'openmm',
+            'engine_version': '6.0'
+        }
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     body=json.dumps(body), method='POST')
+        reply = self.wait()
+        self.assertEqual(reply.code, 400)
 
     def test_post_target_and_streams(self):
         # register an account
@@ -389,3 +506,4 @@ if __name__ == '__main__':
     #suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
     #suite.addTest(WSInitTestCase())
     unittest.TextTestRunner(verbosity=3).run(suite)
+    #pass

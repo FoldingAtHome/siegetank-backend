@@ -18,7 +18,7 @@ public:
     or 2) send a checkpoint */
     void check_frame_write(int current_step);
 
-    void initialize(std::string uri);
+    void initialize(std::string uri, std::string donor_token="");
 
     /* get time per frame in seconds */
     int tpf(long long steps_completed) const;

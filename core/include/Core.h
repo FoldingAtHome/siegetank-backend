@@ -85,6 +85,7 @@ protected:
 
     std::ostringstream _logstring;
 
+    /* where the log data is being piped to */
     std::ostream& _logstream;
 
     /* time the job started */
@@ -96,26 +97,23 @@ protected:
 
 private:
 
-    /* used by should_send_checkpoint() to determine if we need to checkpoint */
-    int _next_checkpoint_time;
-
-    /* used by should_heartbeat() to determine when we should send a heartbeat */
-    int _next_heartbeat_time;
-
     /* how often we send checkpoints in seconds */
     const int _checkpoint_send_interval;
 
     /* how often we send heartbeats in seconds */
     const int _heartbeat_interval;
 
+    /* used by should_send_checkpoint() to determine if we need to checkpoint */
+    int _next_checkpoint_time;
+
+    /* used by should_heartbeat() to determine when we should send a heartbeat */
+    int _next_heartbeat_time;
+
     /* Get an assignment from the command center, and initializes _session so
     we can start the stream the from the workserver */
     void _initialize_session(const Poco::URI &cc_uri);
 
     Poco::Net::HTTPSClientSession* _session;
-
-    void _send_files_to_uri(const std::string &path, 
-        const std::map<std::string, std::string> &files, bool gzip) const;
 
     Poco::URI _ws_uri;
 

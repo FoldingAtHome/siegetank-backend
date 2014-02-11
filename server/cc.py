@@ -308,6 +308,7 @@ class AssignHandler(BaseHandler):
                 #"core_id": core_id,
                 "engine": "openmm", (lowercase)
                 "engine_version": "5.2"
+                "donor_token": "token"
             }
 
         Reply:
@@ -333,6 +334,17 @@ class AssignHandler(BaseHandler):
         self.set_status(400)
         #core_id = self.request.body['core_id']
         content = json.loads(self.request.body.decode())
+        if 'donor_token' in content:
+            donor_token = content['donor_token']
+            mdb = self.application.mdb
+            query = mdb.donors.find_one({'token': donor_token},
+                                        fields=['_id'])
+            if not query:
+                return self.write(json.dumps({'error': 'bad donor token'}))
+            donor_id = query['_id']
+        else:
+            donor_id = None
+
         engine = content['engine']
         if engine != 'openmm':
             return self.write(json.dumps({'error': 'engine must be openmm'}))
@@ -356,7 +368,7 @@ class AssignHandler(BaseHandler):
             ws_db = self.application.get_ws_db(ws_name)
             token = str(uuid.uuid4())
             stream_id = server.ws.WorkServer.activate_stream(
-                target_id, token, ws_db)
+                target_id, token, ws_db, donor_id)
             if stream_id:
                 workserver = WorkServer(ws_name, self.db)
                 ws_url = workserver.hget('url')

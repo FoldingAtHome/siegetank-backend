@@ -138,7 +138,7 @@ class ActiveStream(Entity):
     fields = {'total_frames': int,  # total frames completed.
               'buffer_frames': int,  # number of frames in buffer.xtc
               'auth_token': str,  # used by core to send requests
-              'donor': str,  # the donor assigned
+              'donor': str,  # the donor assigned ? support lookup?
               'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
               'frame_hash': str,  # md5sum of the received frame
@@ -148,9 +148,9 @@ class ActiveStream(Entity):
 
 class Target(Entity):
     prefix = 'target'
-    fields = {'queue': zset(str),    # queue of inactive streams
-              'stream_files': {str},        # set of filenames for the stream
-              'target_files': {str},        # set of filenames for the target
+    fields = {'queue': zset(str),  # queue of inactive streams
+              'stream_files': {str},  # set of filenames for the stream
+              'target_files': {str},  # set of filenames for the target
               }
 
 
@@ -160,8 +160,9 @@ class CommandCenter(Entity):
               'http_port': str  # http port
               }
 
+#Target.add_lookup('owner', injective=False)
 ActiveStream.add_lookup('auth_token')
-Target.add_lookup('owner')
+ActiveStream.add_lookup('donor', injective=False)
 relate(Target, 'streams', {Stream}, 'target')
 relate(Target, 'active_streams', {ActiveStream})
 
@@ -772,11 +773,9 @@ class WorkServer(tornado.web.Application, RedisMixin):
             self.deactivate_stream(dead_stream)
 
     @staticmethod
-    def activate_stream(target_id, token, db):
+    def activate_stream(target_id, token, db, donor_id=None):
         """ Activate and return the highest priority stream belonging to target
         target_id. This is called directly by the CC to start a stream.
-
-        TODO: zrevrange and zrem needs to be handled atomically and locked. 
 
         """
         target = Target(target_id, db)
@@ -793,6 +792,8 @@ class WorkServer(tornado.web.Application, RedisMixin):
             active_stream.hset('auth_token', token)
             active_stream.hset('steps', 0)
             active_stream.hset('start_time', time.time())
+            if donor_id:
+                active_stream.hset('donor', donor_id)
             increment = tornado.options.options['heartbeat_increment']
             db.zadd('heartbeats', stream_id, time.time() + increment)
 

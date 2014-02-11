@@ -110,13 +110,15 @@ Core::Core(int checkpoint_send_interval,
            string engine,
            string engine_version) :
     _frame_send_interval(0),
-    _checkpoint_send_interval(checkpoint_send_interval),
-    _heartbeat_interval(15),
+    _frame_write_interval(0),
     _logstream(_logstring),
+    _checkpoint_send_interval(checkpoint_send_interval),
+    _start_time(time(NULL)),
+    _heartbeat_interval(15),
     _session(NULL),
     _engine(engine),
-    _engine_version(engine_version),
-    _start_time(time(NULL)) {
+    _engine_version(engine_version) {
+
     _global_exit = false;
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
@@ -204,7 +206,6 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     _session = new Poco::Net::HTTPSClientSession(_ws_uri.getHost(), 
         _ws_uri.getPort(), context);
 
-
     } catch(Poco::Net::SSLException &e) {
         cout << e.displayText() << endl;
         throw;
@@ -276,37 +277,6 @@ void Core::start_stream(const Poco::URI &cc_uri,
     }
 }
 
-void Core::_send_files_to_uri(const string &path, 
-    const std::map<std::string, std::string> &files, bool gzip) const {
-    Poco::Net::HTTPRequest request("PUT", path);
-    string message;
-    message += "{\"files\":{";
-    for(map<string, string>::const_iterator it=files.begin();
-        it != files.end(); it++) {
-        string filename = it->first;
-        string filedata = it->second;
-        if(gzip) {
-            filedata = encode_gz(filedata);
-            filename += ".gz";
-        }
-        filedata = encode_b64(filedata);
-        if(it != files.begin())
-            message += ",";
-        message += "\""+filename+".b64\"";
-        message += ":";
-        message += "\""+filedata+"\"";
-    }
-    message += "}}";
-    request.set("Authorization", _auth_token);
-    request.setContentLength(message.length());
-    _session->sendRequest(request) << message;
-    Poco::Net::HTTPResponse response;
-    _session->receiveResponse(response);
-    if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::_send_files_to_uri bad status code");
-    }
-}
-
 void Core::send_frame_files(const map<string, string> &files, 
     int frame_count, bool gzip) const {
 
@@ -339,7 +309,7 @@ void Core::send_frame_files(const map<string, string> &files,
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::_send_files_to_uri bad status code");
+        throw std::runtime_error("Core::send_frame_files bad status code");
     }
 }
 
@@ -371,7 +341,7 @@ void Core::send_checkpoint_files(const map<string, string> &files,
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::_send_files_to_uri bad status code");
+        throw std::runtime_error("Core::send_checkpoint_files bad status code");
     }
 }
 
