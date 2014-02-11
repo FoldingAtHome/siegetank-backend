@@ -780,7 +780,6 @@ def start():
     tornado.options.define('name', type=str)
     tornado.options.define('redis_port', type=int)
     tornado.options.define('redis_pass', type=str)
-    tornado.options.define('url', type=str)
     tornado.options.define('internal_http_port', type=int)
     tornado.options.define('external_http_port', type=int)
     tornado.options.define('cc_pass', type=str)
