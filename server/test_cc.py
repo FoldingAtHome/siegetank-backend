@@ -34,6 +34,40 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
 
     def tearDown(self):
         self.cc.mdb.managers.drop()
+        self.cc.mdb.donors.drop()
+
+    def test_add_donor(self):
+        username = 'jesse_v'
+        email = 'jv@jv.com'
+        password = 'test_pw'
+        body = {
+            'username': username,
+            'email': email,
+            'password': password
+        }
+        rep = self.fetch('/donors', method='POST', body=json.dumps(body))
+        self.assertEqual(rep.code, 200)
+        query = self.cc.mdb.donors.find_one({'_id': username})
+        stored_hash = query['password_hash']
+        stored_token = query['token']
+        self.assertEqual(stored_hash,
+                         bcrypt.hashpw(password.encode(), stored_hash))
+        reply_token = json.loads(rep.body.decode())['token']
+        self.assertEqual(stored_token, reply_token)
+
+        # test auth
+        for i in range(5):
+            body = {
+                'username': username,
+                'password': password
+            }
+            rep = self.fetch('/donors/auth', method='POST',
+                             body=json.dumps(body))
+            self.assertEqual(rep.code, 200)
+            reply_token = json.loads(rep.body.decode())['token']
+            query = self.cc.mdb.donors.find_one({'_id': username})
+            stored_token = query['token']
+            self.assertEqual(reply_token, stored_token)
 
     def test_add_manager(self):
         email = 'proteneer@gmail.com'
@@ -58,7 +92,8 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                 'email': email,
                 'password': password
             }
-            rep = self.fetch('/auth', method='POST', body=json.dumps(body))
+            rep = self.fetch('/managers/auth', method='POST',
+                             body=json.dumps(body))
             self.assertEqual(rep.code, 200)
             reply_token = json.loads(rep.body.decode())['token']
             query = self.cc.mdb.managers.find_one({'_id': email})

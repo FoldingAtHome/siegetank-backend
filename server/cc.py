@@ -38,7 +38,7 @@ import server.ws
 
 # The command center manages several work servers in addition to managing the
 # stats system for each work server. A single command center manages a single
-# engine type (eg. OpenMM). 
+# engine type (eg. OpenMM).
 
 # CC uses Antirez's redis extensively as NoSQL store mainly because of its
 # blazing fast speed. Binary blobs such as states, systems, and frames are
@@ -61,7 +61,8 @@ import server.ws
 # [A] Requires authentication
 # [P] Publicly accessible (possibly limited info)
 
-# [P] POST x.com/auth - Authenticate the user, returning an authorization token
+# [P] POST x.com/managers/auth - Authenticate the F@h manager
+# [P] POST x.com/donors/auth - Authenticate the F@h donor
 
 # [A] POST x.com/targets - add a target
 # [P] GET x.com/targets - if Authenticated, retrieves User's targets
@@ -115,7 +116,7 @@ relate(Target, 'striated_ws', {WorkServer})
 
 
 def authenticated(method):
-    """ Decorate handlers with this that require managers to login. Based off
+    """ Decorator for handlers that require manager authentication. Based off
     of tornado's authenticated method.
 
     """
@@ -135,17 +136,92 @@ def authenticated(method):
     return wrapper
 
 
-class AuthHandler(tornado.web.RequestHandler):
+class AuthDonorHandler(tornado.web.RequestHandler):
+    def post(self):
+        """ Generate a new authorization token for the donor
+
+        Request: {
+            "username": userid,
+            "password": password
+        }
+
+        Reply: {
+            "token": token
+        }
+
+        """
+        self.set_status(400)
+        content = json.loads(self.request.body.decode())
+        username = content['username']
+        password = content['password']
+        mdb = self.application.mdb
+        query = mdb.donors.find_one({'_id': username},
+                                      fields=['password_hash'])
+        stored_hash = query['password_hash']
+        if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
+            new_token = str(uuid.uuid4())
+            mdb.donors.update({'_id': username},
+                                {'$set': {'token': new_token}})
+        else:
+            return self.status(401)
+        self.set_status(200)
+        self.write(json.dumps({'token': new_token}))
+
+
+class AddDonorHandler(tornado.web.RequestHandler):
+    def post(self):
+        """ Add a F@H Donor
+
+        Request: {
+            "username": jesse_v,
+            "password": jesse's password
+            "email": 'jv@gmail.com'
+        }
+
+        reply: {
+            "token": token;
+        }
+
+        The donor can optionally choose to use token as a commandline arg to
+        when starting the cores. This way, all work is then associated with
+        the donor.
+
+        """
+        self.set_status(400)
+        if self.request.remote_ip != '127.0.0.1':
+            return self.set_status(401)
+        content = json.loads(self.request.body.decode())
+        username = content['username']
+        password = content['password']
+        email = content['email']
+        hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+        token = str(uuid.uuid4())
+        db_body = {'_id': username,
+                   'password_hash': hash_password,
+                   'token': token,
+                   'email': email}
+        donors = self.application.mdb.donors
+        try:
+            donors.insert(db_body)
+            # also check and see if email exists
+        except:
+            self.write(json.dumps({'error': content['donor_id']+' exists'}))
+
+        self.set_status(200)
+        self.write(json.dumps({'token': token}))
+
+
+class AuthManagerHandler(tornado.web.RequestHandler):
     def post(self):
         """ Generate a new authorization token for the user
 
         Request: {
-            'email': proteneer@gmail.com,
-            'password': password
+            "email": proteneer@gmail.com,
+            "password": password
         }
 
         Reply: {
-            token: token
+            "token": token
         }
 
         """
@@ -187,14 +263,11 @@ class AddManagerHandler(tornado.web.RequestHandler):
         token = str(uuid.uuid4())
         password = content['password']
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-
         db_body = {'_id': content['email'],
                    'password_hash': hash_password,
                    'token': token
                    }
-
-        mdb = self.application.mdb
-        managers = mdb.managers
+        managers = self.application.mdb.managers
         try:
             managers.insert(db_body)
         except pymongo.errors.DuplicateKeyError:
@@ -684,8 +757,10 @@ class CommandCenter(tornado.web.Application, RedisMixin):
 
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
-            (r'/auth', AuthHandler),
+            (r'/managers/auth', AuthManagerHandler),
             (r'/managers', AddManagerHandler),
+            (r'/donors/auth', AuthDonorHandler),
+            (r'/donors', AddDonorHandler),
             (r'/targets', TargetHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),

@@ -10,7 +10,7 @@ import base64
 import gzip
 
 
-def add_test_user():
+def add_manager():
     reply = requests.post('https://127.0.0.1:8980/managers',
                           data=json.dumps({'email': 'test_user@gmail.com',
                                            'password': 'test_pass'}),
@@ -18,8 +18,17 @@ def add_test_user():
     assert reply.status_code == 200
 
 
-def auth():
-    reply = requests.post('https://127.0.0.1:8980/auth',
+def add_donor():
+    reply = requests.post('https://127.0.0.1:8980/donors',
+                          data=json.dumps({'username': 'test_donor',
+                                           'email': 'test_donor@gmail.com',
+                                           'password': 'test_donor_pass'}),
+                          verify=False)
+    assert reply.status_code == 200
+
+
+def auth_manager():
+    reply = requests.post('https://127.0.0.1:8980/managers/auth',
                           data=json.dumps({'email': 'test_user@gmail.com',
                                            'password': 'test_pass'}),
                           verify=False)
@@ -85,10 +94,15 @@ if __name__ == '__main__':
         log.write(str(pid2.pid))
 
     try:
-        add_test_user()
+        add_manager()
     except Exception:
         pass
-    token = auth()
+    try:
+        add_donor()
+    except Exception:
+        pass
+
+    token = auth_manager()
     target_id = post_target(token)
     state_url = 'http://www.stanford.edu/~yutongz/state.xml.gz'
     state_xml = gzip.decompress(requests.get(state_url).content)
