@@ -766,6 +766,10 @@ class CommandCenter(tornado.web.Application, RedisMixin):
         self.ws_dbs = {}
         self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
 
+        # set up indexes
+
+        self.mdb.donors.ensure_index("token")
+
         self.targets_folder = targets_folder
         #if not os.path.exists('files'):
         #    os.makedirs('files')

@@ -5,6 +5,15 @@
 #include <iostream>
 #include <signal.h>
 #include <ctime>
+#include <sstream>
+
+#include <Poco/Net/Context.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPResponse.h>
+#include <Poco/Net/HTTPSClientSession.h>
+#include <Poco/JSON/Parser.h>
+#include <Poco/JSON/Object.h>
+#include <Poco/StreamCopier.h>
 
 using namespace std;
 
@@ -63,8 +72,44 @@ void test_should_send_checkpoint() {
     }
 }
 
-void test_should_heartbeat() {
+void test_donor_token() {
+    Core core(150, "openmm", "6.0");
+    Poco::URI uri("https://127.0.0.1:8980");
+
+    Poco::Net::Context::Ptr context = new Poco::Net::Context(
+        Poco::Net::Context::CLIENT_USE, "", 
+        Poco::Net::Context::VERIFY_NONE, 9, false);
+    Poco::Net::HTTPSClientSession cc_session(uri.getHost(),
+                                             uri.getPort(),
+                                             context);
+    Poco::Net::HTTPRequest request("POST", "/donors/auth");
+    string body;
+    body += "{\"username\": \"test_donor\", \"password\": \"test_donor_pass\"}";
+    request.setContentLength(body.length());
+    cc_session.sendRequest(request) << body;
     
+    Poco::Net::HTTPResponse response;
+    istream &content_stream = cc_session.receiveResponse(response);
+    if(response.getStatus() != 200) {
+        throw std::runtime_error("Bad authorizaton token!");
+    }
+    string content;
+    Poco::StreamCopier::copyToString(content_stream, content);
+
+    Poco::JSON::Parser parser;
+    Poco::Dynamic::Var result = parser.parse(content);
+    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
+    string token;
+    token = object->get("token").convert<std::string>();
+
+    core._donor_token = token;
+    map<string, string> target_files;
+    map<string, string> stream_files;
+    string stream_id;
+    string target_id;
+
+    Poco::URI uri2("https://127.0.0.1:8980/core/assign");
+    core.start_stream(uri2, stream_id, target_id, target_files, stream_files);
 }
 
 void test_initialize_and_start() { 
@@ -143,6 +188,7 @@ void test_initialize_and_start() {
 int main() {
     test_sigint_signal();
     test_sigterm_signal();
+    test_donor_token();
     test_should_send_checkpoint();
     test_initialize_and_start();
     return 0;

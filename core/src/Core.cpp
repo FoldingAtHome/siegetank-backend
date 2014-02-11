@@ -179,6 +179,11 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
         string body;
         body += "{\"engine\": \""+_engine+"\",";
         body += "\"engine_version\": \""+_engine_version+"\",";
+
+        if(_donor_token.length() > 0) {
+            body += "\"donor_token\": \""+_donor_token+"\",";
+        }
+
         stringstream core_version;
         core_version << CORE_VERSION;
         body += "\"core_version\": \""+core_version.str()+"\"}";

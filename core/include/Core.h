@@ -75,6 +75,9 @@ public:
     /* return true if we should automatically send heartbeat */
     bool should_heartbeat();
 
+    /* public members are "bad", but then again I'm now a pythonista */
+    std::string _donor_token;
+
 protected:
 
     /* how often we send frames in steps */
