@@ -156,12 +156,12 @@ class AuthDonorHandler(tornado.web.RequestHandler):
         password = content['password']
         mdb = self.application.mdb
         query = mdb.donors.find_one({'_id': username},
-                                      fields=['password_hash'])
+                                    fields=['password_hash'])
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
             mdb.donors.update({'_id': username},
-                                {'$set': {'token': new_token}})
+                              {'$set': {'token': new_token}})
         else:
             return self.status(401)
         self.set_status(200)
@@ -194,18 +194,22 @@ class AddDonorHandler(tornado.web.RequestHandler):
         username = content['username']
         password = content['password']
         email = content['email']
+        donors = self.application.mdb.donors
+        # see if email exists:
+        query = donors.find_one({'email': email})
+        if query:
+            return self.write(json.dumps({'error': 'email exists in db!'}))
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
         token = str(uuid.uuid4())
         db_body = {'_id': username,
                    'password_hash': hash_password,
                    'token': token,
                    'email': email}
-        donors = self.application.mdb.donors
+
         try:
             donors.insert(db_body)
-            # also check and see if email exists
         except:
-            self.write(json.dumps({'error': content['donor_id']+' exists'}))
+            return self.write(json.dumps({'error': username+' exists'}))
 
         self.set_status(200)
         self.write(json.dumps({'token': token}))
@@ -247,12 +251,12 @@ class AddManagerHandler(tornado.web.RequestHandler):
         """ Add a PG member as a Manager.
 
         Request: {
-            'email': proteneer@gmail.com,
-            'password': password,
+            "email": proteneer@gmail.com,
+            "password": password,
         }
 
         Reply: {
-            token: token
+            "token": token
         }
 
         """
@@ -261,9 +265,10 @@ class AddManagerHandler(tornado.web.RequestHandler):
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
         token = str(uuid.uuid4())
+        email = content['email']
         password = content['password']
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-        db_body = {'_id': content['email'],
+        db_body = {'_id': email,
                    'password_hash': hash_password,
                    'token': token
                    }
@@ -271,7 +276,7 @@ class AddManagerHandler(tornado.web.RequestHandler):
         try:
             managers.insert(db_body)
         except pymongo.errors.DuplicateKeyError:
-            self.write(json.dumps({'error': content['email']+' exists'}))
+            self.write(json.dumps({'error': email+' exists'}))
             return
 
         self.set_status(200)

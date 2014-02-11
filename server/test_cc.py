@@ -69,6 +69,24 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
             stored_token = query['token']
             self.assertEqual(reply_token, stored_token)
 
+        # make sure duplicate email throws error
+        body = {
+            'username': 'joe_bob',
+            'email': email,
+            'password': password
+        }
+        rep = self.fetch('/donors', method='POST', body=json.dumps(body))
+        self.assertEqual(rep.code, 400)
+
+        # make sure duplicate username throws error
+        body = {
+            'username': username,
+            'email': 'test_email',
+            'password': 'test_pw'
+        }
+        rep = self.fetch('/donors', method='POST', body=json.dumps(body))
+        self.assertEqual(rep.code, 400)
+
     def test_add_manager(self):
         email = 'proteneer@gmail.com'
         password = 'test_pw_me'
