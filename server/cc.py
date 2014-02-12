@@ -510,7 +510,6 @@ class PostStreamHandler(BaseHandler):
 
         ws_url = picked_ws.hget('url')
         ws_http_port = picked_ws.hget('http_port')
-        ws_db = self.application.get_ws_db(ws_id)
 
         body = {
             'target_id': target_id,
@@ -521,7 +520,8 @@ class PostStreamHandler(BaseHandler):
         for filename, filebin in files.items():
             body['stream_files'][filename] = filebin
 
-        if not server.ws.Target.exists(target_id, ws_db):
+        # see if this target is striating over the ws
+        if ws_id in target.smembers('striated_ws'):
             target_files = target.smembers('files')
             body['target_files'] = {}
             for filename in target_files:
