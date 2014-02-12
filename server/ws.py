@@ -78,6 +78,7 @@ from server.apollo import Entity, zset, relate
 # POST x.com/streams  - add a new stream
 # PUT x.com/streams/delete  - delete a stream
 # GET x.com/streams/stream_id  - download a stream
+# POST x.com/streams/activate - activate a stream
 
 ##################
 # CORE Interface #
@@ -202,6 +203,53 @@ def authenticate_core(method):
             return self.set_status(401)
 
     return wrapper
+
+
+class ActivateStreamHandler(BaseHandler):
+    def post(self):
+        """ Activate and return the highest priority stream on a target.
+            If no streams can be activated, then return status code 400
+
+            Request:
+                {
+                    "target_id": target_id
+
+                    [optional]
+                    "donor_id": donor_id
+                }
+
+            Reply:
+                {
+                    "token": token
+                }
+
+        """
+
+        self.set_status(400)
+        content = json.loads(self.request.body.decode())
+        target_id = content["target_id"]
+        target = Target(target_id, self.db)
+        stream_id = target.zrevpop('queue')
+        token = str(uuid.uuid4())
+        if stream_id:
+            active_stream = ActiveStream.create(stream_id, self.db)
+            active_stream.hset('buffer_frames', 0)
+            active_stream.hset('total_frames', 0)
+            active_stream.hset('auth_token', token)
+            active_stream.hset('steps', 0)
+            active_stream.hset('start_time', time.time())
+            if 'donor_id' in content:
+                donor_id = content['donor_id']
+                active_stream.hset('donor', donor_id)
+            increment = tornado.options.options['heartbeat_increment']
+            self.db.zadd('heartbeats', stream_id, time.time() + increment)
+
+            reply = {}
+            reply["token"] = token
+            self.set_status(200)
+            return self.write(json.dumps(reply))
+        else:
+            return
 
 
 class PostStreamHandler(BaseHandler):
@@ -788,6 +836,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
 
         super(WorkServer, self).__init__([
             (r'/active_streams', ActiveStreamsHandler),
+            (r'/streams/activate', ActivateStreamHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
             (r'/streams/(.*)/(.*)', DownloadHandler),

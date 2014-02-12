@@ -19,6 +19,7 @@ import base64
 import json
 import time
 
+
 class Test(tornado.testing.AsyncTestCase):
 
     @classmethod
@@ -506,4 +507,3 @@ if __name__ == '__main__':
     #suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
     #suite.addTest(WSInitTestCase())
     unittest.TextTestRunner(verbosity=3).run(suite)
-    #pass

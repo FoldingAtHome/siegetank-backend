@@ -300,6 +300,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
 
 class AssignHandler(BaseHandler):
+    @tornado.gen.coroutine
     def post(self):
         """ Get a job assignment.
 
@@ -359,20 +360,28 @@ class AssignHandler(BaseHandler):
         attempts = 0
         while True and attempts < 3:
             attempts += 1
+
             # pick a random target from available targets
             target_id = random.sample(available_targets, 1)[0]
             target = Target(target_id, self.db)
             steps_per_frame = target.hget('steps_per_frame')
             # pick a random ws the target is striating over
             ws_name = target.srandmember('striated_ws')
-            ws_db = self.application.get_ws_db(ws_name)
-            token = str(uuid.uuid4())
-            stream_id = server.ws.WorkServer.activate_stream(
-                target_id, token, ws_db, donor_id)
-            if stream_id:
-                workserver = WorkServer(ws_name, self.db)
-                ws_url = workserver.hget('url')
-                ws_port = workserver.hget('http_port')
+
+            workserver = WorkServer(ws_name, self.db)
+            ws_url = workserver.hget('url')
+            ws_port = workserver.hget('http_port')
+            ws_body = {}
+            ws_body['target_id'] = target_id
+            if donor_id:
+                ws_body['donor_id'] = donor_id
+            client = tornado.httpclient.AsyncHTTPClient()
+            ws_uri = 'https://'+ws_url+':'+str(ws_port)+'/streams/activate'
+            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
+                                       method='POST', body=json.dumps(ws_body))
+            if(reply.code == 200):
+                rep_content = json.loads(reply.body.decode())
+                token = rep_content["token"]
                 body = {
                     'token': token,
                     'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start',
@@ -382,7 +391,6 @@ class AssignHandler(BaseHandler):
                 return self.set_status(200)
             else:
                 pass
-
         self.write(json.dumps({'error': 'could not get assignment'}))
 
 

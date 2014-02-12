@@ -162,6 +162,17 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(isfile(os.path.join(targets_dir, target_id, fn1)))
         self.assertFalse(isfile(os.path.join(targets_dir, target_id, fn2)))
 
+    def _activate_stream(self, target_id):
+        body = {'target_id': target_id}
+        reply = self.fetch('/streams/activate', method='POST',
+                           body=json.dumps(body))
+
+        self.assertEqual(reply.code, 200)
+        reply_data = json.loads(reply.body.decode())
+        token = reply_data['token']
+        stream_id = ws.ActiveStream.lookup('auth_token', token, self.ws.db)
+        return stream_id, token
+
     def test_activate_stream(self):
         target_id = str(uuid.uuid4())
         fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
@@ -173,11 +184,10 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         stream1 = json.loads(response.body.decode())['stream_id']
-        token = str(uuid.uuid4())
-        increment = tornado.options.options['heartbeat_increment']
-        stream2 = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        stream2, token = self._activate_stream(target_id)
         self.assertEqual(stream1, stream2)
         self.assertTrue(ws.ActiveStream(stream1, self.ws.db))
+        increment = tornado.options.options['heartbeat_increment']
         self.assertAlmostEqual(self.ws.db.zscore('heartbeats', stream1),
                                time.time()+increment, 2)
         self.assertEqual(ws.ActiveStream.lookup('auth_token',
@@ -196,8 +206,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         stream1 = json.loads(response.body.decode())['stream_id']
         token = str(uuid.uuid4())
-        increment = tornado.options.options['heartbeat_increment']
-        stream2 = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        stream2, token = self._activate_stream(target_id)
         self.assertEqual(stream1, stream2)
         reply = self.fetch('/active_streams', method='GET')
         self.assertEqual(reply.code, 200)
@@ -209,7 +218,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         new_stream1 = json.loads(response.body.decode())['stream_id']
-        new_stream2 = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        new_stream2, token = self._activate_stream(target_id)
         self.assertEqual(new_stream1, new_stream2)
         reply = self.fetch('/active_streams', method='GET')
         content = json.loads(reply.body.decode())
@@ -224,7 +233,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(targets, {target_id})
         self.assertEqual(streams, {stream1, new_stream1})
 
-    def test_start_stream(self):
+    def _post_and_activate_stream(self):
         target_id = str(uuid.uuid4())
         fn1 = 'system.xml.gz.b64'
         fn2 = 'integrator.xml.gz.b64'
@@ -236,8 +245,13 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                 }
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
-        token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        stream_id, token = self._activate_stream(target_id)
+        return target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token
+
+    def test_start_stream(self):
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
+
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
@@ -249,19 +263,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['target_id'], target_id)
 
     def test_download_stream(self):
-        target_id = str(uuid.uuid4())
-        fn1 = 'system.xml.gz.b64'
-        fn2 = 'integrator.xml.gz.b64'
-        fn3 = 'state.xml.gz.b64'
-        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
-        body = {'target_id': target_id,
-                'target_files': {fn1: fb1, fn2: fb2},
-                'stream_files': {fn3: fb3}
-                }
-        response = self.fetch('/streams', method='POST', body=json.dumps(body))
-        self.assertEqual(response.code, 200)
-        token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
 
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
@@ -336,19 +339,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.body, frame_buffer)
 
     def test_put_frame_variadic(self):
-        target_id = str(uuid.uuid4())
-        fn1 = 'system.xml.gz.b64'
-        fn2 = 'integrator.xml.gz.b64'
-        fn3 = 'state.xml.gz.b64'
-        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
-        body = {'target_id': target_id,
-                'target_files': {fn1: fb1, fn2: fb2},
-                'stream_files': {fn3: fb3}
-                }
-        response = self.fetch('/streams', method='POST', body=json.dumps(body))
-        self.assertEqual(response.code, 200)
-        token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
 
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
@@ -396,19 +388,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.body, frame_buffer)
 
     def test_put_frame(self):
-        target_id = str(uuid.uuid4())
-        fn1 = 'system.xml.gz.b64'
-        fn2 = 'integrator.xml.gz.b64'
-        fn3 = 'state.xml.gz.b64'
-        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
-        body = {'target_id': target_id,
-                'target_files': {fn1: fb1, fn2: fb2},
-                'stream_files': {fn3: fb3}
-                }
-        response = self.fetch('/streams', method='POST', body=json.dumps(body))
-        self.assertEqual(response.code, 200)
-        token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
 
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
@@ -517,19 +498,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
     def test_stop_error_stream(self):
-        target_id = str(uuid.uuid4())
-        fn1 = 'system.xml.gz.b64'
-        fn2 = 'integrator.xml.gz.b64'
-        fn3 = 'state.xml.gz.b64'
-        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
-        body = {'target_id': target_id,
-                'target_files': {fn1: fb1, fn2: fb2},
-                'stream_files': {fn3: fb3}
-                }
-        response = self.fetch('/streams', method='POST', body=json.dumps(body))
-        self.assertEqual(response.code, 200)
-        token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
@@ -582,7 +552,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             self.assertEqual(response.code, 200)
 
         token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        stream_id, token = self._activate_stream(target_id)
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
@@ -618,24 +588,12 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               body='{}')
         self.assertEqual(response.code, 200)
 
-        new_stream_id = ws.WorkServer.activate_stream(target_id, token,
-                                                      self.ws.db)
+        new_stream_id, token = self._activate_stream(target_id)
         self.assertEqual(stream_id, new_stream_id)
 
     def test_stop_stream(self):
-        target_id = str(uuid.uuid4())
-        fn1 = 'system.xml.gz.b64'
-        fn2 = 'integrator.xml.gz.b64'
-        fn3 = 'state.xml.gz.b64'
-        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
-        body = {'target_id': target_id,
-                'target_files': {fn1: fb1, fn2: fb2},
-                'stream_files': {fn3: fb3}
-                }
-        response = self.fetch('/streams', method='POST', body=json.dumps(body))
-        self.assertEqual(response.code, 200)
-        token = str(uuid.uuid4())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
@@ -682,17 +640,15 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                 }
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
-        token = str(uuid.uuid4())
         self.assertEqual(ws.ActiveStream.members(self.ws.db), set())
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        stream_id, token = self._activate_stream(target_id)
         test_set = set([stream_id])
         self.assertEqual(ws.ActiveStream.members(self.ws.db), test_set)
         increment_time = tornado.options.options['heartbeat_increment']
         time.sleep(increment_time+0.5)
         self.ws.check_heartbeats()
         self.assertEqual(ws.ActiveStream.members(self.ws.db), set())
-
-        stream_id = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        stream_id, token = self._activate_stream(target_id)
         self.assertEqual(ws.ActiveStream.members(self.ws.db), test_set)
         time.sleep(3)
         body = '{}'
