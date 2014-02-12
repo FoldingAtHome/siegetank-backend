@@ -183,6 +183,26 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(ws.ActiveStream.lookup('auth_token',
                          token, self.ws.db), stream1)
 
+    def test_get_active_streams(self):
+        tornado.options.options.heartbeat_increment = 10
+        target_id = str(uuid.uuid4())
+        fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
+        fb1, fb2, fb3, fb4 = (str(uuid.uuid4()) for i in range(4))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3, fn4: fb4}
+                }
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        stream1 = json.loads(response.body.decode())['stream_id']
+        token = str(uuid.uuid4())
+        increment = tornado.options.options['heartbeat_increment']
+        stream2 = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+
+        reply = self.fetch('/active_streams', method='GET')
+        self.assertEqual(reply.code, 200)
+        print(reply.body)
+
     def test_start_stream(self):
         target_id = str(uuid.uuid4())
         fn1 = 'system.xml.gz.b64'

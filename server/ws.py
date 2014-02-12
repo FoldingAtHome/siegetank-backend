@@ -101,9 +101,9 @@ from server.apollo import Entity, zset, relate
 # PUBLIC Interface #
 ####################
 
-# GET x.com/public/:target_id/active_streams - return a list of active streams
+# GET x.com/active_streams - get all the active streams
 
-# In general, we should try and use PUTs whenever possible. Idempotency
+# In general, we should try and use GETs/PUTs whenever possible. Idempotency
 # is an incredibly useful way of dealing with failures. Suppose a core
 # either POSTs (non idempotent), or PUTs (idempotent) a frame to a stream.
 
@@ -496,7 +496,6 @@ class CoreFrameHandler(BaseHandler):
                 buffer_handle.write(filedata)
             active_stream.sadd('buffer_files', filename)
         active_stream.hincrby('buffer_frames', frame_count)
-        active_stream.hincrby('total_frames', frame_count)
 
         return self.set_status(200)
 
@@ -575,6 +574,7 @@ class CoreCheckpointHandler(BaseHandler):
                 os.remove(src)
 
         stream.hincrby('frames', buffer_frames)
+        active_stream.hincrby('total_frames', buffer_frames)
         active_stream.hset('buffer_frames', 0)
         self.set_status(200)
 
@@ -616,6 +616,39 @@ class CoreStopHandler(BaseHandler):
         self.set_status(200)
         self.deactivate_stream(stream_id)
 
+
+class ActiveStreamsHandler(BaseHandler):
+    def get(self):
+        """ Display statistics about active streams on the workserver. The list
+        of streams are not sorted, so the client must sort them.
+
+        Reply:
+
+        {
+            target_id: {
+                    stream_id: [donor_id, start_time, total_frames],
+                    stream_id: [donor_id, start_time, total_frames],
+                    ...
+                }
+        }
+
+        """
+        reply = dict()
+        for target in Target.members(self.db):
+            # HACK
+            streams_key = Target.prefix+':'+target+':streams'
+            good_streams = self.db.sinter('active_streams', streams_key)
+            if len(good_streams) > 0:
+                reply[target] = list()
+            for stream_id in good_streams:
+                active_stream = ActiveStream(stream_id, self.db)
+                donor = active_stream.hget('donor')
+                start_time = active_stream.hget('start_time')
+                total_frames = active_stream.hget('total_frames')
+                reply[target].append(donor)
+                reply[target].append(start_time)
+                reply[target].append(total_frames)
+        self.write(json.dumps(reply))
 
 class DownloadHandler(BaseHandler):
     def get(self, stream_id, filename):
@@ -709,8 +742,8 @@ class WorkServer(tornado.web.Application, RedisMixin):
         self.targets_folder = targets_folder
         self.streams_folder = streams_folder
         self.db = init_redis(redis_port, redis_pass,
-                                    appendonly=appendonly,
-                                    appendfilename='aof_'+ws_name)
+                             appendonly=appendonly,
+                             appendfilename='aof_'+ws_name)
         if not os.path.exists(self.targets_folder):
             os.makedirs(self.targets_folder)
         if not os.path.exists(self.streams_folder):
@@ -749,6 +782,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
                 print('Warning: not connect to CC '+cc_name)
 
         super(WorkServer, self).__init__([
+            (r'/active_streams', ActiveStreamsHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
             (r'/streams/(.*)/(.*)', DownloadHandler),
@@ -789,6 +823,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
         if stream_id:
             active_stream = ActiveStream.create(stream_id, db)
             active_stream.hset('buffer_frames', 0)
+            active_stream.hset('total_frames', 0)
             active_stream.hset('auth_token', token)
             active_stream.hset('steps', 0)
             active_stream.hset('start_time', time.time())
