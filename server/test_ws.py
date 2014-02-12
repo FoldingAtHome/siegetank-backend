@@ -198,10 +198,31 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         token = str(uuid.uuid4())
         increment = tornado.options.options['heartbeat_increment']
         stream2 = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
-
+        self.assertEqual(stream1, stream2)
         reply = self.fetch('/active_streams', method='GET')
         self.assertEqual(reply.code, 200)
-        print(reply.body)
+        content = json.loads(reply.body.decode())
+        for tid in content:
+            self.assertEqual(tid, target_id)
+            for sid in content[tid]:
+                self.assertEqual(sid, stream1)
+        response = self.fetch('/streams', method='POST', body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        new_stream1 = json.loads(response.body.decode())['stream_id']
+        new_stream2 = ws.WorkServer.activate_stream(target_id, token, self.ws.db)
+        self.assertEqual(new_stream1, new_stream2)
+        reply = self.fetch('/active_streams', method='GET')
+        content = json.loads(reply.body.decode())
+
+        targets = set()
+        streams = set()
+        for tid in content:
+            targets.add(tid)
+            for sid in content[tid]:
+                streams.add(sid)
+
+        self.assertEqual(targets, {target_id})
+        self.assertEqual(streams, {stream1, new_stream1})
 
     def test_start_stream(self):
         target_id = str(uuid.uuid4())

@@ -626,28 +626,33 @@ class ActiveStreamsHandler(BaseHandler):
 
         {
             target_id: {
-                    stream_id: [donor_id, start_time, total_frames],
-                    stream_id: [donor_id, start_time, total_frames],
+                    stream_id_1: {
+                        donor_id: None,
+                        start_time: time,
+                        total_frames: frames
+                    }
                     ...
-                }
+            }
+            ...
         }
 
         """
         reply = dict()
         for target in Target.members(self.db):
-            # HACK
+            # Hardcoded
             streams_key = Target.prefix+':'+target+':streams'
             good_streams = self.db.sinter('active_streams', streams_key)
             if len(good_streams) > 0:
-                reply[target] = list()
+                reply[target] = dict()
             for stream_id in good_streams:
+                reply[target][stream_id] = dict()
                 active_stream = ActiveStream(stream_id, self.db)
                 donor = active_stream.hget('donor')
                 start_time = active_stream.hget('start_time')
                 total_frames = active_stream.hget('total_frames')
-                reply[target].append(donor)
-                reply[target].append(start_time)
-                reply[target].append(total_frames)
+                reply[target][stream_id]['donor'] = donor
+                reply[target][stream_id]['start_time'] = start_time
+                reply[target][stream_id]['total_frames'] = total_frames
         self.write(json.dumps(reply))
 
 class DownloadHandler(BaseHandler):
