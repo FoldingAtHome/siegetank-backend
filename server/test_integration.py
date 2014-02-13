@@ -253,9 +253,11 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
 
         body = json.loads(reply.body.decode())
+
         streams = set()
-        for k, v in body.items():
-            streams.add(k)
+        for ws_name in body:
+            for ws_stream in body[ws_name]:
+                streams.add(ws_stream)
         self.assertEqual(streams, post_streams)
 
         # delete a random stream
@@ -275,8 +277,9 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         body = json.loads(reply.body.decode())
         streams = set()
-        for k, v in body.items():
-            streams.add(k)
+        for ws_name in body:
+            for ws_stream in body[ws_name]:
+                streams.add(ws_stream)
         post_streams.remove(stream_id)
         self.assertEqual(streams, post_streams)
 
@@ -452,9 +455,13 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         body = json.loads(reply.body.decode())
         streams = set()
         striated_servers = set()
-        for k, v in body.items():
-            streams.add(k)
-            striated_servers.add(v[2])
+
+        for ws_name in body:
+            striated_servers.add(ws_name)
+            for ws_stream in body[ws_name]:
+                streams.add(ws_stream)
+        self.assertEqual(streams, post_streams)
+
         self.assertEqual(streams, post_streams)
         self.assertEqual(striated_servers, {'flash', 'jaedong'})
 

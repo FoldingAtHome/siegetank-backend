@@ -71,7 +71,7 @@ import server.ws
 # [A] PUT x.com/targets/stage/:target_id - change stage from beta->adv->full
 # [A] PUT x.com/targets/delete/:target_id - delete target and its streams
 # [A] PUT x.com/targets/stop/:target_id - stop the target and its streams
-# [A] GET x.com/targets/streams/:target_id - get the streams for the target
+# [A] GET x.com/targets/streams/:target_id - get the streams for target
 
 # [A] POST x.com/streams - add a stream
 # [P] GET x.com/streams/info/:stream_id - get information about specific stream
@@ -435,32 +435,39 @@ class DeleteStreamHandler(BaseHandler):
     @authenticated
     @tornado.gen.coroutine
     def put(self, stream_id):
-        """ Deletes a stream from the server
+        """ Deletes a stream from the server. If the stream was found on one of
+        the workservers, then status 200 is returned. Otherwise, 400.
 
         Request:
             {
-                'stream_id': stream_id,
+                "stream_id": stream_id,
             }
 
         """
-        for ws_name in WorkServer.members(self.db):
-            db_client = self.application.get_ws_db(ws_name)
-            if server.ws.Stream.exists(stream_id, db_client):
-                picked_ws = WorkServer(ws_name, self.db)
-                ws_url = picked_ws.hget('url')
-                ws_http_port = picked_ws.hget('http_port')
-                client = tornado.httpclient.AsyncHTTPClient()
-                body = {
-                    'stream_id': stream_id
-                }
-                rep = yield client.fetch('https://'+str(ws_url)+':'
-                                         +str(ws_http_port)+'/streams/delete',
-                                         method='PUT', body=json.dumps(body),
-                                         validate_cert=is_domain(ws_url))
-                return self.set_status(rep.code)
-            else:
-                self.write(json.dumps({'error': 'stream not found'}))
+        # this is a relatively slow method. Partially because 1) we don't know
+        # which server the stream is on, and 2) we don't know its target so
+        # we don't know which servers its striating over
         self.set_status(400)
+        found = False
+        for ws_name in WorkServer.members(self.db):
+            picked_ws = WorkServer(ws_name, self.db)
+            ws_url = picked_ws.hget('url')
+            ws_http_port = picked_ws.hget('http_port')
+            body = {
+                'stream_id': stream_id
+            }
+            client = tornado.httpclient.AsyncHTTPClient()
+            rep = yield client.fetch('https://'+str(ws_url)+':'
+                                     +str(ws_http_port)+'/streams/delete',
+                                     method='PUT', body=json.dumps(body),
+                                     validate_cert=is_domain(ws_url))
+            if rep.code == 200:
+                found = True
+        if found:
+            self.status(200)
+            self.write(json.dumps({}))
+        else:
+            self.write(json.dumps({'error': 'stream not found'}))
 
 
 class PostStreamHandler(BaseHandler):
@@ -586,13 +593,19 @@ class GetTargetHandler(BaseHandler):
 
 
 class ListStreamsHandler(BaseHandler):
+    @tornado.gen.coroutine
     def get(self, target_id):
         """ Return a list of streams for the specified target
 
         Reply:
             {
-                'stream1_id': [status, n_frames, ws_name]
-                'stream2_id': [status, n_frames, ws_name],
+                'ws_name': {
+                    stream1_id: {
+                        'status': OK
+                        'frames': 253,
+                    }
+                    ...
+                }
                 ...
             }
 
@@ -604,15 +617,18 @@ class ListStreamsHandler(BaseHandler):
         body = {}
 
         for ws_name in striated_ws:
-            ws_db = self.application.get_ws_db(ws_name)
-            ws_target = server.ws.Target(target_id, ws_db)
-            stream_ids = ws_target.smembers('streams')
-            for stream_id in stream_ids:
-                body[stream_id] = []
-                stream = server.ws.Stream(stream_id, ws_db)
-                body[stream_id].append(stream.hget('status'))
-                body[stream_id].append(stream.hget('frames'))
-                body[stream_id].append(ws_name)
+            ws = WorkServer(ws_name, self.db)
+            ws_url = ws.hget('url')
+            ws_port = ws.hget('http_port')
+
+            client = tornado.httpclient.AsyncHTTPClient()
+            ws_uri = 'https://'+ws_url+':'+str(ws_port)+'/targets/streams/'+\
+                     target_id
+            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
+                                       method='GET')
+
+            if reply.code == 200:
+                body[ws_name] = json.loads(reply.body.decode())
 
         self.set_status(200)
         self.write(json.dumps(body))

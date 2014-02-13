@@ -91,17 +91,11 @@ from server.apollo import Entity, zset, relate
 #                              to the last frame received
 # POST x.com/core/heartbeat  - send a heartbeat
 
-# checkpointing technique
-# if x.com/core/checkpoint is sent, message is:
-# POST {frame_md5: 10gj3n60twemp9g8,
-#       checkpoint: checkpoint.xml.gz.b64,
-#      }
-# this is how we can verify
-
 ####################
 # PUBLIC Interface #
 ####################
 
+# GET x.com/targets/streams/:target_id
 # GET x.com/active_streams - get all the active streams
 
 # In general, we should try and use GETs/PUTs whenever possible. Idempotency
@@ -203,6 +197,31 @@ def authenticate_core(method):
             return self.set_status(401)
 
     return wrapper
+
+
+class TargetStreamsHandler(BaseHandler):
+    def get(self, target_id):
+        """ Get a list of streams and their simple status
+        Reply:
+            {
+                'stream_id': {
+                    'status': OK,
+                    'frames': 253,
+                }
+                ...
+            }
+
+        """
+        self.set_status(400)
+        target = Target(target_id, self.db)
+        body = {}
+        for stream_id in target.smembers('streams'):
+            stream = Stream(stream_id, self.db)
+            body[stream_id] = {}
+            body[stream_id]['status'] = stream.hget('status')
+            body[stream_id]['frames'] = stream.hget('frames')
+        self.set_status(200)
+        self.write(json.dumps(body))
 
 
 class ActivateStreamHandler(BaseHandler):
@@ -840,6 +859,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
             (r'/streams', PostStreamHandler),
             (r'/streams/delete', DeleteStreamHandler),
             (r'/streams/(.*)/(.*)', DownloadHandler),
+            (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
             (r'/core/checkpoint', CoreCheckpointHandler),
@@ -859,34 +879,6 @@ class WorkServer(tornado.web.Application, RedisMixin):
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
             self.deactivate_stream(dead_stream)
-
-    @staticmethod
-    def activate_stream(target_id, token, db, donor_id=None):
-        """ Activate and return the highest priority stream belonging to target
-        target_id. This is called directly by the CC to start a stream.
-
-        """
-        target = Target(target_id, db)
-
-        # note, it is critical that zrevrange and the subsequent zrem be done
-        # atomically so as to not have a race condition when multiple clients
-        # attempt to activate a stream (remember that the CC runs on mutiple
-        # processes!).
-
-        stream_id = target.zrevpop('queue')
-        if stream_id:
-            active_stream = ActiveStream.create(stream_id, db)
-            active_stream.hset('buffer_frames', 0)
-            active_stream.hset('total_frames', 0)
-            active_stream.hset('auth_token', token)
-            active_stream.hset('steps', 0)
-            active_stream.hset('start_time', time.time())
-            if donor_id:
-                active_stream.hset('donor', donor_id)
-            increment = tornado.options.options['heartbeat_increment']
-            db.zadd('heartbeats', stream_id, time.time() + increment)
-
-        return stream_id
 
     # deactivates the stream on the workserver
     def deactivate_stream(self, stream_id):

@@ -262,6 +262,40 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['stream_id'], stream_id)
         self.assertEqual(content['target_id'], target_id)
 
+    def test_get_streams(self):
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
+
+        # post another stream
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+        reply = self.fetch('/streams', method='POST', body=json.dumps(body))
+        stream_id2 = json.loads(reply.body.decode())['stream_id']
+        self.assertEqual(reply.code, 200)
+
+        headers = {'Authorization': token}
+        reply = self.fetch('/targets/streams/'+target_id, headers=headers,
+                           method='GET')
+        self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+
+        sids = set()
+
+        for sid in content:
+            sids.add(sid)
+            frames = content[sid]['frames']
+            status = content[sid]['status']
+            self.assertEqual(frames, 0)
+            self.assertEqual(status, 'OK')
+
+        self.assertEqual(sids, {stream_id2, stream_id})
+
     def test_download_stream(self):
         target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
             self._post_and_activate_stream()
