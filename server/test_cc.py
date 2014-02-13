@@ -144,9 +144,6 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         ws = cc.WorkServer(ws_name, self.cc.db)
         self.assertEqual(ws.hget('url'), '127.0.0.1')
         self.assertEqual(ws.hget('http_port'), ext_http_port)
-        self.assertEqual(ws.hget('redis_port'), ws_redis_port)
-        self.assertEqual(ws.hget('redis_pass'), ws_redis_pass)
-
         test_db.shutdown()
 
     def test_post_target(self):

@@ -89,8 +89,6 @@ class WorkServer(Entity):
     prefix = 'ws'
     fields = {'url': str,  # http request url (verify based on if IP or not)
               'http_port': int,  # ws http port
-              'redis_port': int,  # ws redis port
-              'redis_pass': str,  # ws password
               'online': bool,  # denotes if the server is online or not
               }
 
@@ -399,15 +397,13 @@ class RegisterWSHandler(BaseHandler):
         """ Called by WS for registration
 
         Header:
-            'Authorization': cc_pass
+            "Authorization": cc_pass
 
         Request:
             {
-                'name': unique_name_of_the_cc
-                'url': url for requests (IP or DNS)
-                'http_port': http port
-                'redis_pass': redis password
-                'redis_port': redis port
+                "name": unique_name_of_the_cc
+                "url": url for requests (IP or DNS)
+                "http_port": http port
             }
 
         Response:
@@ -454,7 +450,7 @@ class DeleteStreamHandler(BaseHandler):
             ws_url = picked_ws.hget('url')
             ws_http_port = picked_ws.hget('http_port')
             body = {
-                'stream_id': stream_id
+                "stream_id": stream_id
             }
             client = tornado.httpclient.AsyncHTTPClient()
             rep = yield client.fetch('https://'+str(ws_url)+':'
@@ -753,22 +749,6 @@ class TargetHandler(BaseHandler):
 
         return self.write(json.dumps(response))
 
-    # def get(self):
-    #     """ PGI - Fetch details on a target"""
-    #     user = 'yutong'
-    #     response = []
-    #     targets = cc_redis.smembers(user+':targets')
-    #     for target_id in targets:
-    #         prop = {}
-
-    #         stamp = datetime.datetime.fromtimestamp(float(cc_redis.hget(target_id,'date')))
-    #         prop['date'] = stamp.strftime('%m/%d/%Y, %H:%M:%S')
-    #         prop['description'] = cc_redis.hget(target_id,'description')
-    #         prop['frames'] = random.randint(0,200)
-    #         response.append(prop)
-
-    #     return self.write(json.dumps(response,indent=4, separators=(',', ': ')))
-
     # def delete(self):
     #     # delete all streams
 
@@ -791,7 +771,6 @@ class CommandCenter(tornado.web.Application, RedisMixin):
         self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
 
         # set up indexes
-
         self.mdb.donors.ensure_index("token")
 
         self.targets_folder = targets_folder
@@ -816,57 +795,6 @@ class CommandCenter(tornado.web.Application, RedisMixin):
 
         self.WorkServerDB = {}
 
-    def _guarded_get(self, name):
-        """ Returns a workserver's db client with name if and only if the
-        client is still alive.
-
-        """
-        ws = WorkServer(name, self.db)
-        if ws.hget('online'):
-            try:
-                # the ws is supposed to be working fine
-                self.WorkServerDB[name].ping()  # raise exception otherwise
-                return self.WorkServerDB[name]
-            except Exception:
-                # oh noes, the ws is dead
-                ws.hset('online', False)
-                return None
-        else:
-            return None
-
-    def get_ws_db(self, name):
-        """ When pre-forking with tornado, a register_ws request gets
-        sent to a single process, meaning that the other processes did
-        not end up actually calling add_ws() to register the ws.
-
-        However, we can do lazy connects, since all the information pertaining
-        to the ws is contained entirely in redis! So we can reconstruct the
-        client after the fact, and each process constructs at most one time.
-
-        Returns None if the WS is not available.
-
-        """
-        if name in self.WorkServerDB:
-            # the workserver has already been added in this process
-            return self._guarded_get(name)
-        else:
-            # see if this WS exists but hasn't been added to the db
-            if WorkServer.exists(name, self.db):
-                ws = WorkServer(name, self.db)
-                url = ws.hget('url')
-                redis_port = ws.hget('redis_port')
-                redis_pass = ws.hget('redis_pass')
-                client = redis.Redis(host=url,
-                                     port=redis_port,
-                                     password=redis_pass,
-                                     decode_responses=True)
-
-                client.ping()
-                self.WorkServerDB[name] = client
-                return self._guarded_get(name)
-            else:
-                return None
-
     def add_ws(self, name, url, http_port, redis_port, redis_pass=None):
         try:
             # make sure the client is alive
@@ -883,11 +811,7 @@ class CommandCenter(tornado.web.Application, RedisMixin):
 
             ws.hset('url', url)
             ws.hset('http_port', http_port)
-            ws.hset('redis_port', redis_port)
             ws.hset('online', True)
-            if redis_pass:
-                ws.hset('redis_pass', redis_pass)
-            self.WorkServerDB[name] = client
         except Exception as e:
             print(e)
 
