@@ -308,6 +308,11 @@ class AssignHandler(BaseHandler):
                 "engine": "openmm", (lowercase)
                 "engine_version": "5.2"
                 "donor_token": "token"
+
+                [optional]
+
+                "target_id": target_id
+
             }
 
         Reply:
@@ -318,6 +323,9 @@ class AssignHandler(BaseHandler):
             }
 
         Matching algorithm:
+
+        If a "target_id" is specified, then the WS will try and activate a
+        stream corresponding to the target_id.
 
         1. "engine" type must match that of the CC's engine type.
         2. A list of targets matching "engine_versions" is determined.
@@ -356,6 +364,9 @@ class AssignHandler(BaseHandler):
             return
 
         attempts = 0
+
+        # Why not move activation to the WS directly? This way the CC is way 
+        # more robust
         while True and attempts < 3:
             attempts += 1
 
