@@ -322,19 +322,26 @@ class AssignHandler(BaseHandler):
                 "steps_per_frame": 50000
             }
 
-        Matching algorithm:
-
         If a "target_id" is specified, then the WS will try and activate a
         stream corresponding to the target_id.
 
-        1. "engine" type must match that of the CC's engine type.
-        2. A list of targets matching "engine_versions" is determined.
+        Otherwise, we try and find a target_id where:
 
-        A cdf function is built with weights of each target. A random target
-        is picked from this cdf, and one of its streams is activated. The set
-        of striated_ws for this target is found, and a random WS is picked.
+        A list of targets whose engine version is compatible with the core's
+        engine version is generated. The assignment algorithm is then applied:
 
-        The stream is then activated on this WS.
+        Proposed algorithm:
+
+        Let:
+        0 <= target.n_streams
+        0 <= vijay.weight < 10
+        1 <= a <= b
+
+        Then:
+        target.weight = target.n_streams^(2/3)*vijay.weight
+
+        order and compute the cdf over all targets, then sample x ~ U(0,1] and
+        see which target maps to x. 
 
         """
 
@@ -357,26 +364,36 @@ class AssignHandler(BaseHandler):
             return self.write(json.dumps({'error': 'engine must be openmm'}))
         engine_version = content['engine_version']
 
-        available_targets = Target.lookup('engine_versions', engine_version,
-                                          self.db)
-        if not available_targets:
-            self.write(json.dumps({'error': 'no jobs match engine version'}))
-            return
+        available_targets = Target.lookup('engine_versions',
+                                  engine_version, self.db)
 
-        attempts = 0
-
-        # Why not move activation to the WS directly? This way the CC is way 
-        # more robust
-        while True and attempts < 3:
-            attempts += 1
-
-            # pick a random target from available targets
+        if 'target_id' in content:
+            # make sure the given target_id can be sent to this core
+            target_id = content['target_id']
+            if not Target.exists(target_id, self.db):
+                err = 'target_id not managed by this cc'
+                self.write(json.dumps({'error': err}))
+                return
+            if not target_id in available_targets:
+                err = 'requested target_id does not match core engine version'
+                self.write(json.dumps({'error': err}))
+        else:
+            # if no target is specified, then a random target is chosen from a
+            # list of available targets for the core's engine version
+            if not available_targets:
+                err_msg = 'no available targets matching engine version'
+                self.write(json.dumps({'error': err_msg}))
+                return
             target_id = random.sample(available_targets, 1)[0]
-            target = Target(target_id, self.db)
-            steps_per_frame = target.hget('steps_per_frame')
-            # pick a random ws the target is striating over
-            ws_name = target.srandmember('striated_ws')
 
+        target = Target(target_id, self.db)
+        steps_per_frame = target.hget('steps_per_frame')
+
+        # shuffle and re-order the list of striated servers
+        striated_servers = list(target.smembers('striated_ws'))
+        random.shuffle(striated_servers)
+
+        for ws_name in striated_servers:
             workserver = WorkServer(ws_name, self.db)
             ws_url = workserver.hget('url')
             ws_port = workserver.hget('http_port')
@@ -386,21 +403,26 @@ class AssignHandler(BaseHandler):
                 ws_body['donor_id'] = donor_id
             client = tornado.httpclient.AsyncHTTPClient()
             ws_uri = 'https://'+ws_url+':'+str(ws_port)+'/streams/activate'
-            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
-                                       method='POST', body=json.dumps(ws_body))
-            if(reply.code == 200):
-                rep_content = json.loads(reply.body.decode())
-                token = rep_content["token"]
-                body = {
-                    'token': token,
-                    'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start',
-                    'steps_per_frame': steps_per_frame
-                }
-                self.write(json.dumps(body))
-                return self.set_status(200)
-            else:
+            try:
+                reply = yield client.fetch(ws_uri,
+                                           validate_cert=is_domain(ws_url),
+                                           method='POST',
+                                           body=json.dumps(ws_body))
+                if(reply.code == 200):
+                    rep_content = json.loads(reply.body.decode())
+                    token = rep_content["token"]
+                    body = {
+                        'token': token,
+                        'steps_per_frame': steps_per_frame,
+                        'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
+                    }
+                    self.write(json.dumps(body))
+                    return self.set_status(200)
+            except tornado.httpclient.HTTPError as e:
+                print(e)
                 pass
-        self.write(json.dumps({'error': 'could not get assignment'}))
+
+        self.write(json.dumps({'error': 'no free WS available'}))
 
 
 class RegisterWSHandler(BaseHandler):
@@ -471,7 +493,7 @@ class DeleteStreamHandler(BaseHandler):
             if rep.code == 200:
                 found = True
         if found:
-            self.status(200)
+            self.set_status(200)
             self.write(json.dumps({}))
         else:
             self.write(json.dumps({'error': 'stream not found'}))

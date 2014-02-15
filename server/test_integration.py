@@ -25,10 +25,10 @@ class Test(tornado.testing.AsyncTestCase):
     @classmethod
     def setUpClass(cls):
         super(Test, cls).setUpClass()
-        cls.ws_rport = 2398
-        cls.ws_hport = 9028
-        cls.cc_rport = 5872
-        cls.cc_hport = 8342
+        cls.ws_rport = 2399
+        cls.ws_hport = 9029
+        cls.cc_rport = 5873
+        cls.cc_hport = 8343
         cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport,
                                targets_folder='ws_targets',
                                streams_folder='ws_streams',
@@ -38,6 +38,8 @@ class Test(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(Test, self).setUp()
+        self.cc.mdb.managers.drop()
+        self.cc.mdb.donors.drop()
         self.cc.add_ws('mengsk', '127.0.0.1', self.ws_hport, self.ws_rport)
         self.cc_httpserver = tornado.httpserver.HTTPServer(
             self.cc,
@@ -52,15 +54,6 @@ class Test(tornado.testing.AsyncTestCase):
         self.cc_httpserver.listen(self.cc_hport)
         self.ws_httpserver.listen(self.ws_hport)
 
-    def tearDown(self):
-        self.ws.db.flushdb()
-        self.cc.db.flushdb()
-        self.cc_httpserver.stop()
-        self.ws_httpserver.stop()
-        self.cc.mdb.managers.drop()
-        self.cc.mdb.donors.drop()
-
-    def test_donor_token_assign(self):
         # register a manager account
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
         url = '127.0.0.1'
@@ -76,7 +69,21 @@ class Test(tornado.testing.AsyncTestCase):
         rep = self.wait()
         self.assertEqual(rep.code, 200)
         auth = json.loads(rep.body.decode())['token']
-        headers = {'Authorization': auth}
+
+        self.auth_token = auth
+        self.client = client
+        self.url = '127.0.0.1'
+
+    def tearDown(self):
+        self.ws.db.flushdb()
+        self.cc.db.flushdb()
+        self.cc_httpserver.stop()
+        self.ws_httpserver.stop()
+
+    def test_donor_token_assign(self):
+        headers = {'Authorization': self.auth_token}
+        client = self.client
+        url = self.url
 
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
                               for i in range(4))
@@ -88,7 +95,7 @@ class Test(tornado.testing.AsyncTestCase):
             'engine': 'openmm',
             'engine_versions': ['6.0'],
             }
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
                      validate_cert=common.is_domain(url), headers=headers)
         reply = self.wait()
@@ -175,22 +182,9 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 400)
 
     def test_post_target_and_streams(self):
-        # register an account
-        client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
-        url = '127.0.0.1'
-        email = 'proteneer@gmail.com'
-        password = 'test_pw_me'
-        body = {
-            'email': email,
-            'password': password
-        }
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
-        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-                     validate_cert=common.is_domain(url))
-        rep = self.wait()
-        self.assertEqual(rep.code, 200)
-        auth = json.loads(rep.body.decode())['token']
-        headers = {'Authorization': auth}
+        headers = {'Authorization': self.auth_token}
+        client = self.client
+        url = self.url
 
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
                               for i in range(4))
@@ -202,7 +196,7 @@ class Test(tornado.testing.AsyncTestCase):
             'engine': 'openmm',
             'engine_versions': ['6.0'],
             }
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
                      validate_cert=common.is_domain(url), headers=headers)
         reply = self.wait()
@@ -267,6 +261,7 @@ class Test(tornado.testing.AsyncTestCase):
         client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      headers=headers, method='PUT', body='{}')
         reply = self.wait()
+        self.assertEqual(reply.code, 200)
 
         # test GET the streams again
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
@@ -370,6 +365,8 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(TestMultiWS, self).setUp()
+        self.cc.mdb.managers.drop()
+        self.cc.mdb.donors.drop()
         for k, v in self.workservers.items():
             self.cc.add_ws(k, '127.0.0.1', v['hport'], v['rport'])
             v['httpserver'] = tornado.httpserver.HTTPServer(
@@ -386,14 +383,6 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                          'keyfile': 'certs/private.pem'})
         self.cc_httpserver.listen(self.cc_hport)
 
-    def tearDown(self):
-        for k, v in self.workservers.items():
-            v['httpserver'].stop()
-        self.cc_httpserver.stop()
-        self.cc.mdb.managers.drop()
-        pass
-
-    def test_post_target_restricted(self):
         # register an account
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
         url = '127.0.0.1'
@@ -409,6 +398,78 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         rep = self.wait()
         self.assertEqual(rep.code, 200)
         auth = json.loads(rep.body.decode())['token']
+
+        self.auth, self.url, self.client = auth, url, client
+
+    def tearDown(self):
+        for k, v in self.workservers.items():
+            v['httpserver'].stop()
+        self.cc_httpserver.stop()
+        self.cc.mdb.managers.drop()
+        pass
+
+    def test_specify_target(self):
+        headers = {'Authorization': self.auth}
+        client = self.client
+        url = self.url
+
+        available_targets = []
+
+        for i in range(25):
+            # post a target
+            fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
+                                  for i in range(4))
+            description = "Diwakar and John's top secret project"
+            body = {
+                'description': description,
+                'files': {'system.xml.gz.b64': fb1,
+                          'integrator.xml.gz.b64': fb2},
+                'steps_per_frame': 50000,
+                'engine': 'openmm',
+                'engine_versions': ['6.0'],
+                }
+            uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
+            client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                         validate_cert=common.is_domain(url), headers=headers)
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            target_id = json.loads(reply.body.decode())['target_id']
+            available_targets.append(target_id)
+            # post a stream
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
+            rand_bin = base64.b64encode(os.urandom(1024)).decode()
+            body = {'target_id': target_id,
+                    'files': {"state.xml.gz.b64": rand_bin}
+                    }
+
+            client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                         validate_cert=common.is_domain(url),
+                         headers=headers)
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            stream_id = json.loads(reply.body.decode())['stream_id']
+
+        # check to make sure that the stream we activate corresponds to the
+        # target we specify
+        specific_target = random.choice(available_targets)
+        body = {
+            'engine': 'openmm',
+            'engine_version': '6.0',
+            'target_id': specific_target
+        }
+
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     body=json.dumps(body), method='POST')
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+        core_token = content['token']
+
+        # todo later
+
+    def test_post_target_restricted(self):
+        auth, url, client = self.auth, self.url, self.client
         headers = {'Authorization': auth}
 
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()

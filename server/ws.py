@@ -268,7 +268,7 @@ class ActivateStreamHandler(BaseHandler):
             self.set_status(200)
             return self.write(json.dumps(reply))
         else:
-            return
+            return self.write(json.dumps(dict()))
 
 
 class PostStreamHandler(BaseHandler):
