@@ -447,24 +447,35 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                          headers=headers)
             reply = self.wait()
             self.assertEqual(reply.code, 200)
-            stream_id = json.loads(reply.body.decode())['stream_id']
 
         # check to make sure that the stream we activate corresponds to the
         # target we specify
-        specific_target = random.choice(available_targets)
-        body = {
-            'engine': 'openmm',
-            'engine_version': '6.0',
-            'target_id': specific_target
-        }
+        for i in range(10):
+            specific_target = random.choice(available_targets)
+            available_targets.remove(specific_target)
+            body = {
+                'engine': 'openmm',
+                'engine_version': '6.0',
+                'target_id': specific_target
+            }
 
-        uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
-        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-                     body=json.dumps(body), method='POST')
-        reply = self.wait()
-        self.assertEqual(reply.code, 200)
-        content = json.loads(reply.body.decode())
-        core_token = content['token']
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
+            client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                         body=json.dumps(body), method='POST')
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            content = json.loads(reply.body.decode())
+            core_token = content['token']
+            uri = content['uri']
+
+            ws_headers = {'Authorization': core_token}
+            client.fetch(uri, self.stop, headers=ws_headers,
+                         validate_cert=common.is_domain(url))
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+
+            content = json.loads(reply.body.decode())
+            self.assertEqual(content['target_id'], specific_target)
 
         # todo later
 
