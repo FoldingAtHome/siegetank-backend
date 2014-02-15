@@ -184,6 +184,10 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
             body += "\"donor_token\": \""+_donor_token+"\",";
         }
 
+        if(_target_id.length() > 0) {
+            body += "\"target_id\": \""+_target_id+"\",";
+        }
+
         stringstream core_version;
         core_version << CORE_VERSION;
         body += "\"core_version\": \""+core_version.str()+"\"}";
@@ -239,7 +243,13 @@ void Core::start_stream(const Poco::URI &cc_uri,
     Poco::Dynamic::Var result = parser.parse(content);
     Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();        
     _stream_id = object->get("stream_id").convert<std::string>();
-    _target_id = object->get("target_id").convert<std::string>();
+    string temp_target_id = object->get("target_id").convert<std::string>();
+
+    // if user specified a _target_id then we attempt to fetch the specified id
+    if(_target_id.length() > 0 && temp_target_id != _target_id) {
+        throw std::runtime_error("FATAL: Specified target_id mismatch");
+    }
+    _target_id = temp_target_id;
 
     // extract target files
     {

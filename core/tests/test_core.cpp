@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <ctime>
 #include <sstream>
+#include <fstream>
 
 #include <Poco/Net/Context.h>
 #include <Poco/Net/HTTPRequest.h>
@@ -72,13 +73,26 @@ void test_should_send_checkpoint() {
     }
 }
 
+void test_set_target_id() {
+    ifstream targets_file("target_ids.log");
+    string custom_target_id;
+    targets_file >> custom_target_id;
+    Core core(150, "openmm", "6.0");
+    Poco::URI uri("https://127.0.0.1:8980/core/assign");
+    core._target_id = custom_target_id;
+    map<string, string> target_files;
+    map<string, string> stream_files;
+    string stream_id;
+    string target_id;
+    core.start_stream(uri, stream_id, target_id, target_files, stream_files);
+}
+
 void test_donor_token() {
     Core core(150, "openmm", "6.0");
     Poco::URI uri("https://127.0.0.1:8980");
-
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
-        Poco::Net::Context::CLIENT_USE, "", 
-        Poco::Net::Context::VERIFY_NONE, 9, false);
+    Poco::Net::Context::CLIENT_USE, "", 
+    Poco::Net::Context::VERIFY_NONE, 9, false);
     Poco::Net::HTTPSClientSession cc_session(uri.getHost(),
                                              uri.getPort(),
                                              context);
@@ -87,7 +101,7 @@ void test_donor_token() {
     body += "{\"username\": \"test_donor\", \"password\": \"test_donor_pass\"}";
     request.setContentLength(body.length());
     cc_session.sendRequest(request) << body;
-    
+
     Poco::Net::HTTPResponse response;
     istream &content_stream = cc_session.receiveResponse(response);
     if(response.getStatus() != 200) {
@@ -186,6 +200,8 @@ void test_initialize_and_start() {
 }
 
 int main() {
+    // note: this test must be called first (annoying but oh well)
+    test_set_target_id();
     test_sigint_signal();
     test_sigterm_signal();
     test_donor_token();

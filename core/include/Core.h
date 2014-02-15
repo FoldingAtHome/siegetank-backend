@@ -31,6 +31,9 @@ public:
     method also initializes the _frame_write_interval.
     
     The workserver will automatically gunzip and decode files as needed.
+    
+    TODO: Clean up API: it doesn't make sense to return a stream_id or
+    a target_id if they are already part of the core's members
     */
     void start_stream(const Poco::URI &cc_uri,
                       std::string &stream_id, std::string &target_id,
@@ -78,6 +81,9 @@ public:
     /* public members are "bad", but then again I'm now a pythonista */
     std::string _donor_token;
 
+    /* target_id */
+    std::string _target_id;
+
 protected:
 
     /* how often we send frames in steps */
@@ -93,8 +99,6 @@ protected:
 
     /* time the job started */
     const int _start_time;
-
-    std::string _target_id;
     
     std::string _stream_id;
 

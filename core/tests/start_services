@@ -108,3 +108,10 @@ if __name__ == '__main__':
     state_xml = gzip.decompress(requests.get(state_url).content)
     for i in range(10):
         post_streams(target_id, state_xml, token)
+
+    target_id = post_target(token)
+    post_streams(target_id, state_xml, token)
+
+    # post a special target_id
+    with open('target_ids.log', 'w') as log:
+        log.write(str(target_id))

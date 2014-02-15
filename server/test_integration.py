@@ -450,9 +450,8 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
 
         # check to make sure that the stream we activate corresponds to the
         # target we specify
-        for i in range(10):
-            specific_target = random.choice(available_targets)
-            available_targets.remove(specific_target)
+        random.shuffle(available_targets)
+        for specific_target in available_targets:
             body = {
                 'engine': 'openmm',
                 'engine_version': '6.0',
