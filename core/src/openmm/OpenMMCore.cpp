@@ -161,12 +161,10 @@ void OpenMMCore::initialize(string cc_uri) {
 #endif
 
     Poco::URI uri(cc_uri);
-    string stream_id;
-    string target_id;
     map<string, string> target_files;
     map<string, string> stream_files;
 
-    start_stream(uri, stream_id, target_id, target_files, stream_files);
+    start_stream(uri, target_files, stream_files);
     // eg. _frame_send_interval = 50000 for OpenMM simulations
     _frame_send_interval = _frame_write_interval;
         

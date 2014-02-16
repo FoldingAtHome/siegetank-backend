@@ -143,6 +143,15 @@ static bool is_domain(string host) {
         return true;
 }
 
+static string parse_error(const string& body) {
+    Poco::JSON::Parser parser;
+    Poco::Dynamic::Var result = parser.parse(body);
+    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
+    string error(object->get("error").convert<std::string>());
+    parser.reset();
+    return error;
+}
+
 void Core::_initialize_session(const Poco::URI &cc_uri) {
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(cc_uri.getHost())) {
@@ -195,14 +204,20 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
         cc_session.sendRequest(request) << body;
         Poco::Net::HTTPResponse response;
         istream &content_stream = cc_session.receiveResponse(response);
+
+        string content;
+        Poco::StreamCopier::copyToString(content_stream, content);
+
         if(response.getStatus() != 200) {
-            throw std::runtime_error("Could not get an assignment from CC");
+            string reason = parse_error(content);
+            stringstream error;
+            error << "Could not get an assignment from CC, reason: ";
+            error << reason << endl;
+            throw std::runtime_error(error.str());
         }
         cout << "ok" << flush;
 
         {
-        string content;
-        Poco::StreamCopier::copyToString(content_stream, content);
         Poco::Dynamic::Var result = parser.parse(content);
         Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
         ws_uri = object->get("uri").convert<std::string>();
@@ -221,8 +236,7 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     }
 }
 
-void Core::start_stream(const Poco::URI &cc_uri, 
-                        std::string &stream_id, std::string &target_id,
+void Core::start_stream(const Poco::URI &cc_uri,
                         map<string, string> &target_files,
                         map<string, string> &stream_files) {
     if(_session == NULL)

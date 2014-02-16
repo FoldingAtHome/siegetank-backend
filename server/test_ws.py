@@ -189,7 +189,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(ws.ActiveStream(stream1, self.ws.db))
         increment = tornado.options.options['heartbeat_increment']
         self.assertAlmostEqual(self.ws.db.zscore('heartbeats', stream1),
-                               time.time()+increment, 2)
+                               time.time()+increment, 1)
         self.assertEqual(ws.ActiveStream.lookup('auth_token',
                          token, self.ws.db), stream1)
 

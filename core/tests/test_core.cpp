@@ -82,9 +82,7 @@ void test_set_target_id() {
     core._target_id = custom_target_id;
     map<string, string> target_files;
     map<string, string> stream_files;
-    string stream_id;
-    string target_id;
-    core.start_stream(uri, stream_id, target_id, target_files, stream_files);
+    core.start_stream(uri, target_files, stream_files);
 }
 
 void test_donor_token() {
@@ -119,11 +117,9 @@ void test_donor_token() {
     core._donor_token = token;
     map<string, string> target_files;
     map<string, string> stream_files;
-    string stream_id;
-    string target_id;
 
     Poco::URI uri2("https://127.0.0.1:8980/core/assign");
-    core.start_stream(uri2, stream_id, target_id, target_files, stream_files);
+    core.start_stream(uri2, target_files, stream_files);
 }
 
 void test_initialize_and_start() { 
@@ -132,10 +128,7 @@ void test_initialize_and_start() {
 
     map<string, string> target_files;
     map<string, string> stream_files;
-    string stream_id;
-    string target_id;
-
-    core.start_stream(uri, stream_id, target_id, target_files, stream_files);
+    core.start_stream(uri, target_files, stream_files);
 
     if(target_files.find("system.xml") == target_files.end())
         throw std::runtime_error("system.xml not in target_files!");

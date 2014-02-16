@@ -27,22 +27,20 @@ public:
     virtual void main();
 
     /* Start the stream and fetch files. If the files end in .gz or .gz.b64
-    then the suffixes and stripped, and the contents are processed for you. The
-    method also initializes the _frame_write_interval.
-    
-    The workserver will automatically gunzip and decode files as needed.
-    
-    TODO: Clean up API: it doesn't make sense to return a stream_id or
-    a target_id if they are already part of the core's members
+    then the suffixes and stripped, and the contents are processed for you. 
+
+
+    The method initializes members _frame_write_interval, _stream_id, and 
+    _target_id.
     */
     void start_stream(const Poco::URI &cc_uri,
-                      std::string &stream_id, std::string &target_id,
                       std::map<std::string, std::string> &target_files,
                       std::map<std::string, std::string> &stream_files);
 
     /* Send frame files to the WS. This method automatically base64 encodes
        the file */
-    void send_frame_files(const std::map<std::string, std::string> &files, int frame_count = 1, bool gzip=false) const;
+    void send_frame_files(const std::map<std::string, std::string> &files,
+                          int frame_count = 1, bool gzip=false) const;
 
     /* Send checkpoint files to the WS. This method automatically base64
        encodes the files, and adds '.b64' to the suffix. If gzip is true, the 
@@ -55,7 +53,8 @@ public:
            else:
             'state.xml' -> 'state.xml.b64'
     */
-    void send_checkpoint_files(const std::map<std::string, std::string> &files, bool gzip=false) const;
+    void send_checkpoint_files(const std::map<std::string, std::string> &files,
+                               bool gzip=false) const;
 
     /* Disengage the core from the stream and destroys the session */
     void stop_stream(std::string error_msg = "");
