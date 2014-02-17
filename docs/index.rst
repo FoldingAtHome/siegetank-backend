@@ -12,6 +12,7 @@ Contents:
    :maxdepth: 2
 
    ws
+   cc
 
 Indices and tables
 ==================

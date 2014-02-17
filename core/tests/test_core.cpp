@@ -193,7 +193,6 @@ void test_initialize_and_start() {
 }
 
 int main() {
-    // note: this test must be called first (annoying but oh well)
     test_set_target_id();
     test_sigint_signal();
     test_sigterm_signal();

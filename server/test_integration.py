@@ -94,6 +94,7 @@ class Test(tornado.testing.AsyncTestCase):
             'steps_per_frame': 50000,
             'engine': 'openmm',
             'engine_versions': ['6.0'],
+            'stage': 'public'
             }
         uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
@@ -195,6 +196,7 @@ class Test(tornado.testing.AsyncTestCase):
             'steps_per_frame': 50000,
             'engine': 'openmm',
             'engine_versions': ['6.0'],
+            'stage': 'public',
             }
         uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
@@ -427,6 +429,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                 'steps_per_frame': 50000,
                 'engine': 'openmm',
                 'engine_versions': ['6.0'],
+                # we should be able to get a target regardless of stage
                 }
             uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
             client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
@@ -476,8 +479,6 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             content = json.loads(reply.body.decode())
             self.assertEqual(content['target_id'], specific_target)
 
-        # todo later
-
     def test_post_target_restricted(self):
         auth, url, client = self.auth, self.url, self.client
         headers = {'Authorization': auth}
@@ -492,6 +493,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             'engine': 'openmm',
             'engine_versions': ['6.0'],
             'allowed_ws': ['flash', 'jaedong'],
+            'stage': 'public'
             }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),

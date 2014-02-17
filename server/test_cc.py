@@ -10,6 +10,7 @@ import bcrypt
 import server.cc as cc
 import server.common as common
 
+
 class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
@@ -194,6 +195,22 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         query = self.cc.mdb.managers.find_one({'_id': email},
                                               fields=['targets'])
         self.assertEqual(query['targets'], {'test_cc': [target_id]})
+
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
+            'stage': 'public',
+            }
+
+        reply = self.fetch('/targets', method='POST', headers=headers,
+                           body=json.dumps(body))
+        self.assertEqual(reply.code, 200)
+        target_id = json.loads(reply.body.decode())['target_id']
+        target = cc.Target(target_id, self.cc.db)
+        self.assertEqual(target.hget('stage'), 'public')
 
     def test_get_targets(self):
         email = 'proteneer@gmail.com'

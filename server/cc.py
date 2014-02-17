@@ -311,59 +311,73 @@ class UpdateStageHandler(BaseHandler):
         """
 
 
+def yates_generator(x):
+    for i in range(len(x)-1, -1, -1):
+        j = random.randrange(i + 1)
+        x[i], x[j] = x[j], x[i]
+        yield x[i]
+
+
 class AssignHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
-        """ Get a job assignment.
+        """
+        .. http:post:: /core/assign
 
-        Request:
-            {
-                #"core_id": core_id,
-                "engine": "openmm", (lowercase)
-                "engine_version": "5.2",
-                "donor_token": "token"
+            Initialize a stream assignment from the CC.
 
-                [optional]
+            **Example request**
 
-                "core_type": beta,
-                "target_id": target_id
+            .. sourcecode:: javascript
 
-            }
+                {
+                    "engine": "openmm",
+                    "engine_version": "6.0",
+                    "donor_token": "token",
 
-        Reply:
-            {
-                "token": "6lk2j5-tpoi2p6-poipoi23",
-                "url": "https://raynor.stanford.edu:1234/core/start",
-                "steps_per_frame": 50000
-            }
+                    "stage": "beta" // optional, allow access to beta targets
+                    "target_id": "target_id" // optional
+                }
 
-        If a "target_id" is specified, then the WS will try and activate a
-        stream corresponding to the target_id. In addition, the stage of the
-        target is not taken into consideration.
+            If a `target_id` is specified, then the WS will try and activate a
+            stream corresponding to the `target_id`. In addition, the stage of
+            the target is not taken into consideration. Note that `target_id`
+            must be the fully qualified 36 digit uuid.
 
-        Otherwise, we try and find a target_id where:
+            Otherwise, we try and find a `target_id` whose:
 
-        A list of targets whose engine version is compatible with the core's
-        engine version is generated. If the core_type is "beta", then we will
-        first try to find a "beta" project, if none can be find, then a public
-        project is returned.
+            Engine version is compatible with the core's engine version and
+            `stage` is either "beta" or "public".
 
-        The assignment algorithm is then applied:
+            **Example reply**
 
-        Proposed algorithm:
+            .. sourcecode:: javascript
 
-        Let:
-        0 <= target.n_streams
-        0 <= vijay.weight < 10
-        1 <= a <= b
+                {
+                    "token": "6lk2j5-tpoi2p6-poipoi23",
+                    "url": "https://raynor.stanford.edu:1234/core/start",
+                    "steps_per_frame": 50000
+                }
 
-        Then:
-        target.weight = target.n_streams^(2/3)*vijay.weight
-
-        order and compute the cdf over all targets, then sample x ~ U(0,1] and
-        see which target maps to x.
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
+
+        # The assignment algorithm is then applied:
+
+        # Proposed algorithm:
+
+        # Let:
+        # 0 <= target.n_streams
+        # 0 <= vijay.weight < 10
+        # 1 <= a <= b
+
+        # Then:
+        # target.weight = target.n_streams^(2/3)*vijay.weight
+
+        # order and compute the cdf over all targets, then sample x ~ U(0,1]
+        # and see which target maps to x.
 
         self.set_status(400)
         #core_id = self.request.body['core_id']
@@ -384,27 +398,46 @@ class AssignHandler(BaseHandler):
             return self.write(json.dumps({'error': 'engine must be openmm'}))
         engine_version = content['engine_version']
 
-        available_targets = Target.lookup('engine_versions',
-                                          engine_version, self.db)
+        available_targets = list(Target.lookup('engine_versions',
+                                               engine_version, self.db))
+
+        allowed_stages = ['public']
+
+        if 'stage' in content:
+            if content['stage'] == 'beta':
+                allowed_stages.append('beta')
+            else:
+                return self.write(json.dumps({'error': 'stage must be beta'}))
 
         if 'target_id' in content:
             # make sure the given target_id can be sent to this core
             target_id = content['target_id']
             if not Target.exists(target_id, self.db):
-                err = 'target_id not managed by this cc'
-                self.write(json.dumps({'error': err}))
-                return
+                err = 'given target is not managed by this cc'
+                return self.write(json.dumps({'error': err}))
             if not target_id in available_targets:
-                err = 'requested target_id does not match core engine version'
-                self.write(json.dumps({'error': err}))
+                err = 'requested target_id not in available targets'
+                return self.write(json.dumps({'error': err}))
+            target = Target(target_id, self.db)
         else:
             # if no target is specified, then a random target is chosen from a
             # list of available targets for the core's engine version
             if not available_targets:
                 err_msg = 'no available targets matching engine version'
-                self.write(json.dumps({'error': err_msg}))
-                return
-            target_id = random.sample(available_targets, 1)[0]
+                return self.write(json.dumps({'error': err_msg}))
+
+            found = False
+
+            # target_id must be either beta or public
+            for target_id in yates_generator(available_targets):
+                target = Target(target_id, self.db)
+                if target.hget('stage') in allowed_stages:
+                    found = True
+
+            # if we reached here then we didn't find a good target
+            if not found:
+                err = 'no public or beta targets available'
+                return self.write(json.dumps({'error': err}))
 
         target = Target(target_id, self.db)
         steps_per_frame = target.hget('steps_per_frame')
@@ -701,31 +734,42 @@ class TargetHandler(BaseHandler):
 
     @authenticated
     def post(self):
-        """ POST a new target to the server
+        """
+        .. http:post:: /targets
 
-        Request:
-            {
-                [required]
-                "description": description,
-                "files": {"file1_name": file1_bin_b64,
-                          "file2_name": file2_bin_b64,
-                          ...
-                          }
-                "steps_per_frame": 100000,
-                "engine": "openmm",
-                "engine_versions": ["6.0", "5.5", "5.2"]
+            Add a new target to be managed by this command center.
 
+            **Example request**
 
-                [optional]
-                # if present, a list of workservers to striate on.
-                "allowed_ws": ["mengsk", "arcturus"]
-                "stage": "private"/"beta"/"public"
-            }
+            .. sourcecode:: javascript
 
-        Reply:
-            {
-                "target_id": target_id,
-            }
+                {
+                    "files": {"file1_name": file1_bin_b64,
+                              "file2_name": file2_bin_b64,
+                              ...
+                              }
+                    "steps_per_frame": 100000,
+                    "engine": "openmm",
+                    "engine_versions": ["6.0", "5.5", "5.2"],
+
+                    "allowed_ws": ["mengsk", "arcturus"], // optional
+                    "stage": "private", "beta", or "public" // optional
+                }
+
+            allowed_ws is a list of workservers to striate over. If no "stage"
+            is given, then the target's default stage is private.
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "target_id": "uuid4"
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
+
 
         """
         self.set_status(400)
@@ -775,7 +819,11 @@ class TargetHandler(BaseHandler):
         target.hset('steps_per_frame', steps_per_frame)
         target.hset('creation_date', time.time())
         target.hset('engine', engine)
-        target.hset('stage', 'private')
+        if 'stage' in content:
+            if content['stage'] in ['private', 'beta', 'public']:
+                target.hset('stage', content['stage'])
+        else:
+            target.hset('stage', 'private')
         target.hset('owner', self.get_current_user())
         for allowed_version in content['engine_versions']:
             target.sadd('engine_versions', allowed_version)

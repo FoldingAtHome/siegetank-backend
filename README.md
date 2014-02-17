@@ -27,9 +27,9 @@ Python requirements:
 4. pymongo (pip)
 5. requests (pip)
 
-OS requireds:
-1. libffi (apt-get)
-2. libffi-dev (apt-get)
+OS requirements:  
+1. libffi (apt-get)  
+2. libffi-dev (apt-get)  
 
 <h1> Core Dependencies </h1>
 OpenMM Core:  
