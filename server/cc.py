@@ -72,6 +72,7 @@ import server.ws
 # [A] PUT x.com/targets/delete/:target_id - delete target and its streams
 # [A] PUT x.com/targets/stop/:target_id - stop the target and its streams
 # [A] GET x.com/targets/streams/:target_id - get the streams for target
+# [A] PUT x.com/targets/update_stage/:target_id
 
 # [A] POST x.com/streams - add a stream
 # [P] GET x.com/streams/info/:stream_id - get information about specific stream
@@ -102,7 +103,7 @@ class Target(Entity):
               'steps_per_frame': int,  # number of steps per frame
               'files': {str},  # files shared by all streams
               'creation_date': float,  # in linux time.time()
-              'stage': str,  # disabled, beta, release
+              'stage': str,  # private, beta, public
               'allowed_ws': {str},  # ws to allow striation on
               'engine': str,  # openmm or terachem
               'engine_versions': {str},  # allowed core_versions
@@ -297,6 +298,19 @@ class BaseHandler(tornado.web.RequestHandler):
             return None
 
 
+class UpdateStageHandler(BaseHandler):
+    @authenticated
+    def put(self, target_id):
+        """ Update the status of the target
+
+        Request:
+            {
+                "stage": private, beta, public
+            }
+
+        """
+
+
 class AssignHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
@@ -306,11 +320,12 @@ class AssignHandler(BaseHandler):
             {
                 #"core_id": core_id,
                 "engine": "openmm", (lowercase)
-                "engine_version": "5.2"
+                "engine_version": "5.2",
                 "donor_token": "token"
 
                 [optional]
 
+                "core_type": beta,
                 "target_id": target_id
 
             }
@@ -323,12 +338,17 @@ class AssignHandler(BaseHandler):
             }
 
         If a "target_id" is specified, then the WS will try and activate a
-        stream corresponding to the target_id.
+        stream corresponding to the target_id. In addition, the stage of the
+        target is not taken into consideration.
 
         Otherwise, we try and find a target_id where:
 
         A list of targets whose engine version is compatible with the core's
-        engine version is generated. The assignment algorithm is then applied:
+        engine version is generated. If the core_type is "beta", then we will
+        first try to find a "beta" project, if none can be find, then a public
+        project is returned.
+
+        The assignment algorithm is then applied:
 
         Proposed algorithm:
 
@@ -341,7 +361,7 @@ class AssignHandler(BaseHandler):
         target.weight = target.n_streams^(2/3)*vijay.weight
 
         order and compute the cdf over all targets, then sample x ~ U(0,1] and
-        see which target maps to x. 
+        see which target maps to x.
 
         """
 
@@ -365,7 +385,7 @@ class AssignHandler(BaseHandler):
         engine_version = content['engine_version']
 
         available_targets = Target.lookup('engine_versions',
-                                  engine_version, self.db)
+                                          engine_version, self.db)
 
         if 'target_id' in content:
             # make sure the given target_id can be sent to this core
@@ -695,10 +715,11 @@ class TargetHandler(BaseHandler):
                 "engine": "openmm",
                 "engine_versions": ["6.0", "5.5", "5.2"]
 
+
                 [optional]
                 # if present, a list of workservers to striate on.
                 "allowed_ws": ["mengsk", "arcturus"]
-                "stage": beta,
+                "stage": "private"/"beta"/"public"
             }
 
         Reply:
@@ -754,7 +775,7 @@ class TargetHandler(BaseHandler):
         target.hset('steps_per_frame', steps_per_frame)
         target.hset('creation_date', time.time())
         target.hset('engine', engine)
-        target.hset('stage', 'disabled')
+        target.hset('stage', 'private')
         target.hset('owner', self.get_current_user())
         for allowed_version in content['engine_versions']:
             target.sadd('engine_versions', allowed_version)

@@ -184,7 +184,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         target = cc.Target(target_id, self.cc.db)
         self.assertEqual(target.hget('description'), description)
         self.assertEqual(target.hget('steps_per_frame'), 50000)
-        self.assertEqual(target.hget('stage'), 'disabled')
+        self.assertEqual(target.hget('stage'), 'private')
         self.assertEqual(target.hget('engine'), 'openmm')
         self.assertEqual(target.hget('owner'), email)
         self.assertEqual(target.smembers('engine_versions'), {'6.0'})

@@ -301,8 +301,9 @@ float OpenMMCore::ns_per_day(long long steps_completed) const {
 
 void OpenMMCore::main() {
     try {
-        // take ostep();
-        long long current_step = 0;
+        // nothing is written on the first step;
+        long long current_step = 1;
+        _core_context->getIntegrator().step(1);
         changemode(1);
         status_header(cout);
         while(true) {

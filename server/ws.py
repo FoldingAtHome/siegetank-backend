@@ -68,7 +68,6 @@ from server.apollo import Entity, zset, relate
 #
 # TODO:
 # [ ] Stats
-# [ ] md5 checksum of headers
 # [ ] delete mechanisms
 
 ###################
@@ -95,7 +94,7 @@ from server.apollo import Entity, zset, relate
 # PUBLIC Interface #
 ####################
 
-# GET x.com/targets/streams/:target_id
+# GET x.com/targets/streams/:target_id - a list of streams for this target
 # GET x.com/active_streams - get all the active streams
 
 # In general, we should try and use GETs/PUTs whenever possible. Idempotency
@@ -173,7 +172,8 @@ class BaseHandler(tornado.web.RequestHandler):
 
 
 def authenticate_core(method):
-    """ Decorate handlers whose authorization token maps to a specific stream
+    """
+    Decorate handlers whose authorization token maps to a specific stream
         identifier.
 
         If the authorization token is valid, then the stream_id is sent to the
@@ -201,15 +201,28 @@ def authenticate_core(method):
 
 class TargetStreamsHandler(BaseHandler):
     def get(self, target_id):
-        """ Get a list of streams and their simple status
-        Reply:
-            {
-                'stream_id': {
-                    'status': OK,
-                    'frames': 253,
+        """
+        .. http:get:: /targets/streams/(:target_id)
+
+            Get a list of streams for the target and their status and frames
+
+            **Example reply**:
+
+            .. sourcecode:: javascript
+
+                {
+                    "stream_id_1": {
+                        "status": "OK",
+                        "frames": 253,
+                    },
+                    "stream_id_2": {
+                        "status": "OK",
+                        "frames": 1902,
+                    }
                 }
-                ...
-            }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
         self.set_status(400)
@@ -226,21 +239,30 @@ class TargetStreamsHandler(BaseHandler):
 
 class ActivateStreamHandler(BaseHandler):
     def post(self):
-        """ Activate and return the highest priority stream on a target.
-            If no streams can be activated, then return status code 400
+        """
+        .. http:post:: /streams/activate
 
-            Request:
+            Activate and return the highest priority stream of a target.
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
                 {
-                    "target_id": target_id
-
-                    [optional]
-                    "donor_id": donor_id
+                    "target_id": "some_uuid4",
+                    "donor_id": "jesse_v" // optional
                 }
 
-            Reply:
+            **Example reply**
+
+            .. sourcecode:: javascript
+
                 {
-                    "token": token
+                    "token": "uuid token"
                 }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
 
@@ -273,38 +295,42 @@ class ActivateStreamHandler(BaseHandler):
 
 class PostStreamHandler(BaseHandler):
     def post(self):
-        """ Accessible by CC only.
+        """
+        .. http:post:: /streams
 
-        Add a new stream to WS. The POST method on this URI
-        can only be accessed by known CCs (IP restricted)
+            Add a new stream to WS.
 
-        Request:
-            {
-                'target_id': target_id
+            **Example request**
 
-                [required if target_id does not exist on ws]
-                'target_files': {file1_name: file1.b64,
-                                 file2_name: file2.b64,
-                                 ...
-                                 }
+            .. sourcecode:: javascript
 
-                'stream_files': {file3_name: file3.b64,
-                                 file4_name: file4.b64,
-                                 ...
-                                 }
+                {
+                    "target_id": "target_id",
 
-            }
+                    "target_files": {"system.xml.gz.b64": "file1.b64",
+                                     "integrator.xml.gz.b64": "file2.b64",
+                                     } // required if target_id does not exist
 
-        Response:
-            {
-                'stream_id' : hash
-            }
+                    "stream_files": {"state.xml.gz.b64": "file3.b64"}
 
-        Notes: Binaries in files must be base64 encoded.
+                }
 
-        # TODO: stream creation needs to be pipelined and atomic
+            Note: Binaries must be base64 encoded.
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "stream_id" : "uuid hash"
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
+        # TODO: stream creation needs to be pipelined and atomic?
+
         #if not CommandCenter.lookup('ip', self.request.remote_ip, self.db):
         #    return self.set_status(401)
         self.set_status(400)
@@ -357,13 +383,21 @@ class PostStreamHandler(BaseHandler):
 
 class DeleteStreamHandler(BaseHandler):
     def put(self):
-        """ Accessible by CC only. TODO: make it authenticated! So that
-        this method can be called either from the CC or the WS.
+        """
+        .. http:put:: /streams/delete
 
-        Request:
-            {
-                'stream_id': stream_id,
-            }
+            Delete a stream from the workserver
+
+            **Example request**:
+
+            .. sourcecode:: javascript
+
+                {
+                    "stream_id": "stream_id",
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
         stream_id = json.loads(self.request.body.decode())['stream_id']
@@ -394,45 +428,44 @@ class DeleteStreamHandler(BaseHandler):
 class CoreStartHandler(BaseHandler):
     @authenticate_core
     def get(self, stream_id):
-        """ The core first goes to the CC to get an authorization token. The CC
-        activates a stream, and maps the authorization token to the stream.
+        """
+        .. http:get:: /core/start
 
-        Request Header:
+            Start a stream and retrieve files
 
-            Authorization - shared_token
+            :reqheader Authorization: authorization token given by the cc
 
-        Reply:
+            **Example reply**
 
-            {
-                'frame': frame_count,
-                'stream_id': uuid,
-                'target_id': uuid,
-                'stream_files': {file1_name: file1.b64,
-                                 file2_name: file2.b64,
-                                 ...
-                                 }
-                'target_files': {file1_name: file1.b64,
-                                 file2_name: file2.b64,
-                                 ...
-                                 }
-            }
+            .. sourcecode:: javascript
 
-        We need to be extremely careful about checkpoints and frames, as
-        it is important we avoid writing duplicate frames on the first
-        step for the core. We use the follow scheme:
+                {
+                    "stream_id": "uuid4",
+                    "target_id": "uuid4",
+                    "stream_files": {"state.xml.gz.b64": "content.b64"},
+                    "target_files": {"integrator.xml.gz.b64": "content.b64",
+                                     "system.xml.gz.b64": "content.b64"
+                                     }
+                }
 
-                      (0-10]                      (10-20]
-                    frameset_10                 frameset_20
-              ------------------------------------------------------------
-              |c       core 1      |c|              core 2         |c|
-              ---                  --|--                           --|--
-        frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
-                ---------------------| ------------------------------- ---
-
-        When a core fetches a state.xml, it makes sure to NOT write the
-        first frame (equivalent to the frame of fetched state.xml file).
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
+        # We need to be extremely careful about checkpoints and frames, as
+        # it is important we avoid writing duplicate frames on the first
+        # step for the core. We use the follow scheme:
+
+        #               (0-10]                      (10-20]
+        #             frameset_10                 frameset_20
+        #       ------------------------------------------------------------
+        #       |c       core 1      |c|              core 2         |c|
+        #       ---                  --|--                           --|--
+        # frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
+        #         ---------------------| ------------------------------- ---
+
+        # When a core fetches a state.xml, it makes sure to NOT write the
+        # first frame (equivalent to the frame of fetched state.xml file).
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -469,65 +502,62 @@ class CoreStartHandler(BaseHandler):
 class CoreFrameHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Append a new frame.
+        """
+        ..  http:put:: /core/frame
 
-        If the core posts to this method, then the WS assumes that the frame is
-        good. The data received is stored in a buffer until a checkpoint is
-        received.
+            Append a frame to the stream's buffer.
 
-        There are four interval :
+            If the core posts to this method, then the WS assumes that the
+            frame is valid. The data received is stored in a buffer until a
+            checkpoint is received. It is assumed that files given here are
+            binary appendable. Files ending in .b64 or .gz are decoded
+            automatically.
 
-        fwi = frame_write_interval (PG Controlled)
-        fsi = frame_send_interval (Core Controlled)
-        cwi = checkpoint_write_interval (Core Controlled)
-        csi = checkpoint_send_interval (Donor Controlled)
+            :reqheader Authorization: authorization token given by the cc
 
-        Where: fwi < k*fsi = cwi < j*csi | k, j are integers
+            **Example request**
 
-        When a set of frames is sent, the core is guaranteed to write a
-        corresponding checkpoint, so that the next checkpoint received is
-        guaranteed to correspond to the head of the buffered files.
+            .. sourcecode:: javascript
 
-        OpenMM:
-
-        fwi = fsi = cwi = 50000
-        sci = 2x per day
-
-        Terachem:
-
-        fwi = 2
-        fsi = cwf = 100
-        sci = 2x per day
-
-        Request Header:
-
-            Authorization - core_token
-
-        Request Body:
-            {
-
-                [optional]
-                "frames": 25,  # number of frames this contains
-
-                "files" : {
-                    "filename.xtc.b64": file.b64,
-                    "frames.xtc.b64": file.b64,
-                    "coords.xyz.b64": file.b64,
-                    "log.txt.gz.b64": file.gz.b64
+                {
+                    "files" : {
+                        "frames.xtc.b64": "file.b64",
+                        "log.txt.gz.b64": "file.gz.b64"
+                    }
+                    "frames": 25  // optional, number of frames in the files
                 }
 
-
-            }
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         If the filename ends in b64, it is b64 decoded. If the next suffix ends
         in gz, it is gunzipped. Afterwards, the written to disk with the name
         buffer_[filename], with the b64/gz suffixes stripped.
 
-        Reply:
-
-            200 - OK
-
         """
+        # There are four intervals:
+
+        # fwi = frame_write_interval (PG Controlled)
+        # fsi = frame_send_interval (Core Controlled)
+        # cwi = checkpoint_write_interval (Core Controlled)
+        # csi = checkpoint_send_interval (Donor Controlled)
+
+        # Where: fwi < k*fsi = cwi < j*csi | k, j are integers
+
+        # When a set of frames is sent, the core is guaranteed to write a
+        # corresponding checkpoint, so that the next checkpoint received is
+        # guaranteed to correspond to the head of the buffered files.
+
+        # OpenMM:
+
+        # fwi = fsi = cwi = 50000
+        # sci = 2x per day
+
+        # Terachem:
+
+        # fwi = 2
+        # fsi = cwf = 100
+        # sci = 2x per day
         self.set_status(400)
         active_stream = ActiveStream(stream_id, self.db)
         frame_hash = hashlib.md5(self.request.body).hexdigest()
@@ -570,41 +600,42 @@ class CoreFrameHandler(BaseHandler):
 class CoreCheckpointHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Add a checkpoint. Invoking this handler renames the buffered files
-        into a valid filenames prefixed with the corresponding frame count.
+        """
+        .. http:put:: /core/checkpoint
 
-        Suppose we have the following files:
+            Add a checkpoint and renames buffered files into a valid filenames
+            prefixed with the corresponding frame count. It is assumed that the
+            checkpoint corresponds to the last frame of the buffered frames.
 
-        active_stream.hset('buffer_frames', 0)
+            :reqheader Authorization: authorization token given by the cc
 
-        total_frames = stream.hget('frames') +
-                       active_stream.hget('buffer_frames')
-                     = 9
+            .. sourcecode:: javascript
 
-        5_state.xml.gz.b64
-        5_frames.xtc            buffer_frames.xtc
-        5_log.txt               buffer_log.txt
-
-        1. 1) write checkpoint: 9_state.xml.gz.b64 is written
-        2. 2) rename buffered files: buffer_frames.xtc -> 9_frames.xtc
-        3. 3) delete old checkpoint: 5_state.xml.gz.b64 is deleted
-
-        Request Header:
-
-            Authorization: core_token
-
-        Request Body:
-            {
-                "files": {
-                    "state.xml.gz.b64" : state.xml.gz.b64
+                {
+                    "files": {
+                        "state.xml.gz.b64" : "state.xml.gz.b64"
+                    }
                 }
-            }
 
-        Reply:
-
-            200 - OK
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
+        # Naming scheme:
+
+        # active_stream.hset('buffer_frames', 0)
+        # total_frames = stream.hget('frames') +
+        #                active_stream.hget('buffer_frames')
+        #              = 9
+
+        # 5_state.xml.gz.b64
+        # 5_frames.xtc            buffer_frames.xtc
+        # 5_log.txt               buffer_log.txt
+
+        # 1. 1) write checkpoint: 9_state.xml.gz.b64 is written
+        # 2. 2) rename buffered files: buffer_frames.xtc -> 9_frames.xtc
+        # 3. 3) delete old checkpoint: 5_state.xml.gz.b64 is deleted
+
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         stream = Stream(stream_id, self.db)
@@ -649,27 +680,29 @@ class CoreCheckpointHandler(BaseHandler):
 class CoreStopHandler(BaseHandler):
     @authenticate_core
     def put(self, stream_id):
-        """ Stop a stream from being ran by a core.
+        """
+        ..  http:put:: /core/stop
 
-        To do: add marker denoting if stream should be finished
+            Stop a stream
 
-        Request Header:
+            :reqheader Authorization: authorization token given by the cc
 
-            Authorization: core_token
+            **Example Request**
 
-        Request Body:
-            {
-                [optional]
-                "error": error_message
+            .. sourcecode:: javascript
 
-                [optional]
-                "debug_files": {file1_name: file1_bin_b64,
-                                file2_name: file2_bin_b64,
-                                ...
-                                }
-            }
+                {
+                    "error": "error message",  // optional
+                    "debug_files": {"file1_name": "file1_bin_b64",
+                                    "file2_name": "file2_bin_b64"
+                                    } // optional
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
+        # TODO: add field denoting if stream should be finished
         stream = Stream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
         if 'error' in content:
@@ -722,6 +755,7 @@ class ActiveStreamsHandler(BaseHandler):
                 reply[target][stream_id]['total_frames'] = total_frames
         self.write(json.dumps(reply))
 
+
 class DownloadHandler(BaseHandler):
     def get(self, stream_id, filename):
         """ Download the file filename from stream streamid
@@ -764,17 +798,34 @@ class DownloadHandler(BaseHandler):
 class CoreHeartbeatHandler(BaseHandler):
     @authenticate_core
     def post(self, stream_id):
-        ''' Cores POST to this handler to notify the WS that it is still
-        alive.
+        """
+        .. http:post:: /core/heartbeat
 
-        Request Header:
+            Cores POST to this handler to notify the WS that it is still
+            alive.
 
-            Authorization: token
+            :reqheader Authorization: authorization token given by the cc
 
-        Request:
-            {}
+            **Example request**
 
-        '''
+            .. sourcecode:: javascript
+
+                {
+                    // empty
+                }
+
+            **Example reply**:
+
+            .. sourcecode:: javascript
+
+                {
+                    // empty
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
+
+        """
         increment = tornado.options.options['heartbeat_increment']
         self.db.zadd('heartbeats', stream_id, time.time()+increment)
         self.set_status(200)
