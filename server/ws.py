@@ -866,7 +866,8 @@ class WorkServer(tornado.web.Application, RedisMixin):
         self.streams_folder = streams_folder
         self.db = init_redis(redis_port, redis_pass,
                              appendonly=appendonly,
-                             appendfilename='aof_'+ws_name)
+                             appendfilename='aof_'+ws_name,
+                             logfilename='db_'+ws_name+'.log')
         if not os.path.exists(self.targets_folder):
             os.makedirs(self.targets_folder)
         if not os.path.exists(self.streams_folder):

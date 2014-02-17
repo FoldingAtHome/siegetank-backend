@@ -23,7 +23,7 @@ def is_domain(url):
 
 
 def init_redis(redis_port, redis_pass=None,
-               appendonly=False, appendfilename=None):
+               appendonly=False, appendfilename=None, logfilename=None):
     """ Spawn a redis subprocess port and returns a redis client.
 
         Parameters:
@@ -45,6 +45,9 @@ def init_redis(redis_port, redis_pass=None,
     if redis_pass:
         args.append('--requirepass')
         args.append(str(redis_pass))
+    if logfilename:
+        args.append('--logfile')
+        args.append(logfilename)
     redis_process = subprocess.Popen(args)
 
     if redis_process.poll() is not None:

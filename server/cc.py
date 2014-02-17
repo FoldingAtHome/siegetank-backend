@@ -868,7 +868,8 @@ class CommandCenter(tornado.web.Application, RedisMixin):
         self.name = cc_name
         self.db = init_redis(redis_port, redis_pass,
                              appendonly=appendonly,
-                             appendfilename='aof_'+self.name)
+                             appendfilename='aof_'+self.name,
+                             logfilename='db_'+self.name+'.log')
         self.ws_dbs = {}
         self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
 
