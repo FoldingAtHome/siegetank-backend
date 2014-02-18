@@ -217,16 +217,30 @@ class AddDonorHandler(tornado.web.RequestHandler):
 
 class AuthManagerHandler(tornado.web.RequestHandler):
     def post(self):
-        """ Generate a new authorization token for the user
+        """
+        .. http:post:: /auth
 
-        Request: {
-            "email": proteneer@gmail.com,
-            "password": password
-        }
+            Generate a new authorization token for the user
 
-        Reply: {
-            "token": token
-        }
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "email": "proteneer@gmail.com",
+                    "password": "my_password"
+                }
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "token": "uuid token"
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
         self.set_status(400)
@@ -340,12 +354,12 @@ class AssignHandler(BaseHandler):
                     "target_id": "target_id" // optional
                 }
 
-            If a `target_id` is specified, then the WS will try and activate a
-            stream corresponding to the `target_id`. In addition, the stage of
-            the target is not taken into consideration. Note that `target_id`
+            If *target_id* is specified, then the WS will try and activate a
+            stream corresponding to the *target_id*. In addition, the stage of
+            the target is not taken into consideration. Note that *target_id*
             must be the fully qualified 36 digit uuid.
 
-            Otherwise, we try and find a `target_id` whose:
+            Otherwise, we try and find a *target_id* whose:
 
             Engine version is compatible with the core's engine version and
             `stage` is either "beta" or "public".
@@ -557,27 +571,32 @@ class PostStreamHandler(BaseHandler):
     @authenticated
     @tornado.gen.coroutine
     def post(self):
-        """ POST a new stream to the server
+        """
+        .. http:post:: /streams
 
-        When a stream is POSTED, we do a check to make sure that the set of
-        {stream_files} U {target_files} is sufficient for the engine type.
+            Add a new stream to an existing target.
 
-        It now becomes possible for streams to have different xml files
+            **Example request**
 
-        Request:
-            {
-                [required]
-                "target_id": target_id,
-                "files": {"file1_name": file1_bin_b64,
-                          "file2_name": file2_bin_b64,
-                          ...
-                          }
-            }
+            .. sourcecode:: javascript
 
-        Reply:
-            {
-                "stream_id": stream_id
-            }
+                {
+                    "target_id": "target_id",
+                    "files": {"file1_name": "file1_bin_b64",
+                              "file2_name": "file2_bin_b64",
+                              }
+                }
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "stream_id": "stream uuid4"
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
 
         """
         self.set_status(400)
@@ -770,7 +789,6 @@ class TargetHandler(BaseHandler):
 
             :statuscode 200: No error
             :statuscode 400: Bad request
-
 
         """
         self.set_status(400)

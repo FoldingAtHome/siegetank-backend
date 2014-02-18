@@ -6,7 +6,9 @@ Command Center REST API
 Manager Methods
 ---------------
 
+.. autosimple:: AuthManagerHandler.post
 .. autosimple:: TargetHandler.post
+.. autosimple:: PostStreamHandler.post
 
 
 Core Methods
