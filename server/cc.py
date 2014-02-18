@@ -434,23 +434,20 @@ class AssignHandler(BaseHandler):
                 target = Target(target_id, self.db)
                 if target.hget('stage') in allowed_stages:
                     found = True
+                    break
 
             # if we reached here then we didn't find a good target
             if not found:
                 err = 'no public or beta targets available'
                 return self.write(json.dumps({'error': err}))
 
-        target = Target(target_id, self.db)
         steps_per_frame = target.hget('steps_per_frame')
-
-        print("CC WARNING: ", target_id, end='\n', file=sys.stderr)
 
         # shuffle and re-order the list of striated servers
         striated_servers = list(target.smembers('striated_ws'))
         random.shuffle(striated_servers)
 
         for ws_name in striated_servers:
-            print("CC WARNING: ", end='\n', file=sys.stderr)
             workserver = WorkServer(ws_name, self.db)
             ws_url = workserver.hget('url')
             ws_port = workserver.hget('http_port')

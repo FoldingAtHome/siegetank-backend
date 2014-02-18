@@ -231,21 +231,36 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         target_id_public = json.loads(reply.body.decode())['target_id']
 
-        print('PUBLIC TARGET_ID', target_id_public)
-        print('PUBLIC TARGET_ID', target_id_private)
+        for target_id in [target_id_public, target_id_private]:
+            uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
+            rand_bin = base64.b64encode(os.urandom(1024)).decode()
+            body = {'target_id': target_id,
+                    'files': {"state.xml.gz.b64": rand_bin}
+                    }
+
+            client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                         validate_cert=common.is_domain(url),
+                         headers=headers)
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
 
         uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
         client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
                      body=json.dumps(core_body), method='POST')
         reply = self.wait()
-        print(reply.body)
         self.assertEqual(reply.code, 200)
+
+        token = json.loads(reply.body.decode())['token']
+
+        headers = {'Authorization': token}
 
         uri = 'https://'+url+':'+str(self.ws_hport)+'/core/start'
         client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-                     body=json.dumps(body), method='GET')
+                     method='GET', headers=headers)
         reply = self.wait()
         self.assertEqual(reply.code, 200)
+        core_target = json.loads(reply.body.decode())['target_id']
+        self.assertEqual(core_target, target_id_public)
 
     def test_post_target_and_streams(self):
         headers = {'Authorization': self.auth_token}

@@ -266,18 +266,11 @@ class ActivateStreamHandler(BaseHandler):
             :statuscode 400: Bad request
 
         """
-
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content["target_id"]
-
-        print("WS WARNING: ", target_id, end='\n', file=sys.stderr)
-
         target = Target(target_id, self.db)
         stream_id = target.zrevpop('queue')
-
-        print("WS WARNING 2: ", stream_id, end='\n', file=sys.stderr)
-
         token = str(uuid.uuid4())
         if stream_id:
             active_stream = ActiveStream.create(stream_id, self.db)
