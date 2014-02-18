@@ -61,7 +61,8 @@ class Test(tornado.testing.AsyncTestCase):
         password = 'test_pw_me'
         body = {
             'email': email,
-            'password': password
+            'password': password,
+            'role': 'manager'
         }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
@@ -472,7 +473,8 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         password = 'test_pw_me'
         body = {
             'email': email,
-            'password': password
+            'password': password,
+            'role': 'manager'
         }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),

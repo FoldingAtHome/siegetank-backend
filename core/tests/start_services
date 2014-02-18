@@ -13,7 +13,8 @@ import gzip
 def add_manager():
     reply = requests.post('https://127.0.0.1:8980/managers',
                           data=json.dumps({'email': 'test_user@gmail.com',
-                                           'password': 'test_pass'}),
+                                           'password': 'test_pass',
+                                           'role': 'manager'}),
                           verify=False)
     assert reply.status_code == 200
 

@@ -7,6 +7,7 @@ Manager Methods
 ---------------
 
 .. autosimple:: AuthManagerHandler.post
+.. autosimple:: AddManagerHandler.post
 .. autosimple:: TargetHandler.post
 .. autosimple:: PostStreamHandler.post
 

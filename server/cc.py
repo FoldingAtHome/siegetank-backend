@@ -136,6 +136,30 @@ def authenticated(method):
     return wrapper
 
 
+class BaseHandler(tornado.web.RequestHandler):
+    @property
+    def db(self):
+        return self.application.db
+
+    def get_current_user(self):
+        try:
+            header_token = self.request.headers['Authorization']
+            mdb = self.application.mdb
+            query = mdb.managers.find_one({'token': header_token},
+                                          fields=['_id'])
+            return query['_id']
+        except:
+            return None
+
+    def get_user_role(self, email):
+        mdb = self.application.mdb
+        query = mdb.managers.find_one({'_id': email}, fields={'role'})
+        try:
+            return query['role']
+        except:
+            return None
+
+
 class AuthDonorHandler(tornado.web.RequestHandler):
     def post(self):
         """ Generate a new authorization token for the donor
@@ -260,32 +284,62 @@ class AuthManagerHandler(tornado.web.RequestHandler):
         self.write(json.dumps({'token': new_token}))
 
 
-class AddManagerHandler(tornado.web.RequestHandler):
+class AddManagerHandler(BaseHandler):
     def post(self):
-        """ Add a PG member as a Manager.
+        """
+        .. http:post:: /managers
 
-        Request: {
-            "email": proteneer@gmail.com,
-            "password": password,
-        }
+            Add a manager. The request must have originated from localhost or
+            a user whose role is admin. Admins can add new managers, delete
+            managers, in addition to modifying any target
 
-        Reply: {
-            "token": token
-        }
+            :reqheader Authorization: access token of an administrator
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "email": "proteneer@gmail.com",
+                    "password": "password",
+                    "role": "admin" or "manager"
+                }
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "token": "token"
+                }
+
+            :statuscode 200: No error
+            :statuscode 400: Bad request
+            :statuscode 401: Unauthorized
 
         """
         self.set_status(400)
-        if self.request.remote_ip != '127.0.0.1':
+        current_user = self.get_current_user()
+        if current_user:
+            if self.get_user_role(current_user) != 'admin':
+                return self.set_status(401)
+        elif self.request.remote_ip != '127.0.0.1':
             return self.set_status(401)
+
         content = json.loads(self.request.body.decode())
         token = str(uuid.uuid4())
         email = content['email']
         password = content['password']
+        role = content['role']
+        if not role in ['admin', 'manager']:
+            return self.write(json.dumps({'error': 'bad role'}))
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
         db_body = {'_id': email,
                    'password_hash': hash_password,
-                   'token': token
+                   'token': token,
+                   'role': role
                    }
+
         managers = self.application.mdb.managers
         try:
             managers.insert(db_body)
@@ -295,22 +349,6 @@ class AddManagerHandler(tornado.web.RequestHandler):
 
         self.set_status(200)
         self.write(json.dumps({'token': token}))
-
-
-class BaseHandler(tornado.web.RequestHandler):
-    @property
-    def db(self):
-        return self.application.db
-
-    def get_current_user(self):
-        header_token = self.request.headers['Authorization']
-        mdb = self.application.mdb
-        query = mdb.managers.find_one({'token': header_token},
-                                      fields=['_id'])
-        try:
-            return query['_id']
-        except:
-            return None
 
 
 class UpdateStageHandler(BaseHandler):

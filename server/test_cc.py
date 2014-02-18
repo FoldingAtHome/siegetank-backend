@@ -93,17 +93,20 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         password = 'test_pw_me'
         body = {
             'email': email,
-            'password': password
+            'password': password,
+            'role': 'manager'
         }
         rep = self.fetch('/managers', method='POST', body=json.dumps(body))
         self.assertEqual(rep.code, 200)
         query = self.cc.mdb.managers.find_one({'_id': email})
         stored_hash = query['password_hash']
         stored_token = query['token']
+        stored_role = query['role']
         self.assertEqual(stored_hash,
                          bcrypt.hashpw(password.encode(), stored_hash))
         reply_token = json.loads(rep.body.decode())['token']
         self.assertEqual(stored_token, reply_token)
+        self.assertEqual(stored_role, 'manager')
 
         # test auth
         for i in range(5):
@@ -118,6 +121,37 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
             query = self.cc.mdb.managers.find_one({'_id': email})
             stored_token = query['token']
             self.assertEqual(reply_token, stored_token)
+
+        body = {
+            'email': 'admin@gmail.com',
+            'password': 'some_pass',
+            'role': 'admin'
+        }
+
+        reply = self.fetch('/managers', method='POST', body=json.dumps(body))
+        self.assertEqual(reply.code, 200)
+        reply_token = json.loads(reply.body.decode())['token']
+        headers = {'Authorization': reply_token}
+        body = {
+            'email': 'test_user@gmail.com',
+            'password': 'some_pass',
+            'role': 'manager'
+        }
+        reply = self.fetch('/managers', method='POST', body=json.dumps(body),
+                           headers=headers)
+        reply_token = json.loads(reply.body.decode())['token']
+        headers = {'Authorization': reply_token}
+        self.assertEqual(reply.code, 200)
+
+        # Try posting as a manager
+        body = {
+            'email': 'test_user2@gmail.com',
+            'password': 'some_pass2',
+            'role': 'manager'
+        }
+        reply = self.fetch('/managers', method='POST', body=json.dumps(body),
+                           headers=headers)
+        self.assertEqual(reply.code, 401)
 
     def test_register_cc(self):
         ws_name = 'ramanujan'
@@ -152,7 +186,8 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         password = 'test_pw_me'
         body = {
             'email': email,
-            'password': password
+            'password': password,
+            'role': 'manager'
         }
         rep = self.fetch('/managers', method='POST', body=json.dumps(body))
         auth = json.loads(rep.body.decode())['token']
@@ -217,7 +252,8 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         password = 'test_pw_me'
         body = {
             'email': email,
-            'password': password
+            'password': password,
+            'role': 'manager'
         }
         rep = self.fetch('/managers', method='POST', body=json.dumps(body))
         auth = json.loads(rep.body.decode())['token']
