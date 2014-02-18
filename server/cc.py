@@ -31,6 +31,7 @@ import time
 import functools
 import bcrypt
 import pymongo
+import sys
 
 from server.common import RedisMixin, init_redis, is_domain
 from server.apollo import Entity, relate
@@ -442,11 +443,14 @@ class AssignHandler(BaseHandler):
         target = Target(target_id, self.db)
         steps_per_frame = target.hget('steps_per_frame')
 
+        print("CC WARNING: ", target_id, end='\n', file=sys.stderr)
+
         # shuffle and re-order the list of striated servers
         striated_servers = list(target.smembers('striated_ws'))
         random.shuffle(striated_servers)
 
         for ws_name in striated_servers:
+            print("CC WARNING: ", end='\n', file=sys.stderr)
             workserver = WorkServer(ws_name, self.db)
             ws_url = workserver.hget('url')
             ws_port = workserver.hget('http_port')

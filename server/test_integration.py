@@ -182,6 +182,71 @@ class Test(tornado.testing.AsyncTestCase):
         reply = self.wait()
         self.assertEqual(reply.code, 400)
 
+    def test_private_target(self):
+        client = self.client
+        url = self.url
+        headers = {'Authorization': self.auth_token}
+        # test to make sure that we can't retrieve a private target
+        fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
+                              for i in range(4))
+        description = "Diwakar and John's top secret project"
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
+            'stage': 'private'
+            }
+        uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=common.is_domain(url), headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        target_id_private = json.loads(reply.body.decode())['target_id']
+
+        core_body = {
+            'engine': 'openmm',
+            'engine_version': '6.0'
+        }
+
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     body=json.dumps(core_body), method='POST')
+        reply = self.wait()
+        self.assertEqual(reply.code, 400)
+
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
+            'stage': 'public'
+        }
+        uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=common.is_domain(url), headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        target_id_public = json.loads(reply.body.decode())['target_id']
+
+        print('PUBLIC TARGET_ID', target_id_public)
+        print('PUBLIC TARGET_ID', target_id_private)
+
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     body=json.dumps(core_body), method='POST')
+        reply = self.wait()
+        print(reply.body)
+        self.assertEqual(reply.code, 200)
+
+        uri = 'https://'+url+':'+str(self.ws_hport)+'/core/start'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     body=json.dumps(body), method='GET')
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
     def test_post_target_and_streams(self):
         headers = {'Authorization': self.auth_token}
         client = self.client
