@@ -201,8 +201,7 @@ def authenticate_core(method):
 class TargetStreamsHandler(BaseHandler):
     def get(self, target_id):
         """
-        .. http:get:: /targets/streams/(:target_id)
-
+        .. http::get:: /targets/streams/(:target_id)
             Get a list of streams for the target and their status and frames
 
             **Example reply**:
@@ -220,8 +219,8 @@ class TargetStreamsHandler(BaseHandler):
                     }
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -260,8 +259,8 @@ class ActivateStreamHandler(BaseHandler):
                     "token": "uuid token"
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -304,16 +303,14 @@ class PostStreamHandler(BaseHandler):
 
                 {
                     "target_id": "target_id",
-
                     "target_files": {"system.xml.gz.b64": "file1.b64",
                                      "integrator.xml.gz.b64": "file2.b64",
                                      } // required if target_id does not exist
 
                     "stream_files": {"state.xml.gz.b64": "file3.b64"}
-
                 }
 
-            Note: Binaries must be base64 encoded.
+            .. note:: Binaries must be base64 encoded.
 
             **Example reply**
 
@@ -323,8 +320,8 @@ class PostStreamHandler(BaseHandler):
                     "stream_id" : "uuid hash"
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         # TODO: stream creation needs to be pipelined and atomic?
@@ -394,8 +391,8 @@ class DeleteStreamHandler(BaseHandler):
                     "stream_id": "stream_id",
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         stream_id = json.loads(self.request.body.decode())['stream_id']
@@ -446,8 +443,8 @@ class CoreStartHandler(BaseHandler):
                                      }
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         # We need to be extremely careful about checkpoints and frames, as
@@ -527,8 +524,8 @@ class CoreFrameHandler(BaseHandler):
                     "frames": 25  // optional, number of frames in the files
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         If the filename ends in b64, it is b64 decoded. If the next suffix ends
         in gz, it is gunzipped. Afterwards, the written to disk with the name
@@ -609,6 +606,8 @@ class CoreCheckpointHandler(BaseHandler):
 
             :reqheader Authorization: authorization token given by the cc
 
+            **Example Request**
+
             .. sourcecode:: javascript
 
                 {
@@ -617,8 +616,8 @@ class CoreCheckpointHandler(BaseHandler):
                     }
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         # Naming scheme:
@@ -698,8 +697,8 @@ class CoreStopHandler(BaseHandler):
                                     } // optional
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         # TODO: add field denoting if stream should be finished
@@ -759,12 +758,17 @@ class ActiveStreamsHandler(BaseHandler):
 class DownloadHandler(BaseHandler):
     def get(self, stream_id, filename):
         """
-        ..http::get /streams/:stream_id/:filename
+        .. http:get:: /streams/:stream_id/:filename
 
-        Download the file filename from stream streamid
+            Download file ``filename`` from ``stream_id``. This function
+            concatenates the list of frames on the fly by reading the files and
+            yielding chunks.
 
-        This function concatenates the list of frames on the fly by reading
-        the files and yielding chunks.
+            :resheader Content-Type: application/octet-stream
+            :resheader Content-Disposition: attachment; filename=frames.xtc
+
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -825,8 +829,8 @@ class CoreHeartbeatHandler(BaseHandler):
                     // empty
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         increment = tornado.options.options['heartbeat_increment']

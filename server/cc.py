@@ -181,8 +181,8 @@ class AuthDonorHandler(tornado.web.RequestHandler):
                     "token": "uuid_token"
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -274,8 +274,8 @@ class AuthManagerHandler(tornado.web.RequestHandler):
                     "token": "uuid token"
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -324,9 +324,9 @@ class AddManagerHandler(BaseHandler):
                     "token": "token"
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
-            :statuscode 401: Unauthorized
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
 
         """
         self.set_status(400)
@@ -422,8 +422,8 @@ class AssignHandler(BaseHandler):
                     "steps_per_frame": 50000
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
 
@@ -574,8 +574,8 @@ class RegisterWSHandler(BaseHandler):
                     // empty
                 }
 
-            :statuscode 200: OK
-            :statuscode 401: Unauthorized
+            :status 200: OK
+            :status 401: Unauthorized
 
         """
         content = json.loads(self.request.body.decode())
@@ -614,9 +614,9 @@ class DeleteStreamHandler(BaseHandler):
                     "stream_id": stream_id,
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
-            :statuscode 401: Unauthorized
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
 
         """
         # this is a relatively slow method. Partially because 1) we don't know
@@ -674,8 +674,8 @@ class PostStreamHandler(BaseHandler):
                     "stream_id": "stream uuid4"
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -761,8 +761,8 @@ class GetTargetHandler(BaseHandler):
 
             .. note:: ``creation_date`` is in seconds since epoch 01/01/1970.
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -807,8 +807,8 @@ class ListStreamsHandler(BaseHandler):
                     ...
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)
@@ -851,8 +851,8 @@ class TargetsHandler(BaseHandler):
                     'targets': ['target_id1', 'target_id2', '...']
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         target_ids = Target.members(self.db)
@@ -912,8 +912,8 @@ class TargetsHandler(BaseHandler):
                     "target_id": "uuid4"
                 }
 
-            :statuscode 200: OK
-            :statuscode 400: Bad request
+            :status 200: OK
+            :status 400: Bad request
 
         """
         self.set_status(400)

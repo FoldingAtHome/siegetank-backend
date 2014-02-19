@@ -1,4 +1,4 @@
-Work Server REST API
+WS REST API
 ================================
 
 .. automodule:: server.ws
@@ -35,3 +35,4 @@ These methods must be authenticated using a core token
 Manager Methods
 ---------------
 
+.. autosimple:: DownloadHandler.get

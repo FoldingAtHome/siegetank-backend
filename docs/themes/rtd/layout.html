@@ -1,0 +1,11 @@
+{% extends "basic/layout.html" %}
+
+{% block relbaritems %}
+<li>
+<a href="{{pathto('deployment')}}">Deployment</a>
+<a href="{{pathto('http-routingtable')}}">Routing Table</a>
+<a href="{{pathto('ws')}}">WS API</a>
+<a href="{{pathto('cc')}}">CC API</a>
+</li>
+{{ super() }}
+{% endblock %}

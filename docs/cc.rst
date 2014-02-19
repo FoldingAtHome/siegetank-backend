@@ -1,4 +1,4 @@
-Command Center REST API
+CC REST API
 ================================
 
 .. automodule:: server.cc
