@@ -14,13 +14,16 @@ import server.common as common
 class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
-        redis_port = str(3828)
         self.increment = 3
         self.cc_auth = '5lik2j3l4'
+        redis_options = {'port': 3828}
+        mongo_options = {'host': 'localhost',
+                         'port': 27017}
         self.cc = cc.CommandCenter(cc_name='test_cc',
-                                   redis_port=redis_port,
                                    cc_pass=self.cc_auth,
-                                   targets_folder='cc_targets', debug=True)
+                                   redis_options=redis_options,
+                                   mongo_options=mongo_options,
+                                   targets_folder='cc_targets')
         super(TestCCBasics, self).setUpClass()
 
     @classmethod
@@ -159,7 +162,12 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         ws_redis_port = 1234
         ws_redis_pass = 'blackmill'
 
-        test_db = common.init_redis(ws_redis_port, ws_redis_pass)
+        redis_options = {
+            'port': ws_redis_port,
+            'requirepass': ws_redis_pass,
+        }
+
+        test_db = common.init_redis(redis_options)
         test_db.ping()
 
         body = {'name': ws_name,

@@ -16,11 +16,17 @@ from os.path import isfile
 class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
-        redis_port = str(3828)
-        self.ws = ws.WorkServer(ws_name='test_server',
-                                redis_port=redis_port,
-                                ws_ext_http_port=23847)
         super(TestStreamMethods, self).setUpClass()
+        external_options = {
+            'external_url': '127.0.0.1',
+            'external_http_port': '8960'
+        }
+        redis_options = {
+            'port': 3828
+        }
+        self.ws = ws.WorkServer(ws_name='test_server',
+                                external_options=external_options,
+                                redis_options=redis_options)
 
     @classmethod
     def tearDownClass(self):

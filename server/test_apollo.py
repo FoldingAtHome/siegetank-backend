@@ -1,6 +1,5 @@
 import unittest
 import server.apollo as apollo
-import redis
 import sys
 import server.common as common
 
@@ -37,8 +36,8 @@ apollo.relate(Person, 'single_cat', Cat, 'single_owner')
 class TestApollo(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # startup a simple redis server
-        cls.db = common.init_redis(redis_port=29387)
+        redis_options = {'port': 29387}
+        cls.db = common.init_redis(redis_options=redis_options)
         cls.db.flushdb()
 
     def tearDown(self):

@@ -14,14 +14,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import signal
 import uuid
 import os
 import json
 import time
 import shutil
 import hashlib
-import sys
 
 import base64
 import gzip
@@ -36,7 +34,7 @@ import tornado.httpclient
 import tornado.options
 import tornado.process
 
-from server.common import RedisMixin, init_redis, is_domain
+from server.common import BaseServerMixin, is_domain, configure_options
 from server.apollo import Entity, zset, relate
 
 # Capacity
@@ -831,7 +829,7 @@ class CoreHeartbeatHandler(BaseHandler):
         self.set_status(200)
 
 
-class WorkServer(tornado.web.Application, RedisMixin):
+class WorkServer(BaseServerMixin, tornado.web.Application):
     def _cleanup(self):
         # clear active streams (and clear buffer)
         active_streams = ActiveStream.members(self.db)
@@ -846,64 +844,38 @@ class WorkServer(tornado.web.Application, RedisMixin):
 
         # inform the CC gracefully that the WS is dying (ie.expire everything)
 
-    def __init__(self,
-                 ws_name,
-                 redis_port,
-                 url='127.0.0.1',
-                 redis_pass=None,
-                 ws_ext_http_port=None,
-                 ccs=dict(),
-                 targets_folder='targets',
-                 streams_folder='streams',
-                 debug=False,
-                 appendonly=False):
-
-        """ Initialize the WorkServer.
-
-        """
+    def __init__(self, ws_name, external_options, redis_options,
+                 mongo_options=None, command_centers=None,
+                 targets_folder='targets', streams_folder='streams'):
+        print('Starting up Work Server:', ws_name)
+        self.base_init(ws_name, redis_options, mongo_options)
 
         self.targets_folder = targets_folder
         self.streams_folder = streams_folder
-        self.db = init_redis(redis_port, redis_pass,
-                             appendonly=appendonly,
-                             appendfilename='aof_'+ws_name,
-                             logfilename='db_'+ws_name+'.log')
-        if not os.path.exists(self.targets_folder):
-            os.makedirs(self.targets_folder)
-        if not os.path.exists(self.streams_folder):
-            os.makedirs(self.streams_folder)
 
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGTERM, self.shutdown)
-
-        # Notify the command centers that this workserver is starting
-        for cc_name in ccs:
-
-            headers = {
-                'Authorization': ccs[cc_name]['auth']
-            }
-
-            body = {
-                'name': ws_name,
-                'url': url,
-                'http_port': ws_ext_http_port,
-                'redis_port': redis_port,
-                'redis_pass': redis_pass
-            }
-
-            # use the synchronous client
-            client = tornado.httpclient.HTTPClient()
-            url = ccs[cc_name]['url']
-            uri = 'https://'+url+'/register_ws'
-            try:
-                rep = client.fetch(uri, method='PUT', connect_timeout=2,
-                                   body=json.dumps(body), headers=headers,
-                                   validate_cert=is_domain(url))
-                if rep.code != 200:
+        # Notify the command centers that this workserver is online
+        if command_centers:
+            for cc_name, properties in command_centers.items():
+                headers = {
+                    'Authorization': properties['pass']
+                }
+                body = {
+                    'name': ws_name,
+                    'url': external_options['external_url'],
+                    'http_port': external_options['external_http_port'],
+                }
+                client = tornado.httpclient.HTTPClient()
+                url = properties['url']
+                uri = 'https://'+url+'/register_ws'
+                try:
+                    rep = client.fetch(uri, method='PUT', connect_timeout=2,
+                                       body=json.dumps(body), headers=headers,
+                                       validate_cert=is_domain(url))
+                    if rep.code != 200:
+                        print('Warning: not connect to CC '+cc_name)
+                except Exception as e:
+                    print(e.code)
                     print('Warning: not connect to CC '+cc_name)
-            except Exception as e:
-                print(e.code)
-                print('Warning: not connect to CC '+cc_name)
 
         super(WorkServer, self).__init__([
             (r'/active_streams', ActiveStreamsHandler),
@@ -917,7 +889,7 @@ class WorkServer(tornado.web.Application, RedisMixin):
             (r'/core/checkpoint', CoreCheckpointHandler),
             (r'/core/stop', CoreStopHandler),
             (r'/core/heartbeat', CoreHeartbeatHandler)
-        ], debug=debug)
+        ])
 
     def initialize_pulse(self):
         # check for heartbeats only on the 0th process.
@@ -927,12 +899,10 @@ class WorkServer(tornado.web.Application, RedisMixin):
                                                          frequency)
             self.pulse.start()
 
-    # we really don't need all 8 processes to constantly check this...
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
             self.deactivate_stream(dead_stream)
 
-    # deactivates the stream on the workserver
     def deactivate_stream(self, stream_id):
         active_stream = ActiveStream(stream_id, self.db)
 
@@ -954,50 +924,28 @@ class WorkServer(tornado.web.Application, RedisMixin):
         target.zadd('queue', stream_id, frames_completed)
 
 #########################
-# Defined once globally #
+# Defined here globally #
 #########################
 
 tornado.options.define('heartbeat_increment', default=900, type=int)
 tornado.options.define('pulse_frequency_in_ms', default=3000, type=int)
 
 
-def start(*args, **kwargs):
-
-    #######################
-    # WS Specific Options #
-    #######################
-    tornado.options.define('name', type=str)
-    tornado.options.define('redis_port', type=int)
-    tornado.options.define('redis_pass', type=str)
-    tornado.options.define('url', type=str)
-    tornado.options.define('internal_http_port', type=int)
-    tornado.options.define('external_http_port', type=int)
-    tornado.options.define('ssl_certfile', type=str)
-    tornado.options.define('ssl_key', type=str)
-    tornado.options.define('ssl_ca_certs', type=str)
-    tornado.options.define('command_centers', type=dict)
+def start():
+    extra_options = {
+        'command_centers': dict,
+        'external_options': dict
+    }
     conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', 'ws.conf')
-    tornado.options.define('config_file', default=conf_path, type=str)
-
-    tornado.options.parse_command_line()
+    configure_options(extra_options, conf_path)
     options = tornado.options.options
-    tornado.options.parse_config_file(options.config_file)
-    ws_name = options.name
-    redis_port = options.redis_port
-    redis_pass = options.redis_pass
-    url = options.url
-    internal_http_port = options.internal_http_port
-    external_http_port = options.external_http_port
-    command_centers = options.command_centers
 
-    ws_instance = WorkServer(ws_name=ws_name,
-                             url=url,
-                             redis_port=redis_port,
-                             redis_pass=redis_pass,
-                             ccs=command_centers,
-                             ws_ext_http_port=external_http_port,
-                             appendonly=True)
+    ws_instance = WorkServer(ws_name=options.name,
+                             external_options=options.external_options,
+                             command_centers=options.command_centers,
+                             redis_options=options.redis_options,
+                             mongo_options=options.mongo_options)
 
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', options.ssl_certfile)
@@ -1009,7 +957,7 @@ def start(*args, **kwargs):
     ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
 
-    ws_server.bind(internal_http_port)
+    ws_server.bind(options.internal_http_port)
     ws_server.start(0)
     ws_instance.initialize_pulse()
     tornado.ioloop.IOLoop.instance().start()

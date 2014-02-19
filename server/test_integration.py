@@ -29,12 +29,28 @@ class Test(tornado.testing.AsyncTestCase):
         cls.ws_hport = 9029
         cls.cc_rport = 5873
         cls.cc_hport = 8343
-        cls.ws = ws.WorkServer('mengsk', redis_port=cls.ws_rport,
+
+        redis_options = {'port': cls.ws_rport}
+        external_options = {'external_http_port': cls.ws_hport}
+
+        cls.ws = ws.WorkServer(ws_name='mengsk',
+                               external_options=external_options,
+                               redis_options=redis_options,
                                targets_folder='ws_targets',
-                               streams_folder='ws_streams',
-                               debug=True)
-        cls.cc = cc.CommandCenter('goliath', redis_port=cls.cc_rport,
-                                  targets_folder='cc_targets', debug=True)
+                               streams_folder='ws_streams')
+
+        redis_options = {'port': cls.cc_rport}
+
+        mongo_options = {
+            'host': 'localhost',
+            'port': 27017
+        }
+
+        cls.cc = cc.CommandCenter(cc_name='goliath',
+                                  cc_pass=None,
+                                  redis_options=redis_options,
+                                  mongo_options=mongo_options,
+                                  targets_folder='cc_targets')
 
     def setUp(self):
         super(Test, self).setUp()
@@ -434,7 +450,12 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             streams_folder = 'streams_folder_'+k
             v['targets_folder'] = targets_folder
             v['streams_folder'] = streams_folder
-            v['ws'] = ws.WorkServer(k, redis_port=rport_start,
+
+            redis_options = {'port': rport_start}
+            external_options = {'external_http_port': hport_start}
+
+            v['ws'] = ws.WorkServer(k, redis_options=redis_options,
+                                    external_options=external_options,
                                     targets_folder=targets_folder,
                                     streams_folder=streams_folder)
             rport_start += 1
@@ -443,7 +464,17 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         cls.cc_rport = 5872
         cls.cc_hport = 8342
 
-        cls.cc = cc.CommandCenter('goliath', redis_port=cls.cc_rport,
+        redis_options = {'port': cls.cc_rport}
+
+        mongo_options = {
+            'host': 'localhost',
+            'port': 27017
+        }
+
+        cls.cc = cc.CommandCenter(cc_name='goliath',
+                                  cc_pass=None,
+                                  redis_options=redis_options,
+                                  mongo_options=mongo_options,
                                   targets_folder='cc_targets')
 
     def setUp(self):

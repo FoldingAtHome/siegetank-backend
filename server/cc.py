@@ -26,16 +26,13 @@ import os
 import uuid
 import random
 import redis
-import signal
 import time
 import functools
 import bcrypt
 import pymongo
-import sys
 
-from server.common import RedisMixin, init_redis, is_domain
+from server.common import BaseServerMixin, is_domain, configure_options
 from server.apollo import Entity, relate
-import server.ws
 
 # The command center manages several work servers in addition to managing the
 # stats system for each work server. A single command center manages a single
@@ -559,9 +556,7 @@ class RegisterWSHandler(BaseHandler):
         name = content['name']
         url = content['url']
         http_port = content['http_port']
-        redis_port = content['redis_port']
-        redis_pass = content['redis_pass']
-        self.application.add_ws(name, url, http_port, redis_port, redis_pass)
+        self.application.add_ws(name, url, http_port)
         print('WS '+content['name']+' is now connected')
         self.set_status(200)
 
@@ -915,30 +910,13 @@ class TargetHandler(BaseHandler):
     #     return
 
 
-class CommandCenter(tornado.web.Application, RedisMixin):
-    def __init__(self, cc_name, redis_port, redis_pass=None,
-                 cc_pass=None, targets_folder='targets', debug=False,
-                 mdb_host='localhost', mdb_port=27017, mdb_password=None,
-                 appendonly=False):
+class CommandCenter(BaseServerMixin, tornado.web.Application):
+    def __init__(self, cc_name, cc_pass, redis_options, mongo_options=None,
+                 targets_folder='targets'):
         print('Starting up Command Center:', cc_name)
+        self.base_init(cc_name, redis_options, mongo_options)
         self.cc_pass = cc_pass
-        self.name = cc_name
-        self.db = init_redis(redis_port, redis_pass,
-                             appendonly=appendonly,
-                             appendfilename='aof_'+self.name,
-                             logfilename='db_'+self.name+'.log')
-        self.ws_dbs = {}
-        self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
-
-        # set up indexes
-        self.mdb.donors.ensure_index("token")
-
         self.targets_folder = targets_folder
-        #if not os.path.exists('files'):
-        #    os.makedirs('files')
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGTERM, self.shutdown)
-
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
             (r'/managers/auth', AuthManagerHandler),
@@ -951,24 +929,15 @@ class CommandCenter(tornado.web.Application, RedisMixin):
             (r'/register_ws', RegisterWSHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete/(.*)', DeleteStreamHandler)
-            ], debug=debug)
+            ])
 
-        self.WorkServerDB = {}
-
-    def add_ws(self, name, url, http_port, redis_port, redis_pass=None):
+    # this is mainly here for unit testing purposes
+    def add_ws(self, name, url, http_port):
         try:
-            # make sure the client is alive
-            client = redis.Redis(host=url,
-                                 port=redis_port,
-                                 password=redis_pass,
-                                 decode_responses=True)
-            client.ping()
-
             if not WorkServer.exists(name, self.db):
                 ws = WorkServer.create(name, self.db)
             else:
                 ws = WorkServer(name, self.db)
-
             ws.hset('url', url)
             ws.hset('http_port', http_port)
             ws.hset('online', True)
@@ -977,37 +946,19 @@ class CommandCenter(tornado.web.Application, RedisMixin):
 
 
 def start():
-
-    #######################
-    # CC Specific Options #
-    #######################
-    tornado.options.define('name', type=str)
-    tornado.options.define('redis_port', type=int)
-    tornado.options.define('redis_pass', type=str)
-    tornado.options.define('internal_http_port', type=int)
-    tornado.options.define('external_http_port', type=int)
-    tornado.options.define('cc_pass', type=str)
-    tornado.options.define('ssl_certfile', type=str)
-    tornado.options.define('ssl_key', type=str)
-    tornado.options.define('ssl_ca_certs', type=str)
+    extra_options = {
+        'external_http_port': int,
+        'cc_pass': str
+    }
     conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', 'cc.conf')
-    tornado.options.define('config_file', default=conf_path, type=str)
-
-    tornado.options.parse_command_line()
+    configure_options(extra_options, conf_path)
     options = tornado.options.options
-    tornado.options.parse_config_file(options.config_file)
-    cc_name = options.name
-    redis_port = options.redis_port
-    redis_pass = options.redis_pass
-    internal_http_port = options.internal_http_port
-    cc_pass = options.cc_pass
 
-    cc_instance = CommandCenter(cc_name=cc_name,
-                                cc_pass=cc_pass,
-                                redis_port=redis_port,
-                                redis_pass=redis_pass,
-                                appendonly=True)
+    instance = CommandCenter(cc_name=options.name,
+                             cc_pass=options.cc_pass,
+                             redis_options=options.redis_options,
+                             mongo_options=options.mongo_options)
 
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', options.ssl_certfile)
@@ -1016,12 +967,9 @@ def start():
     ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', options.ssl_ca_certs)
 
-    cc_server = tornado.httpserver.HTTPServer(cc_instance, ssl_options={
+    cc_server = tornado.httpserver.HTTPServer(instance, ssl_options={
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
 
-    cc_server.bind(internal_http_port)
+    cc_server.bind(options.internal_http_port)
     cc_server.start(0)
     tornado.ioloop.IOLoop.instance().start()
-
-if __name__ == "__main__":
-    start()
