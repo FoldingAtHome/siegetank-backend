@@ -35,7 +35,6 @@ class SimpleDocumenter(autodoc.MethodDocumenter):
 
 #add_autodocumenter(SimpleDocumenter)
 def setup(app):
-    print('ADDING AUTODUCMENTER')
     app.add_autodocumenter(SimpleDocumenter)
 
 import server.ws
@@ -164,7 +163,7 @@ html_theme_options = {
 
     # Global TOC depth for "site" navbar tab. (Default: 1)
     # Switching to -1 shows all levels.
-    'globaltoc_depth': 2,
+    'globaltoc_depth': 0,
 
     # Include hidden TOCs in Site navbar?
     #
@@ -191,7 +190,7 @@ html_theme_options = {
     #
     # Options are nothing with "" (default) or the name of a valid theme
     # such as "amelia" or "cosmo".
-    'bootswatch_theme': "flatly",
+    'bootswatch_theme': "simplex",
 
     # Choose Bootstrap version.
     # Values: "3" (default) or "2" (in quotes)

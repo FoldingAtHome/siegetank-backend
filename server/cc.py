@@ -25,7 +25,6 @@ import json
 import os
 import uuid
 import random
-import redis
 import time
 import functools
 import bcrypt
@@ -260,7 +259,7 @@ class AuthManagerHandler(tornado.web.RequestHandler):
                     "token": "uuid token"
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -310,7 +309,7 @@ class AddManagerHandler(BaseHandler):
                     "token": "token"
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
             :statuscode 401: Unauthorized
 
@@ -389,15 +388,14 @@ class AssignHandler(BaseHandler):
                     "target_id": "target_id" // optional
                 }
 
-            If *target_id* is specified, then the WS will try and activate a
-            stream corresponding to the *target_id*. In addition, the stage of
-            the target is not taken into consideration. Note that *target_id*
-            must be the fully qualified 36 digit uuid.
+            .. note:: If ``target_id`` is specified, then the WS will try and
+                activate one of its streams. In addition, the stage of the
+                target is not taken into consideration. Note that ``target_id``
+                must be the fully qualified 36 digit uuid.
 
-            Otherwise, we try and find a *target_id* whose:
-
-            Engine version is compatible with the core's engine version and
-            `stage` is either "beta" or "public".
+                Otherwise, we try and find a ``target_id`` whose engine version
+                is compatible with the core's engine_version and `stage` is
+                either "beta" or "public".
 
             **Example reply**
 
@@ -409,7 +407,7 @@ class AssignHandler(BaseHandler):
                     "steps_per_frame": 50000
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -530,22 +528,39 @@ class AssignHandler(BaseHandler):
 
 class RegisterWSHandler(BaseHandler):
     def put(self):
-        """ Called by WS for registration
+        """
+        .. http:put:: /register_ws
 
-        Header:
-            "Authorization": cc_pass
+            Register a WorkServer to be managed by this command center by
+            presenting the secret password.
 
-        Request:
-            {
-                "name": unique_name_of_the_cc
-                "url": url for requests (IP or DNS)
-                "http_port": http port
-            }
+            :reqheader Authorization: Secret password of the CC
 
-        Response:
-            {
-                200 - OK
-            }
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "name": "command_center",
+                    "url": "workserver.stanford.edu",
+                    "http_port": 443
+                }
+
+            .. note:: ``url`` corresponds to the workserver's url. This should
+                be a fully qualifed domain and *not* an ip address.
+
+                ``http_port`` is the outward facing port.
+
+            **Example response**
+
+            .. sourcecode:: javascript
+
+                {
+                    // empty
+                }
+
+            :statuscode 200: OK
+            :statuscode 401: Unauthorized
 
         """
         content = json.loads(self.request.body.decode())
@@ -565,13 +580,28 @@ class DeleteStreamHandler(BaseHandler):
     @authenticated
     @tornado.gen.coroutine
     def put(self, stream_id):
-        """ Deletes a stream from the server. If the stream was found on one of
-        the workservers, then status 200 is returned. Otherwise, 400.
+        """
+        .. http:put:: /streams/delete/:stream_id
 
-        Request:
-            {
-                "stream_id": stream_id,
-            }
+            Deletes a stream from the server.
+
+            .. note:: This is a relatively slow method. Partially because 1) we
+                don't know which server the stream is on and 2) we don't know
+                its target so we need to check all workservers.
+
+            :reqheader Authorization: Manager's authorization token
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "stream_id": stream_id,
+                }
+
+            :statuscode 200: OK
+            :statuscode 400: Bad request
+            :statuscode 401: Unauthorized
 
         """
         # this is a relatively slow method. Partially because 1) we don't know
@@ -593,6 +623,7 @@ class DeleteStreamHandler(BaseHandler):
                                      validate_cert=is_domain(ws_url))
             if rep.code == 200:
                 found = True
+                break
         if found:
             self.set_status(200)
             self.write(json.dumps({}))
@@ -628,7 +659,7 @@ class PostStreamHandler(BaseHandler):
                     "stream_id": "stream uuid4"
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -692,20 +723,31 @@ class PostStreamHandler(BaseHandler):
 
 class GetTargetHandler(BaseHandler):
     def get(self, target_id):
-        """ Retrieve details regarding this target
+        """
+        .. http:get:: /targets/info/:target_id
 
-        Reply:
-        {
-            "description": description,
-            "owner": owner,
-            "steps_per_frame": steps_per_frame,
-            "creation_date": creation_date,
-            "stage": disabled, beta, release
-            "allowed_ws": workservers allowed
-            "striated_ws": workservers used
-            "engine": engine type ('openmm' for now)
-            "engine_versions": engine_versions
-        }
+            Add a new stream to an existing target.
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "description": "Some secret project",
+                    "owner": "diwakar@gmail.com",
+                    "steps_per_frame": 50000,
+                    "creation_date": 1392784469,
+                    "stage": "beta",
+                    "allowed_ws": ["raynor", "zeratul", "kerrigan"],
+                    "striated_ws": ["raynor", "zeratul"],
+                    "engine": "openmm"
+                    "engine_versions": ["6.0"]
+                }
+
+            .. note:: ``creation_date`` is in seconds since epoch January 1, 1970. 
+
+            :statuscode 200: OK
+            :statuscode 400: Bad request
 
         """
         self.set_status(400)
@@ -730,19 +772,29 @@ class GetTargetHandler(BaseHandler):
 class ListStreamsHandler(BaseHandler):
     @tornado.gen.coroutine
     def get(self, target_id):
-        """ Return a list of streams for the specified target
+        """
+        .. http:get:: /targets/streams/:target_id
 
-        Reply:
-            {
-                'ws_name': {
-                    stream1_id: {
-                        'status': OK
-                        'frames': 253,
+            Return a list of streams on each striated workserver for
+            *target_id*.
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "ws_firebat": {
+                        "stream1_id": {
+                            "status": "OK",
+                            "frames": 253
+                        }
+                        ...
                     }
                     ...
                 }
-                ...
-            }
+
+            :statuscode 200: OK
+            :statuscode 400: Bad request
 
         """
         self.set_status(400)
@@ -771,7 +823,9 @@ class ListStreamsHandler(BaseHandler):
 
 class TargetHandler(BaseHandler):
     def get(self):
-        """ Return a list of targets on the CC depending on context
+        """
+        .. http::get /targets/info/:target_id'
+        Return a list of targets on the CC depending on context
 
         Reply:
             {
@@ -792,6 +846,8 @@ class TargetHandler(BaseHandler):
 
             Add a new target to be managed by this command center.
 
+            :reqheader Authorization: Manager's authorization token
+
             **Example request**
 
             .. sourcecode:: javascript
@@ -809,8 +865,11 @@ class TargetHandler(BaseHandler):
                     "stage": "private", "beta", or "public" // optional
                 }
 
-            allowed_ws is a list of workservers to striate over. If no "stage"
-            is given, then the target's default stage is private.
+            .. note:: If ``allowed_ws`` is specified, then we striate streams for
+                the target only over the specified workserver. Otherwise all
+                workservers available to this cc will be striated over.
+            .. note:: If ``stage`` is not given, then the stage defaults to
+                "private".
 
             **Example reply**
 
@@ -820,7 +879,7 @@ class TargetHandler(BaseHandler):
                     "target_id": "uuid4"
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """

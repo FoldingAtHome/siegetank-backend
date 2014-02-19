@@ -220,7 +220,7 @@ class TargetStreamsHandler(BaseHandler):
                     }
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -260,7 +260,7 @@ class ActivateStreamHandler(BaseHandler):
                     "token": "uuid token"
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -323,7 +323,7 @@ class PostStreamHandler(BaseHandler):
                     "stream_id" : "uuid hash"
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -394,7 +394,7 @@ class DeleteStreamHandler(BaseHandler):
                     "stream_id": "stream_id",
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -446,7 +446,7 @@ class CoreStartHandler(BaseHandler):
                                      }
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -464,6 +464,7 @@ class CoreStartHandler(BaseHandler):
 
         # When a core fetches a state.xml, it makes sure to NOT write the
         # first frame (equivalent to the frame of fetched state.xml file).
+        self.set_status(400)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -494,6 +495,7 @@ class CoreStartHandler(BaseHandler):
         reply['stream_id'] = stream_id
         reply['target_id'] = target_id
 
+        self.set_status(200)
         return self.write(json.dumps(reply))
 
 
@@ -525,7 +527,7 @@ class CoreFrameHandler(BaseHandler):
                     "frames": 25  // optional, number of frames in the files
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         If the filename ends in b64, it is b64 decoded. If the next suffix ends
@@ -615,7 +617,7 @@ class CoreCheckpointHandler(BaseHandler):
                     }
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -696,7 +698,7 @@ class CoreStopHandler(BaseHandler):
                                     } // optional
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """
@@ -820,7 +822,7 @@ class CoreHeartbeatHandler(BaseHandler):
                     // empty
                 }
 
-            :statuscode 200: No error
+            :statuscode 200: OK
             :statuscode 400: Bad request
 
         """

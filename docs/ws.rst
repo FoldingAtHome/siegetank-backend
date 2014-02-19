@@ -17,8 +17,8 @@ known command centers.
 
 .. autosimple:: ActivateStreamHandler.post
 
-Core API
---------
+Core Methods
+------------
 
 These methods must be authenticated using a core token
 
@@ -32,6 +32,6 @@ These methods must be authenticated using a core token
 
 .. autosimple:: CoreHeartbeatHandler.post
 
-PG API
-------
+Manager Methods
+---------------
 
