@@ -758,7 +758,10 @@ class ActiveStreamsHandler(BaseHandler):
 
 class DownloadHandler(BaseHandler):
     def get(self, stream_id, filename):
-        """ Download the file filename from stream streamid
+        """
+        ..http::get /streams/:stream_id/:filename
+
+        Download the file filename from stream streamid
 
         This function concatenates the list of frames on the fly by reading
         the files and yielding chunks.

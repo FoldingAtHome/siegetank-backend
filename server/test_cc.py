@@ -256,7 +256,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(target.hget('stage'), 'public')
 
     def test_get_targets(self):
-        email = 'proteneer@gmail.com'
+        email = 'eisley@gmail.com'
         password = 'test_pw_me'
         body = {
             'email': email,
@@ -286,13 +286,61 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                                body=json.dumps(body))
             self.assertEqual(reply.code, 200)
             target_ids.append(json.loads(reply.body.decode())['target_id'])
+        # fetch all the targets
         reply = self.fetch('/targets', headers=headers)
         r_targets = json.loads(reply.body.decode())['targets']
         self.assertEqual(set(r_targets), set(target_ids))
 
-        # get a specific target
         reply = self.fetch('/targets/info/'+target_ids[0])
         self.assertEqual(reply.code, 200)
+
+        # add a new manager and post a bunch of targets
+        email = 'diwakar@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password,
+            'role': 'manager'
+        }
+        rep = self.fetch('/managers', method='POST', body=json.dumps(body))
+        eisley_auth = json.loads(rep.body.decode())['token']
+        headers = {'Authorization': eisley_auth}
+
+        # post a bunch of targets
+        e_target_ids = []
+        for i in range(4):
+            fb1 = base64.b64encode(os.urandom(1024)).decode()
+            fb2 = base64.b64encode(os.urandom(1024)).decode()
+            description = "Eisley project"
+            body = {
+                'description': description,
+                'files': {'system.xml.gz.b64': fb1,
+                          'integrator.xml.gz.b64': fb2},
+                'steps_per_frame': 50000,
+                'engine': 'openmm',
+                'engine_versions': ['6.0'],
+                }
+
+            reply = self.fetch('/targets', method='POST', headers=headers,
+                               body=json.dumps(body))
+            self.assertEqual(reply.code, 200)
+            e_target_ids.append(json.loads(reply.body.decode())['target_id'])
+
+        # fetch all the targets
+        reply = self.fetch('/targets')
+        self.assertEqual(reply.code, 200)
+        r_targets = json.loads(reply.body.decode())['targets']
+        self.assertEqual(set(r_targets), set(target_ids+e_target_ids))
+
+        reply = self.fetch('/targets', headers={'Authorization': auth})
+        self.assertEqual(reply.code, 200)
+        r_targets = json.loads(reply.body.decode())['targets']
+        self.assertEqual(set(r_targets), set(target_ids))
+
+        reply = self.fetch('/targets', headers={'Authorization': eisley_auth})
+        self.assertEqual(reply.code, 200)
+        r_targets = json.loads(reply.body.decode())['targets']
+        self.assertEqual(set(r_targets), set(e_target_ids))
 
     def get_app(self):
         return self.cc

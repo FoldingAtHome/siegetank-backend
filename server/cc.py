@@ -111,7 +111,7 @@ Target.add_lookup('engine_versions', injective=False)
 relate(Target, 'striated_ws', {WorkServer})
 
 
-def authenticated(method):
+def authenticate_manager(method):
     """ Decorator for handlers that require manager authentication. Based off
     of tornado's authenticated method.
 
@@ -160,14 +160,29 @@ class AuthDonorHandler(tornado.web.RequestHandler):
     def post(self):
         """ Generate a new authorization token for the donor
 
-        Request: {
-            "username": userid,
-            "password": password
-        }
+        .. http:post:: /auth
 
-        Reply: {
-            "token": token
-        }
+            Generate a new authorization token for the donor
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "username": "JesseV",
+                    "password": "some_password"
+                }
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "token": "uuid_token"
+                }
+
+            :statuscode 200: OK
+            :statuscode 400: Bad request
 
         """
         self.set_status(400)
@@ -240,7 +255,7 @@ class AuthManagerHandler(tornado.web.RequestHandler):
         """
         .. http:post:: /auth
 
-            Generate a new authorization token for the user
+            Generate a new authorization token for the manager
 
             **Example request**
 
@@ -348,7 +363,7 @@ class AddManagerHandler(BaseHandler):
 
 
 class UpdateStageHandler(BaseHandler):
-    @authenticated
+    @authenticate_manager
     def put(self, target_id):
         """ Update the status of the target
 
@@ -577,7 +592,7 @@ class RegisterWSHandler(BaseHandler):
 
 
 class DeleteStreamHandler(BaseHandler):
-    @authenticated
+    @authenticate_manager
     @tornado.gen.coroutine
     def put(self, stream_id):
         """
@@ -632,7 +647,7 @@ class DeleteStreamHandler(BaseHandler):
 
 
 class PostStreamHandler(BaseHandler):
-    @authenticated
+    @authenticate_manager
     @tornado.gen.coroutine
     def post(self):
         """
@@ -726,7 +741,7 @@ class GetTargetHandler(BaseHandler):
         """
         .. http:get:: /targets/info/:target_id
 
-            Add a new stream to an existing target.
+            Get detailed information about a target
 
             **Example reply**
 
@@ -744,7 +759,7 @@ class GetTargetHandler(BaseHandler):
                     "engine_versions": ["6.0"]
                 }
 
-            .. note:: ``creation_date`` is in seconds since epoch January 1, 1970. 
+            .. note:: ``creation_date`` is in seconds since epoch 01/01/1970.
 
             :statuscode 200: OK
             :statuscode 400: Bad request
@@ -752,7 +767,6 @@ class GetTargetHandler(BaseHandler):
         """
         self.set_status(400)
         target = Target(target_id, self.db)
-
         # get a list of streams
         body = {
             'description': target.hget('description'),
@@ -821,25 +835,44 @@ class ListStreamsHandler(BaseHandler):
         self.write(json.dumps(body))
 
 
-class TargetHandler(BaseHandler):
+class TargetsHandler(BaseHandler):
     def get(self):
         """
-        .. http::get /targets/info/:target_id'
-        Return a list of targets on the CC depending on context
+        .. http:post:: /targets
 
-        Reply:
-            {
-                'targets': ['target_id1', 'target_id2', '...']
-            }
+            Return a list of all the targets on the CC. If a manager is
+            authenticated, then only his set of targets will be returned.
 
-        If Authorized by a F@h user, it will only return list of targets
-        owned by the user.
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    'targets': ['target_id1', 'target_id2', '...']
+                }
+
+            :statuscode 200: OK
+            :statuscode 400: Bad request
 
         """
-        streams = Target.members(self.db)
-        self.write(json.dumps({'targets': list(streams)}))
+        target_ids = Target.members(self.db)
 
-    @authenticated
+        manager = self.get_current_user()
+
+        # if number of targets increases dramatically:
+        # 1) try pipelining
+        # 2) add a reverse lookup of donors to targets
+        if manager:
+            matched_targets = []
+            for target_id in target_ids:
+                target = Target(target_id, self.db)
+                if target.hget('owner') == manager:
+                    matched_targets.append(target_id)
+            return self.write(json.dumps({'targets': list(matched_targets)}))
+        else:
+            return self.write(json.dumps({'targets': list(target_ids)}))
+
+    @authenticate_manager
     def post(self):
         """
         .. http:post:: /targets
@@ -865,9 +898,9 @@ class TargetHandler(BaseHandler):
                     "stage": "private", "beta", or "public" // optional
                 }
 
-            .. note:: If ``allowed_ws`` is specified, then we striate streams for
-                the target only over the specified workserver. Otherwise all
-                workservers available to this cc will be striated over.
+            .. note:: If ``allowed_ws`` is specified, then we striate streams
+                for the target only over the specified workserver. Otherwise
+                all workservers available to this cc will be striated over.
             .. note:: If ``stage`` is not given, then the stage defaults to
                 "private".
 
@@ -982,7 +1015,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/managers', AddManagerHandler),
             (r'/donors/auth', AuthDonorHandler),
             (r'/donors', AddDonorHandler),
-            (r'/targets', TargetHandler),
+            (r'/targets', TargetsHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/register_ws', RegisterWSHandler),
