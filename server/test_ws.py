@@ -22,7 +22,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             'external_http_port': '8960'
         }
         redis_options = {
-            'port': 3828
+            'port': 3828,
+            'logfile': os.devnull
         }
         self.ws = ws.WorkServer(ws_name='test_server',
                                 external_options=external_options,

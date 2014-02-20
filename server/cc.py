@@ -29,6 +29,8 @@ import time
 import functools
 import bcrypt
 import pymongo
+import io
+import socket
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.apollo import Entity, relate
@@ -88,6 +90,7 @@ class WorkServer(Entity):
     fields = {'url': str,  # http request url (verify based on if IP or not)
               'http_port': int,  # ws http port
               'online': bool,  # denotes if the server is online or not
+              'fail_count': int,  # number of times a request has failed
               }
 
 
@@ -155,6 +158,7 @@ class BaseHandler(tornado.web.RequestHandler):
         except:
             return None
 
+    @tornado.gen.coroutine
     def fetch(self, ws_id, path, **kwargs):
         """
         This is a fairly special method. First, it takes care of some boiler
@@ -176,9 +180,16 @@ class BaseHandler(tornado.web.RequestHandler):
             ws_port = workserver.hget('http_port')
         ws_uri = 'https://'+ws_url+':'+str(ws_port)+path
         client = tornado.httpclient.AsyncHTTPClient()
-        reply = client.fetch(ws_uri, validate_cert=is_domain(ws_url),
-                             **kwargs)
-        return reply
+        try:
+            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
+                                       **kwargs)
+            return reply
+        except socket.gaierror:
+            print('SOCKET_ERROR DETECTED')
+            dummy = tornado.httpclient.HTTPRequest(ws_url)
+            tempb = io.BytesIO(json.dumps({'error': 'WS down'}).encode())
+            reply = tornado.httpclient.HTTPResponse(dummy, 400, buffer=tempb)
+            return reply
 
 
 class AuthDonorHandler(tornado.web.RequestHandler):
@@ -557,7 +568,7 @@ class AssignHandler(BaseHandler):
                     self.write(json.dumps(body))
                     return self.set_status(200)
             except tornado.httpclient.HTTPError as e:
-                print(e)
+                print('HTTP_ERROR::::', e)
                 pass
 
         self.write(json.dumps({'error': 'no free WS available'}))
@@ -738,8 +749,14 @@ class PostStreamHandler(BaseHandler):
                 with open(file_path, 'rb') as handle:
                     body['target_files'][filename] = handle.read().decode()
 
-        rep = yield self.fetch(ws_id, '/streams', method='POST',
-                               body=json.dumps(body))
+        try:
+
+            rep = yield self.fetch(ws_id, '/streams', method='POST',
+                                   body=json.dumps(body))
+
+        except Exception as e:
+
+            print('OUTERRRRR', e)
 
         if rep.code == 200:
             target.sadd('striated_ws', ws_id)

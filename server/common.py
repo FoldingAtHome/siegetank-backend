@@ -85,7 +85,8 @@ class BaseServerMixin():
         self.mongo_options = mongo_options
 
         if 'logfile' in redis_options:
-            redis_options['logfile'] += name
+            if redis_options['logfile'] != os.devnull:
+                redis_options['logfile'] += name
         if 'appendfilename' in redis_options:
             redis_options['appendfilename'] += name
         self.db = init_redis(redis_options)

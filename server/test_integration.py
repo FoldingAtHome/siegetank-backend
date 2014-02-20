@@ -30,7 +30,7 @@ class Test(tornado.testing.AsyncTestCase):
         cls.cc_rport = 5873
         cls.cc_hport = 8343
 
-        redis_options = {'port': cls.ws_rport}
+        redis_options = {'port': cls.ws_rport, 'logfile': os.devnull}
         external_options = {'external_http_port': cls.ws_hport}
 
         cls.ws = ws.WorkServer(ws_name='mengsk',
@@ -39,7 +39,7 @@ class Test(tornado.testing.AsyncTestCase):
                                targets_folder='ws_targets',
                                streams_folder='ws_streams')
 
-        redis_options = {'port': cls.cc_rport}
+        redis_options = {'port': cls.cc_rport, 'logfile': os.devnull}
 
         mongo_options = {
             'host': 'localhost',
@@ -451,7 +451,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             v['targets_folder'] = targets_folder
             v['streams_folder'] = streams_folder
 
-            redis_options = {'port': rport_start}
+            redis_options = {'port': rport_start, 'logfile': os.devnull}
             external_options = {'external_http_port': hport_start}
 
             v['ws'] = ws.WorkServer(k, redis_options=redis_options,
@@ -464,7 +464,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         cls.cc_rport = 5872
         cls.cc_hport = 8342
 
-        redis_options = {'port': cls.cc_rport}
+        redis_options = {'port': cls.cc_rport, 'logfile': os.devnull}
 
         mongo_options = {
             'host': 'localhost',

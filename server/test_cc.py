@@ -16,7 +16,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
     def setUpClass(self):
         self.increment = 3
         self.cc_auth = '5lik2j3l4'
-        redis_options = {'port': 3828}
+        redis_options = {'port': 3828, 'logfile': os.devnull}
         mongo_options = {'host': 'localhost',
                          'port': 27017}
         self.cc = cc.CommandCenter(cc_name='test_cc',
@@ -165,6 +165,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         redis_options = {
             'port': ws_redis_port,
             'requirepass': ws_redis_pass,
+            'logfile': os.devnull
         }
 
         test_db = common.init_redis(redis_options)
