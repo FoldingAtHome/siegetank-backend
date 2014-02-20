@@ -155,6 +155,31 @@ class BaseHandler(tornado.web.RequestHandler):
         except:
             return None
 
+    def fetch(self, ws_id, path, **kwargs):
+        """
+        This is a fairly special method. First, it takes care of some boiler
+        plate code. Second, it keeps track of how many times a workserver has
+        failed. If it has failed one too many times, then the workserver is
+        taken offline.
+
+        """
+        workserver = WorkServer(ws_id, self.db)
+        if 'ws_url' in kwargs:
+            ws_url = kwargs['ws_url']
+            kwargs.pop("ws_url", None)
+        else:
+            ws_url = workserver.hget('url')
+        if 'ws_port' in kwargs:
+            ws_port = kwargs['ws_port']
+            kwargs.pop("ws_port", None)
+        else:
+            ws_port = workserver.hget('http_port')
+        ws_uri = 'https://'+ws_url+':'+str(ws_port)+path
+        client = tornado.httpclient.AsyncHTTPClient()
+        reply = client.fetch(ws_uri, validate_cert=is_domain(ws_url),
+                             **kwargs)
+        return reply
+
 
 class AuthDonorHandler(tornado.web.RequestHandler):
     def post(self):
@@ -509,21 +534,18 @@ class AssignHandler(BaseHandler):
         striated_servers = list(target.smembers('striated_ws'))
         random.shuffle(striated_servers)
 
-        for ws_name in striated_servers:
-            workserver = WorkServer(ws_name, self.db)
+        for ws_id in striated_servers:
+            workserver = WorkServer(ws_id, self.db)
             ws_url = workserver.hget('url')
             ws_port = workserver.hget('http_port')
             ws_body = {}
             ws_body['target_id'] = target_id
             if donor_id:
                 ws_body['donor_id'] = donor_id
-            client = tornado.httpclient.AsyncHTTPClient()
-            ws_uri = 'https://'+ws_url+':'+str(ws_port)+'/streams/activate'
             try:
-                reply = yield client.fetch(ws_uri,
-                                           validate_cert=is_domain(ws_url),
-                                           method='POST',
-                                           body=json.dumps(ws_body))
+                reply = yield self.fetch(ws_id, '/streams/activate',
+                                         ws_url=ws_url, method='POST',
+                                         body=json.dumps(ws_body))
                 if(reply.code == 200):
                     rep_content = json.loads(reply.body.decode())
                     token = rep_content["token"]
@@ -625,17 +647,11 @@ class DeleteStreamHandler(BaseHandler):
         self.set_status(400)
         found = False
         for ws_name in WorkServer.members(self.db):
-            picked_ws = WorkServer(ws_name, self.db)
-            ws_url = picked_ws.hget('url')
-            ws_http_port = picked_ws.hget('http_port')
             body = {
                 "stream_id": stream_id
             }
-            client = tornado.httpclient.AsyncHTTPClient()
-            rep = yield client.fetch('https://'+str(ws_url)+':'
-                                     +str(ws_http_port)+'/streams/delete',
-                                     method='PUT', body=json.dumps(body),
-                                     validate_cert=is_domain(ws_url))
+            rep = yield self.fetch(ws_name, '/streams/delete', method='PUT',
+                                   body=json.dumps(body))
             if rep.code == 200:
                 found = True
                 break
@@ -701,11 +717,6 @@ class PostStreamHandler(BaseHandler):
 
         # randomly pick from available workservers
         ws_id = random.sample(allowed_workservers, 1)[0]
-        target.sadd('striated_ws', ws_id)
-        picked_ws = WorkServer(ws_id, self.db)
-
-        ws_url = picked_ws.hget('url')
-        ws_http_port = picked_ws.hget('http_port')
 
         body = {
             'target_id': target_id,
@@ -716,8 +727,9 @@ class PostStreamHandler(BaseHandler):
         for filename, filebin in files.items():
             body['stream_files'][filename] = filebin
 
-        # see if this target is striating over the ws
-        if ws_id in target.smembers('striated_ws'):
+        # if this target is not yet striating over the ws,
+        # include include the target_files
+        if not ws_id in target.smembers('striated_ws'):
             target_files = target.smembers('files')
             body['target_files'] = {}
             for filename in target_files:
@@ -726,11 +738,11 @@ class PostStreamHandler(BaseHandler):
                 with open(file_path, 'rb') as handle:
                     body['target_files'][filename] = handle.read().decode()
 
-        client = tornado.httpclient.AsyncHTTPClient()
-        rep = yield client.fetch('https://'+str(ws_url)+':'+str(ws_http_port)
-                                 + '/streams', method='POST',
-                                 body=json.dumps(body),
-                                 validate_cert=is_domain(ws_url))
+        rep = yield self.fetch(ws_id, '/streams', method='POST',
+                               body=json.dumps(body))
+
+        if rep.code == 200:
+            target.sadd('striated_ws', ws_id)
 
         self.set_status(rep.code)
         return self.write(rep.body)
@@ -818,15 +830,7 @@ class ListStreamsHandler(BaseHandler):
         body = {}
 
         for ws_name in striated_ws:
-            ws = WorkServer(ws_name, self.db)
-            ws_url = ws.hget('url')
-            ws_port = ws.hget('http_port')
-
-            client = tornado.httpclient.AsyncHTTPClient()
-            ws_uri = 'https://'+ws_url+':'+str(ws_port)+'/targets/streams/'+\
-                     target_id
-            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
-                                       method='GET')
+            reply = yield self.fetch(ws_name, '/targets/streams/'+target_id)
 
             if reply.code == 200:
                 body[ws_name] = json.loads(reply.body.decode())
@@ -1003,8 +1007,8 @@ class TargetsHandler(BaseHandler):
 
 
 class CommandCenter(BaseServerMixin, tornado.web.Application):
-    def __init__(self, cc_name, cc_pass, redis_options, mongo_options=None,
-                 targets_folder='targets'):
+    def __init__(self, cc_name, cc_pass, redis_options, core_keys=set(),
+                 mongo_options=None, targets_folder='targets'):
         print('Starting up Command Center:', cc_name)
         self.base_init(cc_name, redis_options, mongo_options)
         self.cc_pass = cc_pass
@@ -1040,7 +1044,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 def start():
     extra_options = {
         'external_http_port': int,
-        'cc_pass': str
+        'cc_pass': str,
+        'allowed_core_keys': set
     }
     conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', 'cc.conf')

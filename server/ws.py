@@ -539,7 +539,7 @@ class CoreFrameHandler(BaseHandler):
         # cwi = checkpoint_write_interval (Core Controlled)
         # csi = checkpoint_send_interval (Donor Controlled)
 
-        # Where: fwi < k*fsi = cwi < j*csi | k, j are integers
+        # Where: fwi < fsi = cwi < csi
 
         # When a set of frames is sent, the core is guaranteed to write a
         # corresponding checkpoint, so that the next checkpoint received is

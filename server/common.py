@@ -115,7 +115,6 @@ class BaseServerMixin():
 
 def configure_options(extra_options, conf_path):
     for option_name, option_type in extra_options.items():
-        print(option_name, option_type)
         tornado.options.define(option_name, type=option_type)
     tornado.options.define('name', type=str)
     tornado.options.define('redis_options', type=dict)
