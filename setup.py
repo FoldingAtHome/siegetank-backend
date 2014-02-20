@@ -6,5 +6,4 @@ setup(name='Backend',
       author='Yutong Zhao',
       author_email='proteneer@gmail.com',
       url='http://www.proteneer.com',
-      packages=['server'],
       )
