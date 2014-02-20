@@ -186,6 +186,11 @@ class BaseHandler(tornado.web.RequestHandler):
             return reply
         except socket.gaierror:
             print('SOCKET_ERROR DETECTED')
+            fails = workserver.hincrby('fail_count', 1)
+            # TODO: we shouldn't need 'online' if we can just use 'fail_count'
+            # to gauge whether or not a server is alive.
+            if fails > 0:
+                workserver.hset('online', False)
             dummy = tornado.httpclient.HTTPRequest(ws_url)
             tempb = io.BytesIO(json.dumps({'error': 'WS down'}).encode())
             reply = tornado.httpclient.HTTPResponse(dummy, 400, buffer=tempb)
@@ -1054,6 +1059,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             ws.hset('url', url)
             ws.hset('http_port', http_port)
             ws.hset('online', True)
+            ws.hset('fail_count', 0)
         except Exception as e:
             print(e)
 
