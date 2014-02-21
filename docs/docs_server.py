@@ -32,7 +32,8 @@ class TestHandler(tornado.web.RequestHandler):
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
         if self.get_cookie("cookie_monster") == secret_cookie():
-            return self.write(":)")
+            self.redirect("/static/index.html")
+            return
         else:
             self.redirect("/auth/github")
             return
