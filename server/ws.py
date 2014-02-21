@@ -756,13 +756,14 @@ class ActiveStreamsHandler(BaseHandler):
 
 
 class DownloadHandler(BaseHandler):
+    @tornado.gen.coroutine
     def get(self, stream_id, filename):
         """
         .. http:get:: /streams/:stream_id/:filename
 
             Download file ``filename`` from ``stream_id``. This function
             concatenates the list of frames on the fly by reading the files and
-            yielding chunks.
+            writing chunks.
 
             :resheader Content-Type: application/octet-stream
             :resheader Content-Disposition: attachment; filename=frames.xtc
@@ -784,6 +785,7 @@ class DownloadHandler(BaseHandler):
                 self.set_header('Content-Type', 'application/octet-stream')
                 self.set_header('Content-Disposition',
                                 'attachment; filename=frames.xtc')
+                self.set_status(200)
                 for sorted_file in files:
                     filename = os.path.join(stream_dir, sorted_file)
                     with open(filename, 'rb') as f:
@@ -792,7 +794,7 @@ class DownloadHandler(BaseHandler):
                             if not data:
                                 break
                             self.write(data)
-                self.set_status(200)
+                            yield tornado.gen.Task(self.flush)
                 self.finish()
                 return
             else:
