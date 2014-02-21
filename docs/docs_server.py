@@ -47,8 +47,7 @@ class GithubAuthHandler(tornado.web.RequestHandler):
 
     @tornado.gen.coroutine
     def get(self):
-        """ Located at /auth/github.
-
+        """
         Phase 1:
 
             Get code

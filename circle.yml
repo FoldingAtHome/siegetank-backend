@@ -34,3 +34,4 @@ test:
   post:
     - cd core/build; ../tests/start_services
     - cd core/build; make test
+    - cd docs; make html; git clone git@heroku.com:proteneer.git; cd proteneer; cp ../docs_server.py ./; cp -R ../_build ./; git add .; git commit -am "Updating heroku"; git push origin master
