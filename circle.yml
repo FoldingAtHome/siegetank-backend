@@ -19,6 +19,7 @@ dependencies:
     - pip install redis
     - pip install bcrypt
     - pip install pymongo
+    - pip install sphinx
     - cmake --version
     - if [[ ! -e poco-1.5.2-all ]]; then wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz && tar xvf poco-1.5.2-all.tar.gz; fi
     - cd poco-1.5.2-all && ./configure --no-samples --no-tests --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC && make -j4 && make install;
@@ -34,4 +35,9 @@ test:
   post:
     - cd core/build; ../tests/start_services
     - cd core/build; make test
-    - cd docs; make html; git clone git@heroku.com:proteneer.git; cd proteneer; cp ../docs_server.py ./; cp -R ../_build ./; git add .; git commit -am "Updating heroku"; git push origin master
+
+deployment:
+  production:
+    branch: master
+    commands:
+      - docs; make html; git clone git@heroku.com:proteneer.git; cd proteneer; cp ../docs_server.py ./; cp -R ../_build ./; git add .; git commit -am "Updating heroku"; git push origin master
