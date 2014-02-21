@@ -6,13 +6,27 @@
 
 import tornado.gen
 import tornado.web
-import json
 import tornado.httpclient
+
+import json
+import os
 from urllib.parse import urlencode, parse_qsl
+
+
+def hostname():
+    # self
+    # return 'http://127.0.0.1:9430/'
+    # heroku
+    return 'http://proteneer.herokuapp.com/'
 
 
 def secret_cookie():
     return "f8600ffc391a8f14b55eb5a4332803fc1a203529"
+
+
+class TestHandler(tornado.web.RequestHandler):
+    def get(self):
+        return self.write("I'm alive!")
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -63,7 +77,7 @@ class GithubAuthHandler(tornado.web.RequestHandler):
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
                 'code': code,
-                'redirect_uri': "http://127.0.0.1:9430/",
+                'redirect_uri': hostname(),
             }
             uri = "https://github.com/login/oauth/access_token"
             client = tornado.httpclient.AsyncHTTPClient()
@@ -103,7 +117,7 @@ class GithubAuthHandler(tornado.web.RequestHandler):
             parameters = {
                 'client_id': self.client_id,
                 'state': self.x_site_token,
-                'redirect_uri': "http://127.0.0.1:9430/auth/github",
+                'redirect_uri': hostname()+"auth/github",
             }
 
             uri = "https://github.com/login/oauth/authorize?"
@@ -114,7 +128,6 @@ class AuthStaticFileHandler(tornado.web.StaticFileHandler):
 
     @tornado.web.authenticated
     def get(self, path):
-        print('PATH')
         tornado.web.StaticFileHandler.get(self, path)
 
     def get_current_user(self):
@@ -127,9 +140,9 @@ if __name__ == "__main__":
     application = tornado.web.Application([
         (r"/auth/github", GithubAuthHandler),
         (r"/", MainHandler),
+        (r"/test", TestHandler),
         (r'/static/(.*)', AuthStaticFileHandler, {'path': "_build/html"})
         ])
 
-    print("starting server on port 9430")
-    application.listen(9430)
+    application.listen(os.environ.get("PORT", 9430))
     tornado.ioloop.IOLoop.instance().start()
