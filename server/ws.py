@@ -33,6 +33,7 @@ import tornado.httpserver
 import tornado.httpclient
 import tornado.options
 import tornado.process
+import tornado.gen
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.apollo import Entity, zset, relate
