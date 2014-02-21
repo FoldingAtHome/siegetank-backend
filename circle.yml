@@ -40,4 +40,4 @@ deployment:
   production:
     branch: master
     commands:
-      - cd docs; make html; git clone git@heroku.com:proteneer.git; cd proteneer; cp ../docs_server.py ./; cp -R ../_build ./; git add .; git commit -am "Updating heroku"; git config user.name "Yutong Zhao"; git config user.email "proteneer@gmail.com"; git push origin master
+      - cd docs; make html; git clone git@heroku.com:proteneer.git; cd proteneer; cp ../docs_server.py ./; cp -R ../_build ./; git config user.name "Yutong Zhao"; git config user.email "proteneer@gmail.com"; git add .; git commit -am "Updating heroku"; git push origin master
