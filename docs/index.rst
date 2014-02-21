@@ -13,6 +13,7 @@ Contents:
 
    ws
    cc
+   deployment
 
 Indices and tables
 ==================
