@@ -15,9 +15,8 @@ def secret_cookie():
     return "f8600ffc391a8f14b55eb5a4332803fc1a203529"
 
 
-class MainHandler(tornado.web.StaticFileHandler):
+class MainHandler(tornado.web.RequestHandler):
     def get(self):
-        print(self.cookies)
         if self.get_cookie("cookie_monster") == secret_cookie():
             return self.write(":)")
         else:
@@ -25,7 +24,7 @@ class MainHandler(tornado.web.StaticFileHandler):
             return
 
 
-class GithubAuthHandler(tornado.web.StaticFileHandler):
+class GithubAuthHandler(tornado.web.RequestHandler):
 
     x_site_token = 'application'
     client_id = "0668d6beb960856fcc1a"
@@ -59,6 +58,7 @@ class GithubAuthHandler(tornado.web.StaticFileHandler):
         if code:
             # todo check for cross site forgery.
             print('Passed Phase 1')
+            print(self.request.uri)
             parameters = {
                 'client_id': self.client_id,
                 'client_secret': self.client_secret,
@@ -127,7 +127,8 @@ if __name__ == "__main__":
     application = tornado.web.Application([
         (r"/auth/github", GithubAuthHandler),
         (r"/", MainHandler),
-        (r'/static/(.*)', AuthStaticFileHandler, {'path': "_build/html"})])
+        (r'/static/(.*)', AuthStaticFileHandler, {'path': "_build/html"})
+        ])
 
     print("starting server on port 9430")
     application.listen(9430)
