@@ -54,6 +54,34 @@ class TestApollo(unittest.TestCase):
 
         eve.delete()
 
+    def test_atomic_creation(self):
+        emails = {'eve@eve.com', 'eve@gmail.com'}
+        favorite_songs = {'claire de lune'}
+        fields = {'ssn': '321-45-6982',
+                  'age': 25,
+                  'emails': emails,
+                  'favorite_songs': favorite_songs}
+        eve = Person.create('eve', self.db, fields)
+        self.assertEqual(eve.hget('ssn'), '321-45-6982')
+        self.assertEqual(eve.hget('age'), 25)
+        self.assertEqual(eve.smembers('favorite_songs'), favorite_songs)
+        self.assertEqual(eve.smembers('emails'), emails)
+
+        cat_fields = {'age': 33,
+                      'owner': eve,
+                      'caretakers': {eve}
+                      }
+
+        sphinx = Cat.create('sphinx', self.db, cat_fields)
+
+        self.assertEqual(eve.smembers('cats'), {'sphinx'})
+        self.assertEqual(eve.smembers('cats_to_feed'), {'sphinx'})
+        self.assertEqual(sphinx.smembers('caretakers'), {'eve'})
+        self.assertEqual(sphinx.hget('owner'), 'eve')
+        self.assertEqual(sphinx.hget('age'), 33)
+        eve.delete()
+        sphinx.delete()
+
     def test_lookup_1_to_1(self):
         joe = Person.create('joe', self.db)
         joe.hset('ssn', '123-45-6789')

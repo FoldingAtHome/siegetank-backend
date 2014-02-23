@@ -209,13 +209,30 @@ class Entity(metaclass=_entity_metaclass):
     def create(cls, id, db, fields=dict()):
         """ Create an object with identifier id on the redis client db
 
+            fields is a dictionary of fields that are all created in a single
+            transaction
         """
         if isinstance(id, bytes):
             raise TypeError('id must be a string')
         if cls.exists(id, db):
             raise KeyError(id, 'already exists')
-        db.sadd(cls.prefix + 's', id)
-        return cls(id, db)
+
+        instance = cls(id, db, verify=False)
+
+        pipeline = db.pipeline()
+        for field_name, field_value in fields.items():
+            if type(field_value) is set:
+                instance.sadd(field_name, *field_value, pipeline=pipeline)
+            elif type(field_value) in (str, int, bool, float):
+                instance.hset(field_name, field_value, pipeline=pipeline)
+            elif isinstance(field_value, Entity):
+                instance.hset(field_name, field_value, pipeline=pipeline)
+            else:
+                raise TypeError('unsupported type:'+field_value)
+
+        pipeline.sadd(cls.prefix + 's', id)
+        pipeline.execute()
+        return instance
 
     @classmethod
     def add_lookup(cls, field, injective=True):
@@ -548,11 +565,11 @@ class Entity(metaclass=_entity_metaclass):
         assert not field in self.relations
         return self._db.zrem(self.prefix+':'+self.id+':'+field, *args)
 
-    def __init__(self, id, db):
+    def __init__(self, id, db, verify=True):
         assert type(id) in (str, int)
         self._db = db
         self._id = id
         # overhead
-        if not self.__class__.exists(id, db):
+        if verify and not self.__class__.exists(id, db):
             raise KeyError(id, 'has not been created yet')
         self.__dict__['_id'] = id
