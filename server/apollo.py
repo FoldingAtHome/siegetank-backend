@@ -1,4 +1,5 @@
 from functools import wraps
+import redis
 
 
 # generic container used to denote zset
@@ -31,6 +32,35 @@ def _set_relation(entity1, field1, entity2):
             raise KeyError('Cannot add relation to existing field')
     entity.fields[field1] = entity2
     return entity
+
+
+def auto_pipeline(method):
+    """ A pipelined function flushes the buffer iff a pipeline is not given
+    explicitly. This maintains a nested scope so that:
+
+        outer(pipeline=None)
+            inner1(pipeline=pipeline)
+                inner2(pipeline=pipeline)
+        pipeline.execute()  # flush happens here
+
+    """
+    @wraps(method)
+    def wrapper(self, *args, pipeline=None):
+        if pipeline is not None:
+            assert isinstance(pipeline, redis.client.Pipeline)
+            flush = False
+        else:
+            pipeline = self._db.pipeline()
+            flush = True
+
+        retval = method(self, *args, pipeline=pipeline)
+
+        if flush:
+            return pipeline.execute()
+        else:
+            return retval
+
+    return wrapper
 
 
 def relate(entityA, fieldA, entityB, fieldB=None):
@@ -216,14 +246,12 @@ class Entity(metaclass=_entity_metaclass):
         else:
             return db.smembers(field+':'+value+':'+self.prefix)
 
+    @auto_pipeline
     def delete(self, pipeline=None):
         """ Remove this entity from the db, all associated fields and related
             fields will also be cleaned up
 
         """
-        if not pipeline:
-            pipeline = self._db.pipeline()
-
         for field_name, field_type in self.fields.items():
             if type(field_type) is set:
                 if field_name in self.relations or field_name in self.lookups:
@@ -239,7 +267,6 @@ class Entity(metaclass=_entity_metaclass):
                 self.hdel(field_name, pipeline=pipeline)
         pipeline.delete(self.prefix+':'+self.id)
         pipeline.srem(self.prefix+'s', self.id)
-        pipeline.execute()
 
     @property
     def id(self):
@@ -253,6 +280,7 @@ class Entity(metaclass=_entity_metaclass):
         return self._db.hincrby(self.prefix + ':' + self._id, field, count)
 
     @check_field
+    @auto_pipeline
     def hset(self, field, value, pipeline=None):
         """ Set a hash field equal to value """
         # set local value
@@ -261,10 +289,6 @@ class Entity(metaclass=_entity_metaclass):
 
         # clean up this field first since it can only be bound to a single
         # object hash field (implicitly).
-
-        if not pipeline:
-            pipeline = self._db.pipeline()
-
         if field in self.relations:
             self.hdel(field, pipeline=pipeline)
             assert isinstance(value, Entity)
@@ -293,16 +317,13 @@ class Entity(metaclass=_entity_metaclass):
         if isinstance(value, Entity):
             value = value.id
         pipeline.hset(self.prefix + ':' + self._id, field, value)
-        pipeline.execute()
 
     @check_field
+    @auto_pipeline
     def hdel(self, field, pipeline=None):
         """ Delete a hash field and its related fields and lookups """
         assert (self.fields[field] in (str, int, bool, float) or
                 issubclass(self.fields[field], Entity))
-
-        if not pipeline:
-            pipeline = self._db.pipeline()
 
         if field in self.relations:
         #if issubclass(self.fields[field], Entity):
@@ -333,7 +354,6 @@ class Entity(metaclass=_entity_metaclass):
                                   self.id)
 
         pipeline.hdel(self.prefix+':'+self.id, field)
-        pipeline.execute()
 
     @check_field
     def hget(self, field):
@@ -382,22 +402,18 @@ class Entity(metaclass=_entity_metaclass):
         return self._db.srandmember(self.prefix+':'+self.id+':'+field)
 
     @check_field
+    @auto_pipeline
     def sremall(self, field, pipeline=None):
         """ Empty the set """
         assert type(self.fields[field]) == set
-
-        if not pipeline:
-            pipeline = self._db.pipeline()
-
         if field in self.relations or field in self.lookups:
             values = list(self.smembers(field))
             pipeline.srem(field, *values, pipeline=pipeline)
         else:
             pipeline.delete(self.prefix+':'+self._id+':'+field)
 
-        pipeline.execute()
-
     @check_field
+    @auto_pipeline
     def srem(self, field, *values, pipeline=None):
         """ Remove values from the set field. Is pipeline is specified, then
             the pipeline will be used. Else, it will use its own pipeline
@@ -409,9 +425,6 @@ class Entity(metaclass=_entity_metaclass):
                 carbon_copy_values.append(value.id)
             else:
                 carbon_copy_values.append(value)
-
-        if not pipeline:
-            pipeline = self._db.pipeline()
 
         for value in carbon_copy_values:
             if field in self.relations:
@@ -437,9 +450,9 @@ class Entity(metaclass=_entity_metaclass):
                     pipeline.srem(field+':'+value+':'+self.prefix, self.id)
 
         pipeline.srem(self.prefix+':'+self._id+':'+field, *carbon_copy_values)
-        pipeline.execute()
 
     @check_field
+    @auto_pipeline
     def sadd(self, field, *values, pipeline=None):
         """ Add values to the field. If the field expects Entities, then values
         can either be a list of strings, a list of Entities, or a mix of both.
@@ -457,9 +470,6 @@ class Entity(metaclass=_entity_metaclass):
                 carbon_copy_values.append(value)
             else:
                 raise TypeError('Bad sadd type')
-
-        if not pipeline:
-            pipeline = self._db.pipeline()
 
         if field in self.relations:
             other_entity = self.relations[field][0]
@@ -486,7 +496,6 @@ class Entity(metaclass=_entity_metaclass):
                     pipeline.sadd(field+':'+value+':'+self.prefix, self.id)
 
         pipeline.sadd(self.prefix+':'+self._id+':'+field, *carbon_copy_values)
-        pipeline.execute()
 
     @check_field
     def zscore(self, field, key):
