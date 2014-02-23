@@ -216,26 +216,30 @@ class Entity(metaclass=_entity_metaclass):
         else:
             return db.smembers(field+':'+value+':'+self.prefix)
 
-    def delete(self):
+    def delete(self, pipeline=None):
         """ Remove this entity from the db, all associated fields and related
             fields will also be cleaned up
 
         """
+        if not pipeline:
+            pipeline = self._db.pipeline()
+
         for field_name, field_type in self.fields.items():
             if type(field_type) is set:
                 if field_name in self.relations or field_name in self.lookups:
                     for member in self._db.smembers(self.prefix+':'+self.id
                                                     +':'+field_name):
-                        self.srem(field_name, member)
-                self._db.delete(self.prefix+':'+self.id+':'+field_name)
+                        self.srem(field_name, member, pipeline=pipeline)
+                pipeline.delete(self.prefix+':'+self.id+':'+field_name)
             elif type(field_type) is zset:
-                self._db.delete(self.prefix+':'+self.id+':'+field_name)
+                pipeline.delete(self.prefix+':'+self.id+':'+field_name)
             elif issubclass(field_type, Entity):
-                self.hdel(field_name)
+                self.hdel(field_name, pipeline=pipeline)
             elif field_type in (str, int, bool, float):
-                self.hdel(field_name)
-        self._db.delete(self.prefix+':'+self.id)
-        self._db.srem(self.prefix+'s', self.id)
+                self.hdel(field_name, pipeline=pipeline)
+        pipeline.delete(self.prefix+':'+self.id)
+        pipeline.srem(self.prefix+'s', self.id)
+        pipeline.execute()
 
     @property
     def id(self):
@@ -249,7 +253,7 @@ class Entity(metaclass=_entity_metaclass):
         return self._db.hincrby(self.prefix + ':' + self._id, field, count)
 
     @check_field
-    def hset(self, field, value):
+    def hset(self, field, value, pipeline=None):
         """ Set a hash field equal to value """
         # set local value
         assert (self.fields[field] in (str, int, bool, float) or
@@ -257,66 +261,79 @@ class Entity(metaclass=_entity_metaclass):
 
         # clean up this field first since it can only be bound to a single
         # object hash field (implicitly).
+
+        if not pipeline:
+            pipeline = self._db.pipeline()
+
         if field in self.relations:
-            self.hdel(field)
+            self.hdel(field, pipeline=pipeline)
             assert isinstance(value, Entity)
             other_entity = self.relations[field][0]
             other_field_name = self.relations[field][1]
             other_field_type = other_entity.fields[other_field_name]
             if type(other_field_type) is set:
-                self._db.sadd(other_entity.prefix+':'+value.id+':'+
+                pipeline.sadd(other_entity.prefix+':'+value.id+':'+
                               other_field_name, self.id)
             elif issubclass(other_field_type, Entity):
                 # raise?
-                value.hdel(other_field_name)
-                self._db.hset(other_entity.prefix+':'+value.id,
+                value.hdel(other_field_name, pipeline=pipeline)
+                pipeline.hset(other_entity.prefix+':'+value.id,
                               other_field_name, self.id)
-            self.hdel(field)
+            self.hdel(field, pipeline=pipeline)
         elif field in self.lookups:
-            self.hdel(field)
+            self.hdel(field, pipeline=pipeline)
             if self.lookups[field]:
                 # see if this field is mapped to something already
                 reference = self.__class__.lookup(field, value, self._db)
                 if reference:
-                    self._db.hdel(self.prefix+':'+reference+':'+field, value)
-                self._db.hset(field+':'+value, self.prefix, self.id)
+                    pipeline.hdel(self.prefix+':'+reference+':'+field, value)
+                pipeline.hset(field+':'+value, self.prefix, self.id)
             else:
-                self._db.sadd(field+':'+value+':'+self.prefix, self.id)
+                pipeline.sadd(field+':'+value+':'+self.prefix, self.id)
         if isinstance(value, Entity):
             value = value.id
-        self._db.hset(self.prefix + ':' + self._id, field, value)
+        pipeline.hset(self.prefix + ':' + self._id, field, value)
+        pipeline.execute()
 
     @check_field
-    def hdel(self, field):
+    def hdel(self, field, pipeline=None):
         """ Delete a hash field and its related fields and lookups """
         assert (self.fields[field] in (str, int, bool, float) or
                 issubclass(self.fields[field], Entity))
+
+        if not pipeline:
+            pipeline = self._db.pipeline()
 
         if field in self.relations:
         #if issubclass(self.fields[field], Entity):
             other_entity = self.relations[field][0]
             other_field_name = self.relations[field][1]
             other_field_type = other_entity.fields[other_field_name]
+
+            # Not pipelined (but should be safe)
             other_entity_id = self._db.hget(self.prefix+':'+self.id, field)
             if other_entity_id:
                 if type(other_field_type) is set:
-                    self._db.srem(other_entity.prefix+':'+other_entity_id+':'+
+                    pipeline.srem(other_entity.prefix+':'+other_entity_id+':'+
                                   other_field_name, self.id)
                 elif issubclass(other_field_type, Entity):
-                    self._db.hdel(other_entity.prefix+':'+other_entity_id,
+                    pipeline.hdel(other_entity.prefix+':'+other_entity_id,
                                   other_field_name)
         elif field in self.lookups:
+
+            # Not pipelined (but should be safe)
             lookup_value = self._db.hget(self.prefix+':'+self.id, field)
             if lookup_value:
                 # if it is injective, implies mapping to a single hash
                 if self.lookups[field]:
-                    self._db.hdel(field+':'+lookup_value, self.prefix)
+                    pipeline.hdel(field+':'+lookup_value, self.prefix)
                 # lookup maps to many different values
                 else:
-                    self._db.srem(field+':'+lookup_value+':'+self.prefix,
+                    pipeline.srem(field+':'+lookup_value+':'+self.prefix,
                                   self.id)
 
-        self._db.hdel(self.prefix+':'+self.id, field)
+        pipeline.hdel(self.prefix+':'+self.id, field)
+        pipeline.execute()
 
     @check_field
     def hget(self, field):
@@ -365,19 +382,26 @@ class Entity(metaclass=_entity_metaclass):
         return self._db.srandmember(self.prefix+':'+self.id+':'+field)
 
     @check_field
-    def sremall(self, field):
+    def sremall(self, field, pipeline=None):
         """ Empty the set """
         assert type(self.fields[field]) == set
 
+        if not pipeline:
+            pipeline = self._db.pipeline()
+
         if field in self.relations or field in self.lookups:
             values = list(self.smembers(field))
-            self.srem(field, *values)
+            pipeline.srem(field, *values, pipeline=pipeline)
         else:
-            self._db.delete(self.prefix+':'+self._id+':'+field)
+            pipeline.delete(self.prefix+':'+self._id+':'+field)
+
+        pipeline.execute()
 
     @check_field
-    def srem(self, field, *values):
-        """ Remove values from the set field """
+    def srem(self, field, *values, pipeline=None):
+        """ Remove values from the set field. Is pipeline is specified, then
+            the pipeline will be used. Else, it will use its own pipeline
+            to ensure transaction integrity """
         assert type(self.fields[field]) == set
         carbon_copy_values = []
         for value in values:
@@ -385,6 +409,9 @@ class Entity(metaclass=_entity_metaclass):
                 carbon_copy_values.append(value.id)
             else:
                 carbon_copy_values.append(value)
+
+        if not pipeline:
+            pipeline = self._db.pipeline()
 
         for value in carbon_copy_values:
             if field in self.relations:
@@ -395,24 +422,25 @@ class Entity(metaclass=_entity_metaclass):
                 other_field_type = other_entity.fields[other_field_name]
 
                 if type(other_field_type) is set:
-                    self._db.srem(other_entity.prefix+':'+value+':'+
+                    pipeline.srem(other_entity.prefix+':'+value+':'+
                                   other_field_name, self.id)
                 elif issubclass(other_field_type, Entity):
-                    self._db.hdel(other_entity.prefix+':'+value,
+                    pipeline.hdel(other_entity.prefix+':'+value,
                                   other_field_name)
             elif field in self.lookups:
                 if not self.sismember(field, value):
                     raise ValueError(value+' is not in '+self.id+'\'s '+field)
                 if self.lookups[field]:
                     # see if this field mapped to something already
-                    self._db.hdel(field+':'+value, self.prefix, self.id)
+                    pipeline.hdel(field+':'+value, self.prefix, self.id)
                 else:
-                    self._db.srem(field+':'+value+':'+self.prefix, self.id)
+                    pipeline.srem(field+':'+value+':'+self.prefix, self.id)
 
-        self._db.srem(self.prefix+':'+self._id+':'+field, *carbon_copy_values)
+        pipeline.srem(self.prefix+':'+self._id+':'+field, *carbon_copy_values)
+        pipeline.execute()
 
     @check_field
-    def sadd(self, field, *values):
+    def sadd(self, field, *values, pipeline=None):
         """ Add values to the field. If the field expects Entities, then values
         can either be a list of strings, a list of Entities, or a mix of both.
 
@@ -430,17 +458,20 @@ class Entity(metaclass=_entity_metaclass):
             else:
                 raise TypeError('Bad sadd type')
 
+        if not pipeline:
+            pipeline = self._db.pipeline()
+
         if field in self.relations:
             other_entity = self.relations[field][0]
             other_field_name = self.relations[field][1]
             other_field_type = other_entity.fields[other_field_name]
             for value in carbon_copy_values:
                 if type(other_field_type) is set:
-                    self._db.sadd(other_entity.prefix+':'+value+':'+
+                    pipeline.sadd(other_entity.prefix+':'+value+':'+
                                   other_field_name, self.id)
                 elif issubclass(other_field_type, Entity):
                     other_entity(value, self._db).hdel(other_field_name)
-                    self._db.hset(other_entity.prefix+':'+value,
+                    pipeline.hset(other_entity.prefix+':'+value,
                                   other_field_name, self.id)
         elif field in self.lookups:
             for value in carbon_copy_values:
@@ -448,13 +479,14 @@ class Entity(metaclass=_entity_metaclass):
                     # see if this field mapped to something already
                     reference = self.__class__.lookup(field, value, self._db)
                     if reference:
-                        self._db.srem(self.prefix+':'+reference+':'+field,
+                        pipeline.srem(self.prefix+':'+reference+':'+field,
                                       value)
-                    self._db.hset(field+':'+value, self.prefix, self.id)
+                    pipeline.hset(field+':'+value, self.prefix, self.id)
                 else:
-                    self._db.sadd(field+':'+value+':'+self.prefix, self.id)
+                    pipeline.sadd(field+':'+value+':'+self.prefix, self.id)
 
-        self._db.sadd(self.prefix+':'+self._id+':'+field, *carbon_copy_values)
+        pipeline.sadd(self.prefix+':'+self._id+':'+field, *carbon_copy_values)
+        pipeline.execute()
 
     @check_field
     def zscore(self, field, key):
