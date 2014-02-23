@@ -61,41 +61,8 @@ from server.apollo import Entity, zset, relate
 # which checks for expired streams against the current time. Streams that
 # expire can be obtained by: redis.zrangebyscore('heartbeat',0,current_time)
 
-# PG Downloading streams: siegetank will first send a query to CC. CC assigns
-# a download token (that expire in 30 days), and responds with an IP and a
-# download_token. PG simply sends the token to the WS to get the downloaded
-# file
-#
 # TODO:
 # [ ] Stats
-# [ ] delete mechanisms
-
-###################
-# CC/PG Interface #
-###################
-
-# POST x.com/streams  - add a new stream
-# PUT x.com/streams/delete  - delete a stream
-# GET x.com/streams/stream_id  - download a stream
-# POST x.com/streams/activate - activate a stream
-
-##################
-# CORE Interface #
-##################
-
-# GET x.com/core/start  - start a stream (given an auth token)
-# PUT x.com/core/frame  - add a frame to a stream (idempotent)
-# PUT x.com/core/stop  - stop a stream
-# PUT x.com/core/checkpoint  - send a checkpoint file corresponding
-#                              to the last frame received
-# POST x.com/core/heartbeat  - send a heartbeat
-
-####################
-# PUBLIC Interface #
-####################
-
-# GET x.com/targets/streams/:target_id - a list of streams for this target
-# GET x.com/active_streams - get all the active streams
 
 # In general, we should try and use GETs/PUTs whenever possible. Idempotency
 # is an incredibly useful way of dealing with failures. Suppose a core

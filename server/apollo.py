@@ -176,8 +176,10 @@ class Entity(metaclass=_entity_metaclass):
         return db.sismember(cls.prefix+'s', id)
 
     @classmethod
-    def create(cls, id, db):
-        """ Create an object with identifier id on the redis client db """
+    def create(cls, id, db, fields=dict()):
+        """ Create an object with identifier id on the redis client db
+
+        """
         if isinstance(id, bytes):
             raise TypeError('id must be a string')
         if cls.exists(id, db):

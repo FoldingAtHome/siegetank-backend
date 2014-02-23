@@ -35,61 +35,40 @@ import socket
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.apollo import Entity, relate
 
-# The command center manages several work servers in addition to managing the
-# stats system for each work server. A single command center manages a single
-# engine type (eg. OpenMM).
+# The Command Center manages several work servers in addition to managing the
+# stats system for each work server.
 
 # CC uses Antirez's redis extensively as NoSQL store mainly because of its
-# blazing fast speed. Binary blobs such as states, systems, and frames are
-# written directly to disk.
+# blazing fast speed, atomicity across different proccesses, and database
+# recovery features. Note: binary blobs such as states, systems, and frames are
+# written directly to disk instead
 
 # For more information on redis memory usage, visit:
 # http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
 
-# On average, we expect the load of the CC to be significantly lower
-# than that of the WS. If each stream takes about 4 hours until
-# termination, then each stream makes about 6 requests per day.
-# A single CC is expected to handle 500,000 streams. This is
-# about 3 million requests per day - translating to about 35 requests
-# per second. Each request needs to be handled by the CC in 30 ms.
+###################
+# Fault tolerance #
+###################
 
-#################
-#   Interface   #
-#################
+# There are three failure modes that could happen:
 
-# [A] Requires authentication
-# [P] Publicly accessible (possibly limited info)
+# 1. CC Up - WS Down: When the WS restarts, it notifies all the WS that it is
+#                     alive via RegisterWSHandler (which resets the fail_count)
 
-# [P] POST x.com/managers/auth - Authenticate the F@h manager
-# [P] POST x.com/donors/auth - Authenticate the F@h donor
+# 2. CC Down - WS Up: When the CC restarts, it pings all of the WS in its redis
+#                     databases to see if they are alive.
 
-# [A] POST x.com/targets - add a target
-# [P] GET x.com/targets - if Authenticated, retrieves User's targets
-#                       - if Public, retrieves list of all targets on server
-# [P] GET x.com/targets/info/:target_id - get info about a specific target
-# [A] PUT x.com/targets/stage/:target_id - change stage from beta->adv->full
-# [A] PUT x.com/targets/delete/:target_id - delete target and its streams
-# [A] PUT x.com/targets/stop/:target_id - stop the target and its streams
-# [A] GET x.com/targets/streams/:target_id - get the streams for target
-# [A] PUT x.com/targets/update_stage/:target_id
-
-# [A] POST x.com/streams - add a stream
-# [P] GET x.com/streams/info/:stream_id - get information about specific stream
-# [A] PUT x.com/streams/delete/:stream_id - delete a stream
-# [A] PUT x.com/streams/stop/:stream_id - stop a stream
-
-##################
-# Core Interface #
-##################
-
-# POST x.com/core/assign - get a stream to work on
+# 3. CC Up - WS Up - Network Down: The CC will see that the WS is down, but the
+#                                  WS won't explicitly restart since it may be
+#                                  slaves to multiple CCs. So the only way is
+#                                  for the CC to periodically ping the downed
+#                                  WSs via a periodic callback.
 
 
 class WorkServer(Entity):
     prefix = 'ws'
     fields = {'url': str,  # http request url (verify based on if IP or not)
               'http_port': int,  # ws http port
-              'online': bool,  # denotes if the server is online or not
               'fail_count': int,  # number of times a request has failed
               }
 
@@ -183,14 +162,11 @@ class BaseHandler(tornado.web.RequestHandler):
         try:
             reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
                                        **kwargs)
+            workserver.hset('fail_count', 0)
             return reply
         except socket.gaierror:
             print('SOCKET_ERROR DETECTED')
-            fails = workserver.hincrby('fail_count', 1)
-            # TODO: we shouldn't need 'online' if we can just use 'fail_count'
-            # to gauge whether or not a server is alive.
-            if fails > 0:
-                workserver.hset('online', False)
+            workserver.hincrby('fail_count', 1)
             dummy = tornado.httpclient.HTTPRequest(ws_url)
             tempb = io.BytesIO(json.dumps({'error': 'WS down'}).encode())
             reply = tornado.httpclient.HTTPResponse(dummy, 400, buffer=tempb)
@@ -1049,6 +1025,14 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/streams/delete/(.*)', DeleteStreamHandler)
             ])
 
+    def is_online(self, ws_id):
+        """ returns True if the workserver is online, False otherwise """
+        ws = WorkServer(ws_id, self.db)
+        if ws.hget('fail_count' < 10):
+            return True
+        else:
+            return False
+
     # this is mainly here for unit testing purposes
     def add_ws(self, name, url, http_port):
         try:
@@ -1058,7 +1042,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 ws = WorkServer(name, self.db)
             ws.hset('url', url)
             ws.hset('http_port', http_port)
-            ws.hset('online', True)
             ws.hset('fail_count', 0)
         except Exception as e:
             print(e)
