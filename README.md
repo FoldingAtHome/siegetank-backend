@@ -20,7 +20,5 @@ The major goals in the development of Siege Tank are:
 
 <h1> Documentation </h1>
 
-Documentation is hosted on heroku with authentication via Github's OAuth2
-system:
-
-![proteneer.herokuapp.com](http://proteneer.herokuapp.com)
+Documentation is hosted on [heroku](http://proteneer.herokuapp.com) with authentication via Github's OAuth2
+system 
