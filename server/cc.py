@@ -64,6 +64,7 @@ from server.apollo import Entity, relate
 #                                  for the CC to periodically ping the downed
 #                                  WSs via a periodic callback.
 
+# If the WS goes down, 
 
 class WorkServer(Entity):
     prefix = 'ws'
@@ -522,8 +523,9 @@ class AssignHandler(BaseHandler):
 
         steps_per_frame = target.hget('steps_per_frame')
 
-        # shuffle and re-order the list of striated servers
-        striated_servers = list(target.smembers('striated_ws'))
+        # shuffle and find an online workserver
+        striated_servers = list(filter(lambda x: self.application.is_online(x),
+                                       target.smembers('striated_ws')))
         random.shuffle(striated_servers)
 
         for ws_id in striated_servers:
@@ -1031,7 +1033,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def is_online(self, ws_id):
         """ returns True if the workserver is online, False otherwise """
         ws = WorkServer(ws_id, self.db)
-        if ws.hget('fail_count' < 10):
+        if ws.hget('fail_count') < 10:
             return True
         else:
             return False
