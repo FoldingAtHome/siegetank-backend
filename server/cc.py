@@ -960,37 +960,40 @@ class TargetsHandler(BaseHandler):
         # write data #
         #------------#
         target_id = str(uuid.uuid4())
-        target = Target.create(target_id, self.db)
-        target.hset('description', description)
-        target.hset('steps_per_frame', steps_per_frame)
-        target.hset('creation_date', time.time())
-        target.hset('engine', engine)
+
+        fields = {
+            'description': description,
+            'steps_per_frame': steps_per_frame,
+            'creation_date': time.time(),
+            'engine': engine,
+            'owner': self.get_current_user(),
+        }
         if 'stage' in content:
             if content['stage'] in ['private', 'beta', 'public']:
-                target.hset('stage', content['stage'])
+                fields['stage'] = content['stage']
         else:
-            target.hset('stage', 'private')
-        target.hset('owner', self.get_current_user())
-        for allowed_version in content['engine_versions']:
-            target.sadd('engine_versions', allowed_version)
+            fields['stage'] = 'private'
+        allowed_versions = set(content['engine_versions'])
+        fields['engine_versions'] = allowed_versions
         if 'allowed_ws' in content:
-            for ws_name in content['allowed_ws']:
-                target.sadd('allowed_ws', ws_name)
+            allowed_workservers = set(content['allowed_ws'])
+            fields['allowed_ws'] = allowed_workservers
+        fields['files'] = set(files.keys())
+
+        target = Target.create(target_id, self.db, fields)
+
+        target_dir = os.path.join(self.application.targets_folder, target_id)
+        if not os.path.exists(target_dir):
+            os.makedirs(target_dir)
+        for filename, filebin in files.items():
+            file_path = os.path.join(target_dir, filename)
+            with open(file_path, 'wb') as handle:
+                handle.write(filebin.encode())
 
         mdb = self.application.mdb
         cc_id = self.application.name
         mdb.managers.update({'_id': self.get_current_user()},
                             {'$push': {'targets.'+cc_id: target_id}})
-
-        target_dir = os.path.join(self.application.targets_folder, target_id)
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir)
-
-        for filename, filebin in files.items():
-            file_path = os.path.join(target_dir, filename)
-            target.sadd('files', filename)
-            with open(file_path, 'wb') as handle:
-                handle.write(filebin.encode())
 
         self.set_status(200)
         response = {'target_id': target_id}
