@@ -211,15 +211,29 @@ class Entity(metaclass=_entity_metaclass):
 
             fields is a dictionary of fields that are all created in a single
             transaction
+
+            if db is a pipeline object, then the returned instance is None
+            since the object does not exist yet. The onus is on the developer
+            to execute pipe first, and then creating the instance.
+
         """
         if isinstance(id, bytes):
             raise TypeError('id must be a string')
-        if cls.exists(id, db):
-            raise KeyError(id, 'already exists')
 
-        instance = cls(id, db, verify=False)
+        if isinstance(db, redis.client.Pipeline):
+            flush = False
+            instance_db = redis.Redis(connection_pool=db.connection_pool)
+            pipeline = db
+        else:
+            assert isinstance(db, redis.client.Redis)
+            if cls.exists(id, db):
+                raise KeyError(id, 'already exists')
+            flush = True
+            instance_db = db
+            pipeline = db.pipeline()
 
-        pipeline = db.pipeline()
+        instance = cls(id, instance_db, verify=False)
+
         for field_name, field_value in fields.items():
             if type(field_value) is set:
                 instance.sadd(field_name, *field_value, pipeline=pipeline)
@@ -231,8 +245,11 @@ class Entity(metaclass=_entity_metaclass):
                 raise TypeError('unsupported type:'+field_value)
 
         pipeline.sadd(cls.prefix + 's', id)
-        pipeline.execute()
-        return instance
+        if flush:
+            pipeline.execute()
+            return instance
+        else:
+            return None
 
     @classmethod
     def add_lookup(cls, field, injective=True):
@@ -551,22 +568,25 @@ class Entity(metaclass=_entity_metaclass):
             return None
 
     @check_field
-    def zadd(self, field, *args, **kwargs):
+    @auto_pipeline
+    def zadd(self, field, *args,  pipeline=None, **kwargs):
         assert type(self.fields[field] == zset)
         assert not field in self.lookups
         assert not field in self.relations
-        return self._db.zadd(self.prefix+':'+self.id+':'+field, *args,
+        return pipeline.zadd(self.prefix+':'+self.id+':'+field, *args,
                              **kwargs)
 
     @check_field
-    def zrem(self, field, *args):
+    @auto_pipeline
+    def zrem(self, field, *args, pipeline=None):
         assert type(self.fields[field] == zset)
         assert not field in self.lookups
         assert not field in self.relations
-        return self._db.zrem(self.prefix+':'+self.id+':'+field, *args)
+        return pipeline.zrem(self.prefix+':'+self.id+':'+field, *args)
 
     def __init__(self, id, db, verify=True):
         assert type(id) in (str, int)
+        assert isinstance(db, redis.client.Pipeline) is False
         self._db = db
         self._id = id
         # overhead

@@ -1040,12 +1040,17 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def add_ws(self, name, url, http_port):
         try:
             if not WorkServer.exists(name, self.db):
-                ws = WorkServer.create(name, self.db)
+                fields = {'url': url,
+                          'http_port': http_port,
+                          'fail_count': 0}
+                ws = WorkServer.create(name, self.db, fields)
             else:
                 ws = WorkServer(name, self.db)
-            ws.hset('url', url)
-            ws.hset('http_port', http_port)
-            ws.hset('fail_count', 0)
+                pipe = self.db.pipeline()
+                ws.hset('url', url, pipe)
+                ws.hset('http_port', http_port, pipe)
+                ws.hset('fail_count', 0, pipe)
+                pipe.execute()
         except Exception as e:
             print(e)
 

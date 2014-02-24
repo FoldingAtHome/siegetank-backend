@@ -85,6 +85,7 @@ from server.apollo import Entity, zset, relate
 # When the WS dies, we can recreate the entire redis database using data from
 # the disk! This implies we don't actually need to save an rdb.
 
+#
 
 class Stream(Entity):
     prefix = 'stream'
@@ -238,15 +239,16 @@ class ActivateStreamHandler(BaseHandler):
         stream_id = target.zrevpop('queue')
         token = str(uuid.uuid4())
         if stream_id:
-            active_stream = ActiveStream.create(stream_id, self.db)
-            active_stream.hset('buffer_frames', 0)
-            active_stream.hset('total_frames', 0)
-            active_stream.hset('auth_token', token)
-            active_stream.hset('steps', 0)
-            active_stream.hset('start_time', time.time())
+            fields = {
+                'buffer_frames': 0,
+                'total_frames': 0,
+                'auth_token': token,
+                'steps': 0,
+                'start_time': time.time()
+            }
             if 'donor_id' in content:
-                donor_id = content['donor_id']
-                active_stream.hset('donor', donor_id)
+                fields['donor'] = content['donor_id']
+            ActiveStream.create(stream_id, self.db, fields)
             increment = tornado.options.options['heartbeat_increment']
             self.db.zadd('heartbeats', stream_id, time.time() + increment)
 
@@ -292,7 +294,8 @@ class PostStreamHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        # TODO: stream creation needs to be pipelined and atomic?
+        # TODO: stream creation needs to be pipelined and atomic
+        # Safety-guarantee: dd files before database entries.
 
         #if not CommandCenter.lookup('ip', self.request.remote_ip, self.db):
         #    return self.set_status(401)
@@ -307,14 +310,15 @@ class PostStreamHandler(BaseHandler):
             target_dir = os.path.join(targets_folder, target_id)
             if not os.path.exists(target_dir):
                 os.makedirs(target_dir)
-            target = Target.create(target_id, self.db)
+            target_fields = {
+                'stream_files': set(stream_files.keys()),
+                'target_files': set(target_files.keys())
+            }
+            target = Target.create(target_id, self.db, target_fields)
             for filename, binary in target_files.items():
                 target_file = os.path.join(target_dir, filename)
                 with open(target_file, 'w') as handle:
                     handle.write(binary)
-                target.sadd('target_files', filename)
-            for filename, binary in stream_files.items():
-                target.sadd('stream_files', filename)
         else:
             target = Target(target_id, self.db)
             if target.smembers('stream_files') != stream_files.keys():
@@ -326,20 +330,23 @@ class PostStreamHandler(BaseHandler):
         if not os.path.exists(stream_dir):
             os.makedirs(stream_dir)
 
-        stream = Stream.create(stream_id, self.db)
         for filename, binary in stream_files.items():
             with open(os.path.join(stream_dir, filename), 'w') as handle:
                 handle.write(binary)
 
-        target = Target(target_id, self.db)
-        target.zadd('queue', stream_id, 0)
-        stream.hset('target', target)
-        stream.hset('frames', 0)
-        stream.hset('status', 'OK')
-        stream.hset('error_count', 0)
+        # create using a transaction
+        pipeline = self.db.pipeline()
+        target.zadd('queue', stream_id, 0, pipeline=pipeline)
+        stream_fields = {
+            'target': target,
+            'frames': 0,
+            'status': 'OK',
+            'error_count': 0
+        }
+        Stream.create(stream_id, pipeline, stream_fields)
+        pipeline.execute()
 
         response = {'stream_id': stream_id}
-
         self.set_status(200)
         self.write(json.dumps(response))
 
@@ -363,23 +370,28 @@ class DeleteStreamHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        # delete from database before deleting from disk
         stream_id = json.loads(self.request.body.decode())['stream_id']
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
-        stream.delete()
+        target = Target(target_id, self.db)
 
+        pipeline = self.db.pipeline()
         try:
             active_stream = ActiveStream(stream_id, self.db)
             if active_stream:
-                active_stream.delete()
+                active_stream.delete(pipeline=pipeline)
         except KeyError:
             pass
+        target.zrem('queue', stream_id, pipeline=pipeline)
+        stream.delete(pipeline=pipeline)
+        pipeline.execute()
+
         shutil.rmtree(os.path.join(self.application.streams_folder, stream_id))
-        target = Target(target_id, self.db)
         # manual cleanup
-        target.zrem('queue', stream_id)
+
         if target.scard('streams') == 0:
             target.delete()
             shutil.rmtree(os.path.join(self.application.targets_folder,

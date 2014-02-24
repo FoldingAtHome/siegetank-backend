@@ -459,6 +459,17 @@ class TestApollo(unittest.TestCase):
 
         joe.delete()
 
+    def test_pipeline_zadd(self):
+        joe = Person.create('joe', self.db)
+        pipeline = self.db.pipeline()
+        joe.zadd('tasks', 'sleep', 5, pipeline=pipeline)
+        joe.zadd('tasks', 'eat', 1, pipeline=pipeline)
+        joe.zadd('tasks', 'drink', 3, pipeline=pipeline)
+        pipeline.execute()
+        self.assertListEqual(joe.zrange('tasks', 0, -1),
+                             ['eat', 'drink', 'sleep'])
+        joe.delete()
+
     def test_zrevpop(self):
         joe = Person.create('joe', self.db)
         joe.zadd('tasks', 'sleep', 5)
