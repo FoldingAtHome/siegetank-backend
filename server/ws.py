@@ -167,10 +167,22 @@ def authenticate_core(method):
     return wrapper
 
 
+class AliveHandler(BaseHandler):
+    def get(self):
+        """
+        ... http:get:: /
+
+            Used to check and see if the WS is up or not
+
+        """
+        self.set_status(200)
+
+
 class TargetStreamsHandler(BaseHandler):
     def get(self, target_id):
         """
-        .. http::get:: /targets/streams/(:target_id)
+        .. http:get:: /targets/streams/(:target_id)
+
             Get a list of streams for the target and their status and frames
 
             **Example reply**:
@@ -870,6 +882,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
                     print('Warning: not connect to CC '+cc_name)
 
         super(WorkServer, self).__init__([
+            (r'/', AliveHandler),
             (r'/active_streams', ActiveStreamsHandler),
             (r'/streams/activate', ActivateStreamHandler),
             (r'/streams', PostStreamHandler),

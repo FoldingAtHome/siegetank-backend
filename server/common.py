@@ -87,6 +87,7 @@ class BaseServerMixin():
             if redis_options['logfile'] != os.devnull:
                 redis_options['logfile'] += name
         if 'appendfilename' in redis_options:
+            redis_options['appendonly'] = 'yes'
             redis_options['appendfilename'] += name
         self.db = init_redis(redis_options)
 

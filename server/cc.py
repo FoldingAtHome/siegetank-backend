@@ -118,6 +118,10 @@ def authenticate_manager(method):
 
 
 class BaseHandler(tornado.web.RequestHandler):
+
+    def initialize(self):
+        self.fetch = self.application.fetch
+
     @property
     def db(self):
         return self.application.db
@@ -139,41 +143,6 @@ class BaseHandler(tornado.web.RequestHandler):
             return query['role']
         except:
             return None
-
-    @tornado.gen.coroutine
-    def fetch(self, ws_id, path, **kwargs):
-        """
-        This is a fairly special method. First, it takes care of some boiler
-        plate code. Second, it keeps track of how many times a workserver has
-        failed. If it has failed one too many times, then the workserver is
-        taken offline.
-
-        """
-        workserver = WorkServer(ws_id, self.db)
-        if 'ws_url' in kwargs:
-            ws_url = kwargs['ws_url']
-            kwargs.pop("ws_url", None)
-        else:
-            ws_url = workserver.hget('url')
-        if 'ws_port' in kwargs:
-            ws_port = kwargs['ws_port']
-            kwargs.pop("ws_port", None)
-        else:
-            ws_port = workserver.hget('http_port')
-        ws_uri = 'https://'+ws_url+':'+str(ws_port)+path
-        client = tornado.httpclient.AsyncHTTPClient()
-        try:
-            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
-                                       **kwargs)
-            workserver.hset('fail_count', 0)
-            return reply
-        except socket.gaierror:
-            print('SOCKET_ERROR DETECTED')
-            workserver.hincrby('fail_count', 1)
-            dummy = tornado.httpclient.HTTPRequest(ws_url)
-            tempb = io.BytesIO(json.dumps({'error': 'WS down'}).encode())
-            reply = tornado.httpclient.HTTPResponse(dummy, 400, buffer=tempb)
-            return reply
 
 
 class AuthDonorHandler(tornado.web.RequestHandler):
@@ -1051,6 +1020,8 @@ class TargetsHandler(BaseHandler):
 
 class CommandCenter(BaseServerMixin, tornado.web.Application):
 
+    _max_ws_fails = 10
+
     def __init__(self, cc_name, cc_pass, redis_options, core_keys=set(),
                  mongo_options=None, targets_folder='targets'):
         print('Starting up Command Center:', cc_name)
@@ -1072,7 +1043,57 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/streams/delete/(.*)', DeleteStreamHandler)
             ])
 
-    _max_ws_fails = 10
+    @tornado.gen.coroutine
+    def fetch(self, ws_id, path, **kwargs):
+        """
+        This is a fairly special method. First, it takes care of some boiler
+        plate code. Second, it keeps track of how many times a workserver has
+        failed. If it has failed one too many times, then the workserver is
+        taken offline.
+
+        """
+        workserver = WorkServer(ws_id, self.db)
+        if 'ws_url' in kwargs:
+            ws_url = kwargs['ws_url']
+            kwargs.pop("ws_url", None)
+        else:
+            ws_url = workserver.hget('url')
+        if 'ws_port' in kwargs:
+            ws_port = kwargs['ws_port']
+            kwargs.pop("ws_port", None)
+        else:
+            ws_port = workserver.hget('http_port')
+        ws_uri = 'https://'+ws_url+':'+str(ws_port)+path
+        client = tornado.httpclient.AsyncHTTPClient()
+        try:
+            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
+                                       **kwargs)
+            workserver.hset('fail_count', 0)
+            return reply
+        except (tornado.httpclient.HTTPError, socket.gaierror):
+            workserver.hincrby('fail_count', 1)
+            dummy = tornado.httpclient.HTTPRequest(ws_url)
+            tempb = io.BytesIO(json.dumps({'error': 'WS down'}).encode())
+            reply = tornado.httpclient.HTTPResponse(dummy, 503, buffer=tempb)
+            return reply
+
+    @tornado.gen.coroutine
+    def check_ws(self):
+        """ check all workservers to see if they are alive or not.
+            This is called once at the beginning, and periodically """
+        for ws_name in WorkServer.members(self.db):
+            reply = yield self.fetch(ws_name, '/')
+            ws = WorkServer(ws_name)
+            if reply.code == 200:
+                ws.hset('fail_count', 0)
+            else:
+                ws.hset('fail_count', self.application._max_ws_fails)
+
+    def initialize_check_ws(self):
+        if tornado.process.task_id() == 0:
+            tornado.ioloop.IOLoop.instance().add_callback(self.check_ws)
+            self.pulse = tornado.ioloop.PeriodicCallback(self.check_ws, 5000)
+            self.pulse.start()
 
     def ws_online(self, ws_id):
         """ returns True if the workserver is online, False otherwise """
@@ -1127,4 +1148,5 @@ def start():
 
     cc_server.bind(options.internal_http_port)
     cc_server.start(0)
+    instance.initialize_check_ws()
     tornado.ioloop.IOLoop.instance().start()

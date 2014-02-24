@@ -36,3 +36,8 @@ Manager Methods
 ---------------
 
 .. autosimple:: DownloadHandler.get
+
+Misc Methods
+------------
+
+.. autosimple:: AliveHandler.get
