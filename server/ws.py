@@ -170,9 +170,11 @@ def authenticate_core(method):
 class AliveHandler(BaseHandler):
     def get(self):
         """
-        ... http:get:: /
+        .. http:get:: /
 
             Used to check and see if the WS is up or not
+
+            :status 200: OK
 
         """
         self.set_status(200)
