@@ -554,7 +554,7 @@ class DisconnectWSHandler(BaseHandler):
                 }
 
             :status 200: OK
-            :Status 400: Bad request
+            :status 400: Bad request
             :status 401: Unauthorized
 
         """
@@ -1079,8 +1079,11 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def check_ws(self):
-        """ check all workservers to see if they are alive or not.
-            This is called once at the beginning, and periodically """
+        """ Check all workservers to see if they are alive or not.
+
+            This is called once at the beginning, and periodically.
+
+        """
         for ws_name in WorkServer.members(self.db):
             reply = yield self.fetch(ws_name, '/')
             ws = WorkServer(ws_name)
