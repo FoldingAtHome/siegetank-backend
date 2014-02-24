@@ -497,7 +497,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
                          'keyfile': 'certs/private.pem'})
         self.cc_httpserver.listen(self.cc_hport)
 
-        # register an account
+        # register a manager account
         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
         url = '127.0.0.1'
         email = 'proteneer@gmail.com'
@@ -507,9 +507,11 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             'password': password,
             'role': 'manager'
         }
+
         uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
                      validate_cert=common.is_domain(url))
+
         rep = self.wait()
         self.assertEqual(rep.code, 200)
         auth = json.loads(rep.body.decode())['token']
@@ -595,7 +597,6 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
     def test_post_target_restricted(self):
         auth, url, client = self.auth, self.url, self.client
         headers = {'Authorization': auth}
-
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
                               for i in range(4))
         description = "Diwakar and John's top secret project"
@@ -609,6 +610,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             'stage': 'public'
             }
         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+
         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
                      validate_cert=common.is_domain(url), headers=headers)
         reply = self.wait()

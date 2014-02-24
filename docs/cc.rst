@@ -25,3 +25,4 @@ Public Methods
 Special Methods
 ---------------
 .. autosimple:: RegisterWSHandler.put
+.. autosimple:: DisconnectWSHandler.put

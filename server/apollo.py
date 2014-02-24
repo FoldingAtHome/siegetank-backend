@@ -43,6 +43,8 @@ def auto_pipeline(method):
                 inner2(pipeline=pipeline)
         pipeline.execute()  # flush happens here
 
+    pipeline must be a named argument
+
     """
     @wraps(method)
     def wrapper(self, *args, pipeline=None):

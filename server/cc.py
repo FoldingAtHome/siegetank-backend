@@ -64,14 +64,16 @@ from server.apollo import Entity, relate
 #                                  for the CC to periodically ping the downed
 #                                  WSs via a periodic callback.
 
-# If the WS goes down, 
 
 class WorkServer(Entity):
     prefix = 'ws'
     fields = {'url': str,  # http request url (verify based on if IP or not)
+              'ip': str,  # ip address of the workserver
               'http_port': int,  # ws http port
               'fail_count': int,  # number of times a request has failed
               }
+
+WorkServer.add_lookup('ip', injective=True)
 
 
 # note, some of these options are created lazily, ie. they don't take up space
@@ -524,7 +526,7 @@ class AssignHandler(BaseHandler):
         steps_per_frame = target.hget('steps_per_frame')
 
         # shuffle and find an online workserver
-        striated_servers = list(filter(lambda x: self.application.is_online(x),
+        striated_servers = list(filter(lambda x: self.application.ws_online(x),
                                        target.smembers('striated_ws')))
         random.shuffle(striated_servers)
 
@@ -551,10 +553,52 @@ class AssignHandler(BaseHandler):
                     self.write(json.dumps(body))
                     return self.set_status(200)
             except tornado.httpclient.HTTPError as e:
-                print('HTTP_ERROR::::', e)
+                print('HTTP_ERROR::', e)
                 pass
 
         self.write(json.dumps({'error': 'no free WS available'}))
+
+
+class DisconnectWSHandler(BaseHandler):
+    def put(self):
+        """
+        .. http:put:: /disconnect_ws
+
+            Disconnect a WorkServer, setting its status to offline.
+
+            :reqheader Authorization: Secret password of the CC
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "name": "some_workserver"
+                }
+
+            **Example response**
+
+            .. sourcecode:: javascript
+
+                {
+                    //empty
+                }
+
+            :status 200: OK
+            :Status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        self.set_status(400)
+        auth = self.request.headers['Authorization']
+        if auth != self.application.cc_pass:
+            return self.set_status(401)
+        content = json.loads(self.request.body.decode())
+        name = content['name']
+        ws = WorkServer(name, self.db)
+        ws.hset('fail_count', self.application._max_ws_fails)
+        self.set_status(200)
+        return self.write(json.dumps({}))
 
 
 class RegisterWSHandler(BaseHandler):
@@ -572,7 +616,7 @@ class RegisterWSHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "name": "command_center",
+                    "name": "some_workserver",
                     "url": "workserver.stanford.edu",
                     "http_port": 443
                 }
@@ -591,10 +635,11 @@ class RegisterWSHandler(BaseHandler):
                 }
 
             :status 200: OK
+            :status 400: Bad request
             :status 401: Unauthorized
 
         """
-        content = json.loads(self.request.body.decode())
+        self.set_status(400)
         auth = self.request.headers['Authorization']
         if auth != self.application.cc_pass:
             return self.set_status(401)
@@ -605,6 +650,7 @@ class RegisterWSHandler(BaseHandler):
         self.application.add_ws(name, url, http_port)
         print('WS '+content['name']+' is now connected')
         self.set_status(200)
+        return self.write(json.dumps({}))
 
 
 class DeleteStreamHandler(BaseHandler):
@@ -732,14 +778,8 @@ class PostStreamHandler(BaseHandler):
                 with open(file_path, 'rb') as handle:
                     body['target_files'][filename] = handle.read().decode()
 
-        try:
-
-            rep = yield self.fetch(ws_id, '/streams', method='POST',
-                                   body=json.dumps(body))
-
-        except Exception as e:
-
-            print('OUTERRRRR', e)
+        rep = yield self.fetch(ws_id, '/streams', method='POST',
+                               body=json.dumps(body))
 
         if rep.code == 200:
             target.sadd('striated_ws', ws_id)
@@ -982,7 +1022,7 @@ class TargetsHandler(BaseHandler):
             fields['allowed_ws'] = allowed_workservers
         fields['files'] = set(files.keys())
 
-        target = Target.create(target_id, self.db, fields)
+        Target.create(target_id, self.db, fields)
 
         target_dir = os.path.join(self.application.targets_folder, target_id)
         if not os.path.exists(target_dir):
@@ -1010,6 +1050,7 @@ class TargetsHandler(BaseHandler):
 
 
 class CommandCenter(BaseServerMixin, tornado.web.Application):
+
     def __init__(self, cc_name, cc_pass, redis_options, core_keys=set(),
                  mongo_options=None, targets_folder='targets'):
         print('Starting up Command Center:', cc_name)
@@ -1026,35 +1067,36 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/register_ws', RegisterWSHandler),
+            (r'/disconnect_ws', DisconnectWSHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete/(.*)', DeleteStreamHandler)
             ])
 
-    def is_online(self, ws_id):
+    _max_ws_fails = 10
+
+    def ws_online(self, ws_id):
         """ returns True if the workserver is online, False otherwise """
         ws = WorkServer(ws_id, self.db)
-        if ws.hget('fail_count') < 10:
+        if ws.hget('fail_count') < self._max_ws_fails:
             return True
         else:
             return False
 
     # this is mainly here for unit testing purposes
     def add_ws(self, name, url, http_port):
-        try:
-            if not WorkServer.exists(name, self.db):
-                fields = {'url': url,
-                          'http_port': http_port,
-                          'fail_count': 0}
-                ws = WorkServer.create(name, self.db, fields)
-            else:
-                ws = WorkServer(name, self.db)
-                pipe = self.db.pipeline()
-                ws.hset('url', url, pipe)
-                ws.hset('http_port', http_port, pipe)
-                ws.hset('fail_count', 0, pipe)
-                pipe.execute()
-        except Exception as e:
-            print(e)
+        if not WorkServer.exists(name, self.db):
+            fields = {'url': url,
+                      'http_port': http_port,
+                      'fail_count': 0
+                      }
+            ws = WorkServer.create(name, self.db, fields)
+        else:
+            ws = WorkServer(name, self.db)
+            pipe = self.db.pipeline()
+            ws.hset('url', url, pipeline=pipe)
+            ws.hset('http_port', http_port, pipeline=pipe)
+            ws.hset('fail_count', 0, pipeline=pipe)
+            pipe.execute()
 
 
 def start():

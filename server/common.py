@@ -76,7 +76,6 @@ def init_redis(redis_options):
 
 
 class BaseServerMixin():
-
     def base_init(self, name, redis_options, mongo_options):
         """ A BaseServer is a server that is connected to both a redis server
         and a mongo server """

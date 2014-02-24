@@ -843,6 +843,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
 
         self.targets_folder = targets_folder
         self.streams_folder = streams_folder
+        self.command_centers = command_centers
 
         # Notify the command centers that this workserver is online
         if command_centers:
@@ -881,6 +882,30 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/core/stop', CoreStopHandler),
             (r'/core/heartbeat', CoreHeartbeatHandler)
         ])
+
+    def notify_cc_shutdown(self):
+        print('notifying CCs of shutdown...')
+        if tornado.process.task_id() == 0:
+            client = tornado.httpclient.HTTPClient()
+            for cc_name, properties in self.command_centers.items():
+                url = properties['url']
+                uri = 'https://'+url+'/disconnect_ws'
+                body = {
+                    'name': self.name
+                }
+                headers = {
+                    'Authorization': properties['pass']
+                }
+                try:
+                    client.fetch(uri, method='PUT', connect_timeout=2,
+                                 body=json.dumps(body), headers=headers,
+                                 validate_cert=is_domain(url))
+                except tornado.httpclient.HTTPError:
+                    print('Failed to notify '+cc_name+' that WS is down')
+
+    def shutdown(self, *args, **kwargs):
+        self.notify_cc_shutdown()
+        BaseServerMixin.shutdown(self, *args, **kwargs)
 
     def initialize_pulse(self):
         # check for heartbeats only on the 0th process.
