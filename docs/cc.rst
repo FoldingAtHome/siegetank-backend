@@ -22,7 +22,8 @@ Public Methods
 .. autosimple:: AuthDonorHandler.post
 .. autosimple:: TargetsHandler.get
 
-Special Methods
+Workserver Methods
 ---------------
+.. autosimple:: WSStatusHandler.get
 .. autosimple:: RegisterWSHandler.put
 .. autosimple:: DisconnectWSHandler.put

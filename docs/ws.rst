@@ -10,11 +10,8 @@ These methods on the workserver can only be issued by IPs matching that of
 known command centers.
 
 .. autosimple:: TargetStreamsHandler.get
-
 .. autosimple:: PostStreamHandler.post
-
 .. autosimple:: DeleteStreamHandler.put
-
 .. autosimple:: ActivateStreamHandler.post
 
 Core Methods
@@ -23,13 +20,9 @@ Core Methods
 These methods must be authenticated using a core token
 
 .. autosimple:: CoreStartHandler.get
-
 .. autosimple:: CoreFrameHandler.put
-
 .. autosimple:: CoreCheckpointHandler.put
-
 .. autosimple:: CoreStopHandler.put
-
 .. autosimple:: CoreHeartbeatHandler.post
 
 Manager Methods
