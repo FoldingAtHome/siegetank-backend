@@ -23,7 +23,7 @@ Public Methods
 .. autosimple:: TargetsHandler.get
 
 Workserver Methods
----------------
+------------------
 .. autosimple:: WSStatusHandler.get
 .. autosimple:: RegisterWSHandler.put
 .. autosimple:: DisconnectWSHandler.put
