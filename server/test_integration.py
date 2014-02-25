@@ -525,6 +525,16 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         self.cc.mdb.managers.drop()
         pass
 
+    def test_workserver_status(self):
+        client = self.client
+        client.fetch('https://127.0.0.1:'+str(self.cc_hport)+'/ws/status',
+                     self.stop, validate_cert=False)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+        rep_servers = content.keys()
+        self.assertEqual(rep_servers, self.workservers.keys())
+
     def test_specify_target(self):
         headers = {'Authorization': self.auth}
         client = self.client

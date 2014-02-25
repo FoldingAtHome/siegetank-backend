@@ -872,7 +872,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
                 }
                 client = tornado.httpclient.HTTPClient()
                 url = properties['url']
-                uri = 'https://'+url+'/register_ws'
+                uri = 'https://'+url+'/ws/register'
                 try:
                     rep = client.fetch(uri, method='PUT', connect_timeout=2,
                                        body=json.dumps(body), headers=headers,
@@ -904,7 +904,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             client = tornado.httpclient.HTTPClient()
             for cc_name, properties in self.command_centers.items():
                 url = properties['url']
-                uri = 'https://'+url+'/disconnect_ws'
+                uri = 'https://'+url+'/ws/disconnect'
                 body = {
                     'name': self.name
                 }

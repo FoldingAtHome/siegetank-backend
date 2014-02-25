@@ -181,7 +181,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
 
         headers = {'Authorization': self.cc_auth}
 
-        reply = self.fetch('/register_ws', method='PUT', body=json.dumps(body),
+        reply = self.fetch('/ws/register', method='PUT', body=json.dumps(body),
                            headers=headers)
         self.assertEqual(reply.code, 200)
 

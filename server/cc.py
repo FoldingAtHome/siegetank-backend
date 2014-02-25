@@ -68,9 +68,9 @@ from server.apollo import Entity, relate
 class WorkServer(Entity):
     prefix = 'ws'
     fields = {'url': str,  # http request url (verify based on if IP or not)
-              'ip': str,  # ip address of the workserver
               'http_port': int,  # ws http port
               'fail_count': int,  # number of times a request has failed
+              #'assigns': zset(str),  # assigns per day
               }
 
 WorkServer.add_lookup('ip', injective=True)
@@ -531,7 +531,7 @@ class AssignHandler(BaseHandler):
 class DisconnectWSHandler(BaseHandler):
     def put(self):
         """
-        .. http:put:: /disconnect_ws
+        .. http:put:: /ws/disconnect
 
             Disconnect a WorkServer, setting its status to offline.
 
@@ -570,10 +570,44 @@ class DisconnectWSHandler(BaseHandler):
         return self.write(json.dumps({}))
 
 
+class WSStatusHandler(BaseHandler):
+    def get(self):
+        """
+        .. http:put:: /ws/status
+
+            Return the status of all workservers managed by the command center.
+
+            **Example response**
+
+            .. sourcecode:: javascript
+
+                {
+                    "ws_name": {
+                        "url": "raynor.stanford.edu",
+                        "online": true,
+                    }
+                    ..
+                }
+
+        """
+        self.set_status(400)
+        body = {}
+        for ws_name in WorkServer.members(self.db):
+            workserver = WorkServer(ws_name, self.db)
+            body[ws_name] = {}
+            body[ws_name]['url'] = workserver.hget('url')
+            if workserver.hget('fail_count') < self.application._max_ws_fails:
+                body[ws_name]['online'] = True
+            else:
+                body[ws_name]['online'] = False
+        self.set_status(200)
+        return self.write(json.dumps(body))
+
+
 class RegisterWSHandler(BaseHandler):
     def put(self):
         """
-        .. http:put:: /register_ws
+        .. http:put:: /ws/register
 
             Register a WorkServer to be managed by this command center by
             presenting the secret password.
@@ -1037,8 +1071,9 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets', TargetsHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
-            (r'/register_ws', RegisterWSHandler),
-            (r'/disconnect_ws', DisconnectWSHandler),
+            (r'/ws/register', RegisterWSHandler),
+            (r'/ws/disconnect', DisconnectWSHandler),
+            (r'/ws/status', WSStatusHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete/(.*)', DeleteStreamHandler)
             ])
