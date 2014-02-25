@@ -85,7 +85,6 @@ from server.apollo import Entity, zset, relate
 # When the WS dies, we can recreate the entire redis database using data from
 # the disk! This implies we don't actually need to save an rdb.
 
-#
 
 class Stream(Entity):
     prefix = 'stream'
@@ -463,18 +462,13 @@ class CoreStartHandler(BaseHandler):
         assert stream.hget('status') == 'OK'
 
         reply = dict()
+
         reply['stream_files'] = dict()
-        # if target is OpenMM engine type, use the following recipe:
-        base_name = 'state.xml.gz.b64'
-        frame_count = stream.hget('frames')
-        filename = 'state.xml.gz.b64'
-        if frame_count > 0:
-            filename = str(stream.hget('frames'))+'_'+filename
-        file_path = os.path.join(self.application.streams_folder,
-                                 stream_id, filename)
-        with open(file_path, 'r') as handle:
-            reply['stream_files'][base_name] = handle.read()
-        # create additional methods later for gromacs/amber/etc.
+        for filename in target.smembers('stream_files'):
+            file_path = os.path.join(self.application.streams_folder,
+                                     stream_id, filename)
+            with open(file_path, 'r') as handle:
+                reply['stream_files'][filename] = handle.read()
 
         reply['target_files'] = dict()
         for filename in target.smembers('target_files'):
@@ -596,7 +590,8 @@ class CoreCheckpointHandler(BaseHandler):
 
             Add a checkpoint and renames buffered files into a valid filenames
             prefixed with the corresponding frame count. It is assumed that the
-            checkpoint corresponds to the last frame of the buffered frames.
+            checkpoint given corresponds to the last frame of the buffered
+            frames.
 
             :reqheader Authorization: authorization token given by the cc
 
@@ -610,6 +605,8 @@ class CoreCheckpointHandler(BaseHandler):
                     }
                 }
 
+            ..note:: filenames must be almost be present in stream_files
+
             :status 200: OK
             :status 400: Bad request
 
@@ -617,17 +614,32 @@ class CoreCheckpointHandler(BaseHandler):
         # Naming scheme:
 
         # active_stream.hset('buffer_frames', 0)
+
         # total_frames = stream.hget('frames') +
         #                active_stream.hget('buffer_frames')
         #              = 9
 
-        # 5_state.xml.gz.b64
-        # 5_frames.xtc            buffer_frames.xtc
-        # 5_log.txt               buffer_log.txt
+        # ACID Compliance:
 
-        # 1. 1) write checkpoint: 9_state.xml.gz.b64 is written
-        # 2. 2) rename buffered files: buffer_frames.xtc -> 9_frames.xtc
-        # 3. 3) delete old checkpoint: 5_state.xml.gz.b64 is deleted
+        # 1) rename state.xml.gz.b64 -> chkpt_5_state.xml.gz.b64
+        # 2) rename buffered files: buffer_frames.xtc -> 9_frames.xtc
+        # 3) write checkpoint as state.xml.gz.b64
+        # 4) delete chkpt_5_state.xml.gz.b64
+
+        # If the WS crashes, and a file chkpt_* is present, then that means
+        # this process has been interrupted and we need to recover.
+
+        # On a restart, we can revert to a safe state by doing:
+
+        # 1) Identify the checkpoint files and their frame number:
+        #    eg. a file called chkpt_5_something is a checkpoint file, with a
+        #        frame number of 5, and a filename of something
+        # 2) Identify the frame files and their frame number:
+        #    eg. a file called 5_something is a frame file, with a frame number
+        #        of 5, and a filename of something
+        # 3) Remove all frame files with a frame number than that of the
+        #    checkpoint, as well as all buffer files
+        # 4) Rename checkpoint files to their proper names.
 
         self.set_status(400)
         content = json.loads(self.request.body.decode())
@@ -635,21 +647,20 @@ class CoreCheckpointHandler(BaseHandler):
         active_stream = ActiveStream(stream_id, self.db)
         stream_frames = stream.hget('frames')
         buffer_frames = active_stream.hget('buffer_frames')
+        total_frames = stream_frames + buffer_frames
 
-        # important check for idempotency
+        # Important check for idempotency
         if buffer_frames == 0:
             return self.set_status(200)
         streams_folder = self.application.streams_folder
         buffers_folder = os.path.join(streams_folder, stream_id)
 
-        # 1) write checkpoint
+        # 1) rename old checkpoint file
         for filename, bytes in content['files'].items():
-            checkpoint_bytes = content['files'][filename].encode()
-            total_frames = stream_frames + buffer_frames
-            checkpoint_path = os.path.join(streams_folder, stream_id,
-                                           str(total_frames)+'_'+filename)
-            with open(checkpoint_path, 'wb') as handle:
-                handle.write(checkpoint_bytes)
+            src = os.path.join(buffers_folder, filename)
+            dst = os.path.join(buffers_folder, 'chkpt_'+str(stream_frames)+'_'+
+                                               filename)
+            os.rename(src, dst)
 
         # 2) rename buffered files
         for filename in active_stream.smembers('buffer_files'):
@@ -657,12 +668,18 @@ class CoreCheckpointHandler(BaseHandler):
             src = os.path.join(buffers_folder, 'buffer_'+filename)
             os.rename(src, dst)
 
-        # 3) delete old checkpoint
+        # 3) write checkpoint
         for filename, bytes in content['files'].items():
-            src = os.path.join(streams_folder, stream_id,
-                               str(stream_frames)+'_'+filename)
-            if stream_frames > 0:
-                os.remove(src)
+            checkpoint_bytes = content['files'][filename].encode()
+            checkpoint_path = os.path.join(buffers_folder, filename)
+            with open(checkpoint_path, 'wb') as handle:
+                handle.write(checkpoint_bytes)
+
+        # 4) delete old checkpoint safely
+        for filename, bytes in content['files'].items():
+            dst = os.path.join(buffers_folder, 'chkpt_'+str(stream_frames)+'_'+
+                                               filename)
+            os.remove(dst)
 
         stream.hincrby('frames', buffer_frames)
         active_stream.hincrby('total_frames', buffer_frames)

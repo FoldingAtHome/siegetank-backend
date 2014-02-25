@@ -469,7 +469,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stream.hget('frames'), n_frames)
         self.assertFalse(os.path.exists(buffer_path))
         checkpoint_path = os.path.join(streams_dir, stream_id,
-                                       str(n_frames)+'_state.xml.gz.b64')
+                                       'state.xml.gz.b64')
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
         frames_path = os.path.join(streams_dir, stream_id,
                                    str(n_frames)+'_frames.xtc')
@@ -490,7 +490,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             self.assertEqual(response.code, 200)
         self.assertEqual(active_stream.hget('buffer_frames'), more_frames)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
-        total_frames = n_frames+more_frames
 
         # PUT another checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
@@ -503,10 +502,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         initial_state_path = os.path.join(streams_dir, stream_id,
                                           'state.xml.gz.b64')
         self.assertTrue(isfile(initial_state_path))
-        # make sure the old checkpoint is removed
-        self.assertFalse(isfile(checkpoint_path))
-        checkpoint_path = os.path.join(streams_dir, stream_id,
-                                       str(total_frames)+'_state.xml.gz.b64')
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
 
         # test idempotency of put checkpoint
@@ -518,8 +513,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         initial_state_path = os.path.join(streams_dir, stream_id,
                                           'state.xml.gz.b64')
         self.assertTrue(isfile(initial_state_path))
-        checkpoint_path = os.path.join(streams_dir, stream_id,
-                                       str(total_frames)+'_state.xml.gz.b64')
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
 
         # test idempotency of put frame
