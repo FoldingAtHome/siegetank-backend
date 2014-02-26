@@ -62,11 +62,12 @@ public:
     /* Returns true if the core should exit */
     bool exit() const;
 
-    /* return true if we should send checkpoint */
+    /* return true if we should send checkpoint, it is assumed that the user
+       will immediately checkpoint if True */
     bool shouldSendCheckpoint();
 
-    /* return true if we should send heartbeat 
-       TODO: When C++11 becomes more mainstream, offload to different thread */
+    /* return true if we should send heartbeat, it is assumed that the user
+       will immediately checkpoint if True */
     bool shouldHeartbeat();
 
     /* set the donor_token */
@@ -122,45 +123,5 @@ private:
     const std::string _engine_version;
 
 };
-
-/* Example implementation of main():
-
-void OpenMMCore::main() {
-    core.start_stream(&files);
-    int steps = 0;
-    integrator->step();
-    steps++;
-    while(true) {
-        if(exit()) {
-            send_checkpoint();
-            break;
-        }
-        if(user_checkpoint()) {
-            send_checkpoint();
-        }
-        if(steps % _checkpoint_send_interval == 0) {
-            send_checkpoint(); 
-        }
-        if(steps % _frame_write_interval == 0) {
-            // write frame
-        }
-        if(steps % _frame_send_interval == 0) {
-            send_frames();
-        }
-
-
-        
-    }
-    core.stopStream();
-}
-
-int main() {
-    OpenMMCore core(15,25);
-    while(true && !core.exit()) {
-        core.main();
-    }
-}
-
-*/
 
 #endif

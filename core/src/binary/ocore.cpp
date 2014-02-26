@@ -53,6 +53,15 @@ int main(int argc, const char * argv[]) {
     );
 
     opt.add(
+        "",
+        0,
+        0,
+        0,
+        "Display version and exit.",
+        "--version"
+    );
+
+    opt.add(
         "https://127.0.0.1:8980/core/assign", // Default.
         0, // Required?
         1, // Number of args expected.
@@ -79,6 +88,22 @@ int main(int argc, const char * argv[]) {
         "--nospoiler"
     );
 
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "Fully qualified 36 digit target_id",
+        "--target_id");
+
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "Donor access token",
+        "--donor_token");
+
     opt.parse(argc, argv);
 
     if(opt.isSet("-h")) {
@@ -88,9 +113,16 @@ int main(int argc, const char * argv[]) {
         return 1;
     }
 
+    if(opt.isSet("--version")) {
+        std::cout << CORE_VERSION << endl;
+        return 1;
+    }
+
     if(!opt.isSet("--nospoiler")) {
         write_spoiler(cout);
     }
+
+
 
     string cc_uri;
     opt.get("--cc")->getString(cc_uri);
@@ -98,7 +130,26 @@ int main(int argc, const char * argv[]) {
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
 
     try {
+
         OpenMMCore core(checkpoint_frequency);
+        if(opt.isSet("--donor_token")) {
+            string donor_token;
+            opt.get("--donor_token")->getString(donor_token);
+            if(donor_token.length() != 36) {
+                throw std::runtime_error("donor_token must be 36 characters");
+            }
+            core.donor_token = donor_token;
+        }
+
+        if(opt.isSet("--target_id")) {
+            string target_id;
+            opt.get("--target_id")->getString(target_id);
+            if(target_id.length() != 36) {
+                throw std::runtime_error("target_id must be 36 characters");
+            }
+            core.target_id = target_id;
+        }
+
         core.initialize(cc_uri);
         core.main();
     } catch(const exception &e) {
