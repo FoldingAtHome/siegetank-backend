@@ -14,19 +14,21 @@ public:
 
     virtual void main();
 
-    /* check the step and determine if we need to 1) write frame/send  frame, 
-    or 2) send a checkpoint */
-    void check_frame_write(int current_step);
-
+    /* initialize the core */
     void initialize(std::string uri);
 
+    /* check the step and determine if we need to 1) write frame/send  frame, 
+    or 2) send a checkpoint */
+    void checkFrameWrite(int current_step);
+
     /* get time per frame in seconds */
-    int tpf(long long steps_completed) const;
+    int timePerFrame(long long steps_completed) const;
 
     /* get nanoseconds per day of the current simulation */
-    float ns_per_day(long long steps_completed) const;
+    float nsPerDay(long long steps_completed) const;
 
-    void check_state(const OpenMM::State &core_state) const;
+    /* verify the openmm state */
+    void checkState(const OpenMM::State &core_state) const;
 
 private:
 

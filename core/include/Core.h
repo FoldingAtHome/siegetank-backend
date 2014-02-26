@@ -3,7 +3,6 @@
 
 #include <Poco/Net/HTTPSClientSession.h>
 #include <Poco/Net/HTTPResponse.h>
-#include <Poco/Util/Application.h>
 #include <Poco/URI.h>
 
 #include <string>
@@ -15,8 +14,7 @@ class Core {
 
 public:
 
-    // frame_send_interval is in number of frames written
-    // int checkpoint_send_interval is in number of times per day (user config)
+    // checkpoint_send_interval is in number of times per day (user config)
     Core(int checkpoint_send_interval,
          std::string engine,
          std::string engine_version);
@@ -29,17 +27,16 @@ public:
     /* Start the stream and fetch files. If the files end in .gz or .gz.b64
     then the suffixes and stripped, and the contents are processed for you. 
 
-
     The method initializes members _frame_write_interval, _stream_id, and 
     _target_id.
     */
-    void start_stream(const Poco::URI &cc_uri,
+    void startStream(const Poco::URI &cc_uri,
                       std::map<std::string, std::string> &target_files,
                       std::map<std::string, std::string> &stream_files);
 
     /* Send frame files to the WS. This method automatically base64 encodes
        the file */
-    void send_frame_files(const std::map<std::string, std::string> &files,
+    void sendFrameFiles(const std::map<std::string, std::string> &files,
                           int frame_count = 1, bool gzip=false) const;
 
     /* Send checkpoint files to the WS. This method automatically base64
@@ -53,35 +50,30 @@ public:
            else:
             'state.xml' -> 'state.xml.b64'
     */
-    void send_checkpoint_files(const std::map<std::string, std::string> &files,
+    void sendCheckpointFiles(const std::map<std::string, std::string> &files,
                                bool gzip=false) const;
 
     /* Disengage the core from the stream and destroys the session */
-    void stop_stream(std::string error_msg = "");
+    void stopStream(std::string error_msg = "");
 
     /* Send a heartbeat */
-    void send_heartbeat() const;
+    void sendHeartbeat() const;
 
     /* Returns true if the core should exit */
     bool exit() const;
 
-    int get_frame_send_interval() const;
+    /* return true if we should send checkpoint */
+    bool shouldSendCheckpoint();
 
-    int get_frame_write_interval() const;
+    /* return true if we should send heartbeat 
+       TODO: When C++11 becomes more mainstream, offload to different thread */
+    bool shouldHeartbeat();
 
-    int get_checkpoint_send_interval() const;
-
-    /* return true if we should automatically send checkpoint */
-    bool should_send_checkpoint();
-
-    /* return true if we should automatically send heartbeat */
-    bool should_heartbeat();
-
-    /* public members are "bad", but then again I'm now a pythonista */
-    std::string _donor_token;
+    /* set the donor_token */
+    std::string donor_token;
 
     /* target_id */
-    std::string _target_id;
+    std::string target_id;
 
 protected:
 
@@ -159,7 +151,7 @@ void OpenMMCore::main() {
 
         
     }
-    core.stop_stream();
+    core.stopStream();
 }
 
 int main() {

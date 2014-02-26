@@ -189,12 +189,12 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
         body += "{\"engine\": \""+_engine+"\",";
         body += "\"engine_version\": \""+_engine_version+"\",";
 
-        if(_donor_token.length() > 0) {
-            body += "\"donor_token\": \""+_donor_token+"\",";
+        if(donor_token.length() > 0) {
+            body += "\"donor_token\": \""+donor_token+"\",";
         }
 
-        if(_target_id.length() > 0) {
-            body += "\"target_id\": \""+_target_id+"\",";
+        if(target_id.length() > 0) {
+            body += "\"target_id\": \""+target_id+"\",";
         }
 
         stringstream core_version;
@@ -236,7 +236,7 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     }
 }
 
-void Core::start_stream(const Poco::URI &cc_uri,
+void Core::startStream(const Poco::URI &cc_uri,
                         map<string, string> &target_files,
                         map<string, string> &stream_files) {
     if(_session == NULL)
@@ -257,13 +257,13 @@ void Core::start_stream(const Poco::URI &cc_uri,
     Poco::Dynamic::Var result = parser.parse(content);
     Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();        
     _stream_id = object->get("stream_id").convert<std::string>();
-    string temp_target_id = object->get("target_id").convert<std::string>();
+    string temptarget_id = object->get("target_id").convert<std::string>();
 
-    // if user specified a _target_id then we attempt to fetch the specified id
-    if(_target_id.length() > 0 && temp_target_id != _target_id) {
+    // if user specified a target_id then we attempt to fetch the specified id
+    if(target_id.length() > 0 && temptarget_id != target_id) {
         throw std::runtime_error("FATAL: Specified target_id mismatch");
     }
-    _target_id = temp_target_id;
+    target_id = temptarget_id;
 
     // extract target files
     {
@@ -306,7 +306,7 @@ void Core::start_stream(const Poco::URI &cc_uri,
     }
 }
 
-void Core::send_frame_files(const map<string, string> &files, 
+void Core::sendFrameFiles(const map<string, string> &files, 
     int frame_count, bool gzip) const {
 
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
@@ -338,11 +338,11 @@ void Core::send_frame_files(const map<string, string> &files,
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::send_frame_files bad status code");
+        throw std::runtime_error("Core::sendFrameFiles bad status code");
     }
 }
 
-void Core::send_checkpoint_files(const map<string, string> &files, 
+void Core::sendCheckpointFiles(const map<string, string> &files, 
     bool gzip) const {
 
     Poco::Net::HTTPRequest request("PUT", "/core/checkpoint");
@@ -370,11 +370,11 @@ void Core::send_checkpoint_files(const map<string, string> &files,
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::send_checkpoint_files bad status code");
+        throw std::runtime_error("Core::sendCheckpointFiles bad status code");
     }
 }
 
-void Core::stop_stream(string err_msg) {
+void Core::stopStream(string err_msg) {
     Poco::Net::HTTPRequest request("PUT", "/core/stop");
     string message;
     message += "{";
@@ -387,13 +387,13 @@ void Core::stop_stream(string err_msg) {
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::stop_stream bad status code");
+        throw std::runtime_error("Core::stopStream bad status code");
     }
     delete _session;
     _session = NULL;
 }
 
-void Core::send_heartbeat() const {
+void Core::sendHeartbeat() const {
     Poco::Net::HTTPRequest request("POST", "/core/heartbeat");
     string message("{}");
     request.set("Authorization", _auth_token);
@@ -402,7 +402,7 @@ void Core::send_heartbeat() const {
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::send_heartbeat bad status code");
+        throw std::runtime_error("Core::sendHeartbeat bad status code");
     }
 }
 
@@ -410,19 +410,7 @@ void Core::main() {
 
 }
 
-int Core::get_frame_send_interval() const {
-    return _frame_send_interval;
-}
-
-int Core::get_frame_write_interval() const {
-    return _frame_write_interval;
-}
-
-int Core::get_checkpoint_send_interval() const {
-    return _checkpoint_send_interval;
-}
-
-bool Core::should_send_checkpoint() {
+bool Core::shouldSendCheckpoint() {
     time_t current_time = time(NULL);
     if(current_time > _next_checkpoint_time) {
         _next_checkpoint_time = current_time + _checkpoint_send_interval;
@@ -432,7 +420,7 @@ bool Core::should_send_checkpoint() {
     }
 }
 
-bool Core::should_heartbeat() {
+bool Core::shouldHeartbeat() {
     time_t current_time = time(NULL);
     if(current_time > _next_heartbeat_time) {
         _next_heartbeat_time = current_time + _heartbeat_interval;

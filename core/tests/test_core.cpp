@@ -57,18 +57,18 @@ void test_should_send_checkpoint() {
     int checkpoint_increment = 6;
     Core core(checkpoint_increment, "openmm", "6.0");
     time_t current_time = time(0);
-    if(core.should_send_checkpoint()) {
+    if(core.shouldSendCheckpoint()) {
         throw std::runtime_error("1. should_checkpoint() returned true");
     }
     sleep(checkpoint_increment+2);
-    if(!core.should_send_checkpoint()) {
+    if(!core.shouldSendCheckpoint()) {
         throw std::runtime_error("2. should_checkpoint() returned false");
     }
-    if(core.should_send_checkpoint()) {
+    if(core.shouldSendCheckpoint()) {
         throw std::runtime_error("3. should_checkpoint() returned true");
     }
     sleep(checkpoint_increment+2);
-    if(!core.should_send_checkpoint()) {
+    if(!core.shouldSendCheckpoint()) {
         throw std::runtime_error("2. should_checkpoint() returned false");
     }
 }
@@ -79,10 +79,10 @@ void test_set_target_id() {
     targets_file >> custom_target_id;
     Core core(150, "openmm", "6.0");
     Poco::URI uri("https://127.0.0.1:8980/core/assign");
-    core._target_id = custom_target_id;
+    core.target_id = custom_target_id;
     map<string, string> target_files;
     map<string, string> stream_files;
-    core.start_stream(uri, target_files, stream_files);
+    core.startStream(uri, target_files, stream_files);
 }
 
 void test_donor_token() {
@@ -114,12 +114,12 @@ void test_donor_token() {
     string token;
     token = object->get("token").convert<std::string>();
 
-    core._donor_token = token;
+    core.donor_token = token;
     map<string, string> target_files;
     map<string, string> stream_files;
 
     Poco::URI uri2("https://127.0.0.1:8980/core/assign");
-    core.start_stream(uri2, target_files, stream_files);
+    core.startStream(uri2, target_files, stream_files);
 }
 
 void test_initialize_and_start() { 
@@ -128,7 +128,7 @@ void test_initialize_and_start() {
 
     map<string, string> target_files;
     map<string, string> stream_files;
-    core.start_stream(uri, target_files, stream_files);
+    core.startStream(uri, target_files, stream_files);
 
     if(target_files.find("system.xml") == target_files.end())
         throw std::runtime_error("system.xml not in target_files!");
@@ -149,10 +149,10 @@ void test_initialize_and_start() {
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.send_frame_files(frame_files, 1);
+        core.sendFrameFiles(frame_files, 1);
     }
 
-    core.send_heartbeat();
+    core.sendHeartbeat();
 
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
@@ -162,15 +162,15 @@ void test_initialize_and_start() {
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.send_frame_files(frame_files, 1, true);
+        core.sendFrameFiles(frame_files, 1, true);
     }
 
-    core.send_heartbeat();
+    core.sendHeartbeat();
 
     string c_filename("state.xml");
     map<string, string> checkpoint_files;
     checkpoint_files[c_filename] = test_state;
-    core.send_checkpoint_files(checkpoint_files, true);
+    core.sendCheckpointFiles(checkpoint_files, true);
 
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
@@ -181,14 +181,14 @@ void test_initialize_and_start() {
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
         int count = (rand()%100)+1;
-        core.send_frame_files(frame_files, count);
+        core.sendFrameFiles(frame_files, count);
     }
 
-    core.send_heartbeat();
+    core.sendHeartbeat();
 
-    core.send_checkpoint_files(checkpoint_files, true);
+    core.sendCheckpointFiles(checkpoint_files, true);
 
-    core.stop_stream();
+    core.stopStream();
 
 }
 

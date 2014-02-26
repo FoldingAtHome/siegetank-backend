@@ -164,7 +164,7 @@ void OpenMMCore::initialize(string cc_uri) {
     map<string, string> target_files;
     map<string, string> stream_files;
 
-    start_stream(uri, target_files, stream_files);
+    startStream(uri, target_files, stream_files);
     // eg. _frame_send_interval = 50000 for OpenMM simulations
     _frame_send_interval = _frame_write_interval;
         
@@ -223,13 +223,13 @@ void OpenMMCore::_send_saved_checkpoint() {
     }
     map<string, string> checkpoint_files;
     checkpoint_files["state.xml"] = _checkpoint_xml;
-    send_checkpoint_files(checkpoint_files, true);
+    sendCheckpointFiles(checkpoint_files, true);
     // flush
     _checkpoint_xml.clear();
 }
 
 
-void OpenMMCore::check_state(const OpenMM::State &core_state) const {
+void OpenMMCore::checkState(const OpenMM::State &core_state) const {
 
     _ref_context->setState(core_state);
     OpenMM::State reference_state = _ref_context->getState(
@@ -242,7 +242,8 @@ void OpenMMCore::check_state(const OpenMM::State &core_state) const {
 
 }
 
-void OpenMMCore::check_frame_write(int current_step) {
+void OpenMMCore::checkFrameWrite(int current_step) {
+    // nothing is written on the first step;
     if(current_step > 0 && current_step % _frame_write_interval == 0) {
         OpenMM::State state = _core_context->getState(
             OpenMM::State::Positions | 
@@ -252,7 +253,7 @@ void OpenMMCore::check_frame_write(int current_step) {
             OpenMM::State::Forces);
 
         // todo: check against reference context.
-        check_state(state);
+        checkState(state);
 
         state.getTime();
         OpenMM::Vec3 a,b,c;
@@ -275,7 +276,7 @@ void OpenMMCore::check_frame_write(int current_step) {
         xtcwriter.append(current_step, state.getTime(), box, positions);
         map<string, string> frame_files;
         frame_files["frames.xtc"] = frame_stream.str();
-        send_frame_files(frame_files);
+        sendFrameFiles(frame_files);
         // write checkpoint
         ostringstream checkpoint;
         OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
@@ -283,14 +284,14 @@ void OpenMMCore::check_frame_write(int current_step) {
     }
 }
 
-int OpenMMCore::tpf(long long steps_completed) const {
+int OpenMMCore::timePerFrame(long long steps_completed) const {
     int time_diff = time(NULL)-_start_time;
     if(steps_completed == 0)
         return 0;
     return int(double(_frame_write_interval)*(time_diff)/steps_completed);
 }
 
-float OpenMMCore::ns_per_day(long long steps_completed) const {
+float OpenMMCore::nsPerDay(long long steps_completed) const {
     int time_diff = time(NULL)-_start_time;
     if(time_diff == 0)
         return 0;
@@ -301,14 +302,12 @@ float OpenMMCore::ns_per_day(long long steps_completed) const {
 
 void OpenMMCore::main() {
     try {
-        // nothing is written on the first step;
-        long long current_step = 1;
-        _core_context->getIntegrator().step(1);
+        long long current_step = 0;
         changemode(1);
         status_header(cout);
         while(true) {
             if(current_step % 10 == 0) {
-                update_status(_target_id, _stream_id, tpf(current_step), ns_per_day(current_step),
+                update_status(target_id, _stream_id, timePerFrame(current_step), nsPerDay(current_step),
                               current_step/_frame_write_interval, current_step);
             }
             if(exit()) {
@@ -323,19 +322,19 @@ void OpenMMCore::main() {
                     _send_saved_checkpoint();
                 }
             }
-            check_frame_write(current_step);
-            if(should_heartbeat()) {
-                send_heartbeat();
+            checkFrameWrite(current_step);
+            if(shouldHeartbeat()) {
+                sendHeartbeat();
             }
-            if(should_send_checkpoint()) {
+            if(shouldSendCheckpoint()) {
                _send_saved_checkpoint();
             }
             _core_context->getIntegrator().step(1);
             current_step++;
         }
-        stop_stream();
+        stopStream();
     } catch(exception &e) {
-        stop_stream(e.what());
+        stopStream(e.what());
         cout << e.what() << endl;
     }
 
