@@ -722,11 +722,10 @@ class CoreStopHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         if 'error' in content:
             stream.hincrby('error_count', 1)
-            message = base64.b64decode(content['error'])
+            message = base64.b64decode(content['error']).decode()
             log_path = os.path.join(self.application.streams_folder,
                                     stream_id, 'log.txt')
-            # decodes to binary mode
-            with open(log_path, 'ab') as handle:
+            with open(log_path, 'a') as handle:
                 handle.write(time.strftime("%c")+' | '+message)
 
         self.set_status(200)
