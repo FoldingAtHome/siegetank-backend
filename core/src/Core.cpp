@@ -379,7 +379,7 @@ void Core::stopStream(string err_msg) {
     string message;
     message += "{";
     if(err_msg.length() > 0) {
-        cout << "stopping stream with error: " << endl;
+        cout << "stopping stream with error: " << err_msg << endl;
         string b64_error(encode_b64(err_msg));
         message += "\"error\": \"" + b64_error + "\"";
     }
