@@ -725,7 +725,8 @@ class CoreStopHandler(BaseHandler):
             message = base64.b64decode(content['error'])
             log_path = os.path.join(self.application.streams_folder,
                                     stream_id, 'log.txt')
-            with open(log_path, 'a') as handle:
+            # decodes to binary mode
+            with open(log_path, 'ab') as handle:
                 handle.write(time.strftime("%c")+' | '+message)
 
         self.set_status(200)
