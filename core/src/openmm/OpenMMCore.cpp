@@ -24,6 +24,7 @@ using namespace std;
 extern "C" void registerSerializationProxies();
 extern "C" void registerCpuPlatform();
 extern "C" void registerOpenCLPlatform();
+extern "C" void registerCudaPlatform();
 #ifdef USE_PME_PLUGIN
     extern "C" void registerCpuPmeKernelFactories();
 #endif

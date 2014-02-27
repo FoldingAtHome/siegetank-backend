@@ -2,6 +2,7 @@ link_directories(${Core_BINARY_DIR})
 
 # test using the CPU platform
 add_definitions(-DOPENMM_CPU)
+set(openmm_libraries OpenMMCPU_static ${openmm_libraries})
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${Core_BINARY_DIR})
 set(test_progs "test_core.cpp")

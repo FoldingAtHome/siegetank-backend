@@ -129,6 +129,9 @@ relate(Target, 'active_streams', {ActiveStream})
 
 
 class BaseHandler(tornado.web.RequestHandler):
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+
     @property
     def db(self):
         return self.application.db
@@ -702,11 +705,13 @@ class CoreStopHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "error": "error message",  // optional
+                    "error": "error message b64",  // optional
                     "debug_files": {"file1_name": "file1_bin_b64",
                                     "file2_name": "file2_bin_b64"
                                     } // optional
                 }
+
+            .. note:: ``error`` is b64 encoded
 
             :status 200: OK
             :status 400: Bad request
@@ -717,7 +722,7 @@ class CoreStopHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         if 'error' in content:
             stream.hincrby('error_count', 1)
-            message = content['error']
+            message = base64.b64decode(content['error'])
             log_path = os.path.join(self.application.streams_folder,
                                     stream_id, 'log.txt')
             with open(log_path, 'a') as handle:
@@ -760,9 +765,11 @@ class ActiveStreamsHandler(BaseHandler):
                 donor = active_stream.hget('donor')
                 start_time = active_stream.hget('start_time')
                 total_frames = active_stream.hget('total_frames')
+                buffer_frames = active_stream.hget('buffer_frames')
                 reply[target][stream_id]['donor'] = donor
                 reply[target][stream_id]['start_time'] = start_time
                 reply[target][stream_id]['total_frames'] = total_frames
+                reply[target][stream_id]['buffer_frames'] = buffer_frames
         self.write(json.dumps(reply))
 
 

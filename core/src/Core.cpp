@@ -378,8 +378,11 @@ void Core::stopStream(string err_msg) {
     Poco::Net::HTTPRequest request("PUT", "/core/stop");
     string message;
     message += "{";
-    if(err_msg.length() > 0)
-        message += "\"error\": \"" + err_msg + "\"";
+    if(err_msg.length() > 0) {
+        cout << "stopping stream with error: " << endl;
+        string b64_error(encode_b64(err_msg));
+        message += "\"error\": \"" + b64_error + "\"";
+    }
     message += "}";
     request.set("Authorization", _auth_token);
     request.setContentLength(message.length());
