@@ -129,6 +129,9 @@ relate(Target, 'active_streams', {ActiveStream})
 
 
 class BaseHandler(tornado.web.RequestHandler):
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+
     @property
     def db(self):
         return self.application.db
