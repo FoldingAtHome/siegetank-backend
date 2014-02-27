@@ -557,7 +557,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(ws.ActiveStream.exists(stream_id, self.ws.db))
         self.assertTrue(target.zscore('queue', stream_id) is None)
 
-        body = {'error': base64.b64encode('NaN'.encode())}
+        body = {'error': base64.b64encode(b'NaN').decode()}
         response = self.fetch('/core/stop', headers=headers, method='PUT',
                               body=json.dumps(body))
         self.assertEqual(response.code, 200)
