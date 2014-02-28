@@ -4,15 +4,30 @@ import simtk.openmm
 
 
 class Stream():
+    def __init__(self, id, ws):
+        self._id = id
+        self._ws = ws
+
+    def reload(self):
+        pass
+
     @property
     def frames(self):
         pass
 
+    @property
+    def status(self):
+        return self._status
+
+    @property
+    def ws(self):
+        return self._ws
+
 
 class Target():
     # create a new target on the backend
-    def __init__(self, id, cc_uri):
-        self.cc_uri = cc_uri
+    def __init__(self, id, cc):
+        self.cc_uri = 'https://'+cc+':443'
         self._id = id
         self._description = None
         self._steps_per_frame = None
@@ -27,7 +42,7 @@ class Target():
     def reload(self):
         reply = requests.get(uri+'/targets/info/'+self.id)
         if(reply.status_code != 200):
-            raise Exception("Failed to fill target internals")
+            raise Exception("Failed to load data about stream")
 
     @property
     def id(self):
@@ -79,7 +94,6 @@ class Target():
     def load_from_id(id):
         pass
 
-def WorkServer():
 
 
 import siegetank
@@ -89,7 +103,8 @@ siegetank.login(auth_token)
 # these methods return a target
 target = siegetank.openmm.add_target(system, integrator)
 target = siegetank.openmm.load_target(target_id)
-# add a stream
+# add a stream, canaries to makes sure that the state is compatible with the
+# pre-existing target files?
 target.add_stream(state)
 # load streams
 foo = target.streams
