@@ -11,7 +11,7 @@ import server.cc as cc
 import server.common as common
 
 
-class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
+class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
         self.increment = 3
@@ -24,7 +24,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                                    redis_options=redis_options,
                                    mongo_options=mongo_options,
                                    targets_folder='cc_targets')
-        super(TestCCBasics, self).setUpClass()
+        super(TestCommandCenter, self).setUpClass()
 
     @classmethod
     def tearDownClass(self):
@@ -34,11 +34,12 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         for folder in folders:
             if os.path.exists(folder):
                 shutil.rmtree(folder)
-        super(TestCCBasics, self).tearDownClass()
+        super(TestCommandCenter, self).tearDownClass()
 
     def tearDown(self):
-        self.cc.mdb.managers.drop()
-        self.cc.mdb.donors.drop()
+        self.cc.mdb.drop_database('users')
+        self.cc.mdb.drop_database('community')
+        self.cc.mdb.drop_database('targets')
 
     def test_add_donor(self):
         username = 'jesse_v'
@@ -51,7 +52,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         }
         rep = self.fetch('/donors', method='POST', body=json.dumps(body))
         self.assertEqual(rep.code, 200)
-        query = self.cc.mdb.donors.find_one({'_id': username})
+        query = self.cc.mdb.community.donors.find_one({'_id': username})
         stored_hash = query['password_hash']
         stored_token = query['token']
         self.assertEqual(stored_hash,
@@ -69,7 +70,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                              body=json.dumps(body))
             self.assertEqual(rep.code, 200)
             reply_token = json.loads(rep.body.decode())['token']
-            query = self.cc.mdb.donors.find_one({'_id': username})
+            query = self.cc.mdb.community.donors.find_one({'_id': username})
             stored_token = query['token']
             self.assertEqual(reply_token, stored_token)
 
@@ -101,7 +102,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         }
         rep = self.fetch('/managers', method='POST', body=json.dumps(body))
         self.assertEqual(rep.code, 200)
-        query = self.cc.mdb.managers.find_one({'_id': email})
+        query = self.cc.mdb.users.managers.find_one({'_id': email})
         stored_hash = query['password_hash']
         stored_token = query['token']
         stored_role = query['role']
@@ -121,7 +122,7 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
                              body=json.dumps(body))
             self.assertEqual(rep.code, 200)
             reply_token = json.loads(rep.body.decode())['token']
-            query = self.cc.mdb.managers.find_one({'_id': email})
+            query = self.cc.mdb.users.managers.find_one({'_id': email})
             stored_token = query['token']
             self.assertEqual(reply_token, stored_token)
 
@@ -236,9 +237,10 @@ class TestCCBasics(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(target.smembers('files'), {'system.xml.gz.b64',
                                                     'integrator.xml.gz.b64'})
 
-        query = self.cc.mdb.managers.find_one({'_id': email},
-                                              fields=['targets'])
-        self.assertEqual(query['targets'], {'test_cc': [target_id]})
+        query = self.cc.mdb.data.targets.find_one({'_id': target_id},
+                                                  fields=['owner'])
+        self.assertEqual(query['_id'], target_id)
+        self.assertEqual(query['owner'], email)
 
         body = {
             'description': description,

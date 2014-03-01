@@ -10,6 +10,7 @@ import json
 import time
 import base64
 import random
+import pymongo
 from os.path import isfile
 
 
@@ -25,13 +26,40 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             'port': 3828,
             'logfile': os.devnull
         }
+        mongo_options = {
+            'host': 'localhost',
+            'port': 27017
+        }
+
         self.ws = ws.WorkServer(ws_name='test_server',
+                                mongo_options=mongo_options,
                                 external_options=external_options,
                                 redis_options=redis_options)
+
+        # add a manager for testing purposes
+        token = str(uuid.uuid4())
+        test_manager = "test_ws@gmail.com"
+        db_body = {'_id': test_manager,
+                   'token': token,
+                   'role': 'manager'
+                   }
+
+        managers = self.ws.mdb.users.managers
+
+        try:
+            managers.insert(db_body)
+        except pymongo.errors.DuplicateKeyError:
+            pass
+
+        self.auth_token = token
+        self.test_manager = test_manager
 
     @classmethod
     def tearDownClass(self):
         self.ws.shutdown_redis()
+        self.ws.mdb.drop_database('users')
+        self.ws.mdb.drop_database('community')
+        self.ws.mdb.drop_database('data')
         folders = [self.ws.targets_folder, self.ws.streams_folder]
         for folder in folders:
             if os.path.exists(folder):
@@ -44,6 +72,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     def tearDown(self):
         super(TestStreamMethods, self).tearDown()
         self.ws.db.flushdb()
+        self.ws.mdb.data.targets.drop()
 
     def test_post_stream(self):
         target_id = str(uuid.uuid4())
@@ -242,14 +271,24 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
     def _post_and_activate_stream(self):
         target_id = str(uuid.uuid4())
+
+        targets = self.ws.mdb.data.targets
+        body = {
+            '_id': target_id,
+            'owner': self.test_manager,
+        }
+        targets.insert(body)
+
         fn1 = 'system.xml.gz.b64'
         fn2 = 'integrator.xml.gz.b64'
         fn3 = 'state.xml.gz.b64'
         fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+
         body = {'target_id': target_id,
                 'target_files': {fn1: fb1, fn2: fb2},
                 'stream_files': {fn3: fb3}
                 }
+
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         stream_id, token = self._activate_stream(target_id)
@@ -341,7 +380,10 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
         # download the frames
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc')
+        manager_headers = {'Authorization': self.auth_token}
+        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+                              headers=manager_headers)
+        print(response.body)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
 
@@ -363,7 +405,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         buffer_path = os.path.join(streams_dir, stream_id, 'buffer_frames.xtc')
 
         # download the frames
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc')
+        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+                              headers=manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, old_buffer)
 
@@ -375,7 +418,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
         # download the frames
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc')
+        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+                              headers=manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
 
@@ -424,7 +468,9 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(os.path.exists(buffer_path))
 
         # test downloading the frames again
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc')
+        manager_headers = {'Authorization': self.auth_token}
+        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+                              headers = manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
 

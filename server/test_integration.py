@@ -54,8 +54,8 @@ class Test(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(Test, self).setUp()
-        self.cc.mdb.managers.drop()
-        self.cc.mdb.donors.drop()
+        self.cc.mdb.users.managers.drop()
+        self.cc.mdb.community.donors.drop()
         self.cc.add_ws('mengsk', '127.0.0.1', self.ws_hport)
         self.cc_httpserver = tornado.httpserver.HTTPServer(
             self.cc,
@@ -479,8 +479,8 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(TestMultiWS, self).setUp()
-        self.cc.mdb.managers.drop()
-        self.cc.mdb.donors.drop()
+        self.cc.mdb.users.managers.drop()
+        self.cc.mdb.community.donors.drop()
         for k, v in self.workservers.items():
             self.cc.add_ws(k, '127.0.0.1', v['hport'])
             v['httpserver'] = tornado.httpserver.HTTPServer(
@@ -522,7 +522,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         for k, v in self.workservers.items():
             v['httpserver'].stop()
         self.cc_httpserver.stop()
-        self.cc.mdb.managers.drop()
+        self.cc.mdb.users.managers.drop()
         pass
 
     def test_workserver_status(self):

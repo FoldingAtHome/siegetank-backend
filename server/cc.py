@@ -33,6 +33,7 @@ import io
 import socket
 
 from server.common import BaseServerMixin, is_domain, configure_options
+from server.common import authenticate_manager
 from server.apollo import Entity, relate
 
 # The Command Center manages several work servers in addition to managing the
@@ -96,27 +97,6 @@ Target.add_lookup('engine_versions', injective=False)
 relate(Target, 'striated_ws', {WorkServer})
 
 
-def authenticate_manager(method):
-    """ Decorator for handlers that require manager authentication. Based off
-    of tornado's authenticated method.
-
-    """
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        try:
-            self.request.headers['Authorization']
-        except:
-            self.write(json.dumps({'error': 'missing Authorization header'}))
-            return self.set_status(401)
-
-        if self.get_current_user():
-            return method(self, *args, **kwargs)
-        else:
-            return self.set_status(401)
-
-    return wrapper
-
-
 class BaseHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
         self.set_header("Access-Control-Allow-Origin", "*")
@@ -128,18 +108,23 @@ class BaseHandler(tornado.web.RequestHandler):
     def db(self):
         return self.application.db
 
+    @property
+    def mdb(self):
+        return self.application.mdb
+
     def get_current_user(self):
         try:
             header_token = self.request.headers['Authorization']
-            mdb = self.application.mdb
+            mdb = self.mdb.users
             query = mdb.managers.find_one({'token': header_token},
                                           fields=['_id'])
             return query['_id']
         except:
             return None
 
+    # TODO: refactor to common
     def get_user_role(self, email):
-        mdb = self.application.mdb
+        mdb = self.mdb.users
         query = mdb.managers.find_one({'_id': email}, fields={'role'})
         try:
             return query['role']
@@ -147,11 +132,11 @@ class BaseHandler(tornado.web.RequestHandler):
             return None
 
 
-class AuthDonorHandler(tornado.web.RequestHandler):
+class AuthDonorHandler(BaseHandler):
     def post(self):
         """ Generate a new authorization token for the donor
 
-        .. http:post:: /auth
+        .. http:post:: /managers/auth
 
             Generate a new authorization token for the donor
 
@@ -180,21 +165,21 @@ class AuthDonorHandler(tornado.web.RequestHandler):
         content = json.loads(self.request.body.decode())
         username = content['username']
         password = content['password']
-        mdb = self.application.mdb
-        query = mdb.donors.find_one({'_id': username},
-                                    fields=['password_hash'])
+        donors = self.mdb.community.donors
+        query = donors.find_one({'_id': username},
+                                fields=['password_hash'])
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
-            mdb.donors.update({'_id': username},
-                              {'$set': {'token': new_token}})
+            donors.update({'_id': username},
+                          {'$set': {'token': new_token}})
         else:
             return self.status(401)
         self.set_status(200)
         self.write(json.dumps({'token': new_token}))
 
 
-class AddDonorHandler(tornado.web.RequestHandler):
+class AddDonorHandler(BaseHandler):
     def post(self):
         """ Add a F@H Donor
 
@@ -220,7 +205,7 @@ class AddDonorHandler(tornado.web.RequestHandler):
         username = content['username']
         password = content['password']
         email = content['email']
-        donors = self.application.mdb.donors
+        donors = self.mdb.community.donors
         # see if email exists:
         query = donors.find_one({'email': email})
         if query:
@@ -241,7 +226,7 @@ class AddDonorHandler(tornado.web.RequestHandler):
         self.write(json.dumps({'token': token}))
 
 
-class AuthManagerHandler(tornado.web.RequestHandler):
+class AuthManagerHandler(BaseHandler):
     def post(self):
         """
         .. http:post:: /auth
@@ -273,13 +258,13 @@ class AuthManagerHandler(tornado.web.RequestHandler):
         content = json.loads(self.request.body.decode())
         password = content['password']
         email = content['email']
-        mdb = self.application.mdb
-        query = mdb.managers.find_one({'_id': email},
-                                      fields=['password_hash'])
+        managers = self.mdb.users.managers
+        query = managers.find_one({'_id': email},
+                                  fields=['password_hash'])
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
-            mdb.managers.update({'_id': email}, {'$set': {'token': new_token}})
+            managers.update({'_id': email}, {'$set': {'token': new_token}})
         else:
             return self.status(401)
         self.set_status(200)
@@ -342,7 +327,7 @@ class AddManagerHandler(BaseHandler):
                    'role': role
                    }
 
-        managers = self.application.mdb.managers
+        managers = self.mdb.users.managers
         try:
             managers.insert(db_body)
         except pymongo.errors.DuplicateKeyError:
@@ -438,9 +423,9 @@ class AssignHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         if 'donor_token' in content:
             donor_token = content['donor_token']
-            mdb = self.application.mdb
-            query = mdb.donors.find_one({'token': donor_token},
-                                        fields=['_id'])
+            donors = self.mdb.community.donors
+            query = donors.find_one({'token': donor_token},
+                                    fields=['_id'])
             if not query:
                 return self.write(json.dumps({'error': 'bad donor token'}))
             donor_id = query['_id']
@@ -969,15 +954,6 @@ class TargetsHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         files = content['files']
 
-        if content['engine'] == 'openmm':
-            if content['engine_versions'] != ['6.0']:
-                return self.write(json.dumps({'error': 'version must be 6.0'}))
-        elif content['engine'] == 'terachem':
-            if content['engine_versions'] != ['1.0']:
-                return self.write(json.dumps({'error': 'version msut be 1.0'}))
-        else:
-            return self.write(json.dumps({'error': 'unsupported engine'}))
-
         #----------------#
         # verify request #
         #----------------#
@@ -1037,11 +1013,16 @@ class TargetsHandler(BaseHandler):
             with open(file_path, 'wb') as handle:
                 handle.write(filebin.encode())
 
-        mdb = self.application.mdb
+        targets = self.mdb.data.targets
         cc_id = self.application.name
-        mdb.managers.update({'_id': self.get_current_user()},
-                            {'$push': {'targets.'+cc_id: target_id}})
 
+        body = {
+            '_id': target_id,
+            'owner': self.get_current_user(),
+            'cc': cc_id,
+        }
+
+        targets.insert(body)
         self.set_status(200)
         response = {'target_id': target_id}
 
@@ -1052,6 +1033,51 @@ class TargetsHandler(BaseHandler):
 
     #     # delete the project
     #     return
+
+
+class DownloadHandler(BaseHandler):
+    @authenticate_manager
+    @tornado.gen.coroutine
+    def get(self, target_id, filename):
+        """
+        .. http:get:: /targets/:target_id/:filename
+
+            Download file ``filename`` from ``target_id``.
+
+            :resheader Content-Type: application/octet-stream
+            :resheader Content-Disposition: attachment; filename=frames.xtc
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        self.set_status(400)
+        # prevent files from leaking outside of the dir
+        targets_folder = self.application.targets_folder
+        target_dir = os.path.join(targets_folder, target_id)
+        file_dir = os.path.dirname(os.path.abspath(filename))
+        if(file_dir != os.path.abspath(target_dir)):
+            return
+
+        try:
+            Target(target_id, self.db)
+            filepath = os.path.join(target_dir, filename)
+            buf_size = 4096
+            self.set_header('Content-Type', 'application/octet-stream')
+            self.set_header('Content-Disposition',
+                            'attachment; filename='+filename)
+            self.set_status(200)
+            with open(filepath, 'rb') as f:
+                while True:
+                    data = f.read(buf_size)
+                    if not data:
+                        break
+                    self.write(data)
+                    yield tornado.gen.Task(self.flush)
+            self.finish()
+            return
+        except Exception as e:
+            return self.write(json.dumps({'error': str(e)}))
 
 
 class CommandCenter(BaseServerMixin, tornado.web.Application):

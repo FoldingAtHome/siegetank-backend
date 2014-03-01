@@ -173,33 +173,36 @@ void OpenMMCore::initialize(string cc_uri) {
     OpenMM::State *initial_state;
     OpenMM::Integrator *ref_intg;
     OpenMM::Integrator *core_intg;
-    if(target_files.find("system.xml") != target_files.end()) {
-        istringstream system_stream(target_files["system.xml"]);
-        shared_system = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
-    } else if(stream_files.find("system.xml") != stream_files.end()) {
+
+    if(stream_files.find("system.xml") != stream_files.end()) {
         istringstream system_stream(stream_files["system.xml"]);
+        shared_system = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
+    } else if(target_files.find("system.xml") != target_files.end()) {
+        istringstream system_stream(target_files["system.xml"]);
         shared_system = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
     } else {
         throw std::runtime_error("Cannot find system.xml");
     }
-    if(target_files.find("state.xml") != target_files.end()) {
-        istringstream state_stream(target_files["state.xml"]);
-        initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
-    } else if(stream_files.find("state.xml") != stream_files.end()) {
+
+    if(stream_files.find("state.xml") != stream_files.end()) {
         istringstream state_stream(stream_files["state.xml"]);
+        initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
+    } else if(target_files.find("state.xml") != target_files.end()) {
+        istringstream state_stream(target_files["state.xml"]);
         initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
     } else {
         throw std::runtime_error("Cannot find state.xml");
     }
-    if(target_files.find("integrator.xml") != target_files.end()) {
-        istringstream core_integrator_stream(target_files["integrator.xml"]);
-        core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
-        istringstream ref_integrator_stream(target_files["integrator.xml"]);
-        ref_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(ref_integrator_stream);
-    } else if(stream_files.find("integrator.xml") != stream_files.end()) {
+
+    if(stream_files.find("integrator.xml") != stream_files.end()) {
         istringstream core_integrator_stream(stream_files["integrator.xml"]);
         core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
         istringstream ref_integrator_stream(stream_files["integrator.xml"]);
+        ref_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(ref_integrator_stream);
+    } else if(target_files.find("integrator.xml") != target_files.end()) {
+        istringstream core_integrator_stream(target_files["integrator.xml"]);
+        core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
+        istringstream ref_integrator_stream(target_files["integrator.xml"]);
         ref_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(ref_integrator_stream);
     } else {
         throw std::runtime_error("Cannot find integrator.xml");

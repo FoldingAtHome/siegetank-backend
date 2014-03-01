@@ -8,6 +8,8 @@ import os
 import pymongo
 import signal
 import tornado.options
+import functools
+import json
 
 
 def sum_time(time):
@@ -23,6 +25,26 @@ def is_domain(url):
         return False
     except Exception:
         return True
+
+
+def authenticate_manager(method):
+    """ Decorator for handlers that require manager authentication. Based off
+    of tornado's authenticated method.
+
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            self.request.headers['Authorization']
+        except:
+            self.write(json.dumps({'error': 'missing Authorization header'}))
+            return self.set_status(401)
+        if self.get_current_user():
+            return method(self, *args, **kwargs)
+        else:
+            return self.set_status(401)
+
+    return wrapper
 
 
 def init_redis(redis_options):
@@ -92,10 +114,10 @@ class BaseServerMixin():
         self.db = init_redis(redis_options)
 
         if mongo_options:
-            mdb_host = mongo_options['host']
-            mdb_port = mongo_options['port']
-            self.mdb = pymongo.MongoClient(host=mdb_host, port=mdb_port).users
-            self.mdb.donors.ensure_index("token")
+            host = mongo_options['host']
+            port = mongo_options['port']
+            self.mdb = pymongo.MongoClient(host=host, port=port)
+            self.mdb.community.donors.ensure_index("token")
 
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)

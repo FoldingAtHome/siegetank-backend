@@ -20,6 +20,7 @@ import json
 import time
 import shutil
 import hashlib
+import sys
 
 import base64
 import gzip
@@ -36,6 +37,7 @@ import tornado.process
 import tornado.gen
 
 from server.common import BaseServerMixin, is_domain, configure_options
+from server.common import authenticate_manager
 from server.apollo import Entity, zset, relate
 
 # Capacity
@@ -137,8 +139,22 @@ class BaseHandler(tornado.web.RequestHandler):
         return self.application.db
 
     @property
+    def mdb(self):
+        return self.application.mdb
+
+    @property
     def deactivate_stream(self):
         return self.application.deactivate_stream
+
+    def get_current_user(self):
+        header_token = self.request.headers['Authorization']
+        managers = self.mdb.users.managers
+        query = managers.find_one({'token': header_token},
+                                  fields=['_id'])
+        if query:
+            return query['_id']
+        else:
+            return None
 
 
 def authenticate_core(method):
@@ -774,6 +790,7 @@ class ActiveStreamsHandler(BaseHandler):
 
 
 class DownloadHandler(BaseHandler):
+    @authenticate_manager
     @tornado.gen.coroutine
     def get(self, stream_id, filename):
         """
@@ -791,10 +808,24 @@ class DownloadHandler(BaseHandler):
 
         """
         self.set_status(400)
-        stream = Stream(stream_id, self.db)
-        if stream:
-            streams_folder = self.application.streams_folder
-            stream_dir = os.path.join(streams_folder, stream_id)
+        # prevent files from leaking outside of the dir
+        streams_folder = self.application.streams_folder
+        stream_dir = os.path.join(streams_folder, stream_id)
+        file_dir = os.path.dirname(os.path.abspath(os.path.join(
+                                                   stream_dir, filename)))
+        if(file_dir != os.path.abspath(stream_dir)):
+            return
+
+        try:
+            stream = Stream(stream_id, self.db)
+            target_id = stream.hget('target')
+
+            query = self.mdb.data.targets.find_one({'_id': target_id},
+                                                   fields=['owner'])
+            # query should never be none
+            if query['owner'] != self.get_current_user():
+                return
+
             if stream.hget('frames') > 0:
                 files = [f for f in os.listdir(stream_dir)
                          if (filename in f and 'buffer_' not in f)]
@@ -802,11 +833,11 @@ class DownloadHandler(BaseHandler):
                 buf_size = 4096
                 self.set_header('Content-Type', 'application/octet-stream')
                 self.set_header('Content-Disposition',
-                                'attachment; filename=frames.xtc')
+                                'attachment; filename='+filename)
                 self.set_status(200)
                 for sorted_file in files:
-                    filename = os.path.join(stream_dir, sorted_file)
-                    with open(filename, 'rb') as f:
+                    filepath = os.path.join(stream_dir, sorted_file)
+                    with open(filepath, 'rb') as f:
                         while True:
                             data = f.read(buf_size)
                             if not data:
@@ -818,8 +849,9 @@ class DownloadHandler(BaseHandler):
             else:
                 self.write('')
                 return self.set_status(200)
-        else:
-            return self.write(json.dumps({'error': 'bad stream_id'}))
+        except Exception as e:
+            print('DownloadHandler Exception', str(e))
+            return self.write(json.dumps({'error': str(e)}))
 
 
 class CoreHeartbeatHandler(BaseHandler):
