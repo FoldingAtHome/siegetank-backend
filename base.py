@@ -1,5 +1,6 @@
 import requests
 import json
+import siegetank.login
 
 
 class Stream:
@@ -24,20 +25,25 @@ class Stream:
 
 
 class Target:
-    # create a new target on the backend
-    def __init__(self, id, cc_uri):
-        self.uri = 'https://'+cc_uri+':443'
-        self._id = id
-        self._description = None
-        self._steps_per_frame = None
-        self._creation_date = None
-        self._allowed_ws = None
-        self._engine = None
-        self._engine_versions = None
+    @classmethod
+    def load(cls, target_id, cc_uri):
+        cls.uri = 'https://'+cc_uri+':443'
+        target = cls(target_id, cc_uri)
+        target._id = target_id
+        target._description = None
+        target._steps_per_frame = None
+        target._creation_date = None
+        target._allowed_ws = None
+        target._engine = None
+        target._engine_versions = None
+        target._target_files = None
 
-    # override with your own 
     def add_stream(files):
-        print('hehe')
+        body = json.loads(files)
+        requests.put(files)
+
+    def reload_files(self):
+        reply = requests.get(self.uri+'hehe')
 
     def reload(self):
         reply = requests.get(self.uri+'/targets/info/'+self.id)
@@ -54,6 +60,11 @@ class Target:
     @property
     def id(self):
         return self._id
+
+    @property:
+    def target_files(self):
+        if not self._target_files:
+            requests.fetch(self.uri)
 
     @property
     def streams(self):
