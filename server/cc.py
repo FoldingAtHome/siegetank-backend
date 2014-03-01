@@ -26,7 +26,6 @@ import os
 import uuid
 import random
 import time
-import functools
 import bcrypt
 import pymongo
 import io
@@ -134,8 +133,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
 class AuthDonorHandler(BaseHandler):
     def post(self):
-        """ Generate a new authorization token for the donor
-
+        """
         .. http:post:: /managers/auth
 
             Generate a new authorization token for the donor
@@ -1042,7 +1040,8 @@ class DownloadHandler(BaseHandler):
         """
         .. http:get:: /targets/:target_id/:filename
 
-            Download file ``filename`` from ``target_id``.
+            Download file ``filename`` from ``target_id``. The files you can
+            specify are the target_files specified when POSTing the target.
 
             :resheader Content-Type: application/octet-stream
             :resheader Content-Disposition: attachment; filename=frames.xtc
@@ -1055,7 +1054,8 @@ class DownloadHandler(BaseHandler):
         # prevent files from leaking outside of the dir
         targets_folder = self.application.targets_folder
         target_dir = os.path.join(targets_folder, target_id)
-        file_dir = os.path.dirname(os.path.abspath(filename))
+        file_dir = os.path.dirname(os.path.abspath(os.path.join(
+                                                   target_dir, filename)))
         if(file_dir != os.path.abspath(target_dir)):
             return
 
@@ -1099,6 +1099,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets', TargetsHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
+            (r'/targets/(.*)/(.*)', DownloadHandler),
             (r'/ws/register', RegisterWSHandler),
             (r'/ws/disconnect', DisconnectWSHandler),
             (r'/ws/status', WSStatusHandler),
