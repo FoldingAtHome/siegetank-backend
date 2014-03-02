@@ -661,7 +661,7 @@ class DeleteStreamHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "stream_id": stream_id,
+                    // empty
                 }
 
             :status 200: OK
@@ -675,11 +675,8 @@ class DeleteStreamHandler(BaseHandler):
         self.set_status(400)
         found = False
         for ws_name in WorkServer.members(self.db):
-            body = {
-                "stream_id": stream_id
-            }
-            rep = yield self.fetch(ws_name, '/streams/delete', method='PUT',
-                                   body=json.dumps(body))
+            rep = yield self.fetch(ws_name, '/streams/delete/'+stream_id,
+                                   method='PUT', body='')
             if rep.code == 200:
                 found = True
                 break
@@ -732,7 +729,9 @@ class PostStreamHandler(BaseHandler):
         files = content['files']
         for filename in files:
             if target.hget('engine') == 'openmm':
-                if filename != 'state.xml.gz.b64':
+                if filename not in ('state.xml.gz.b64',
+                                    'integrator.xml.gz.b64',
+                                    'system.xml.gz.b64'):
                     return self.write(json.dumps({'error': 'bad_filename'}))
 
         # TODO: ensure the WS we're POSTing to is up
@@ -964,6 +963,13 @@ class TargetsHandler(BaseHandler):
         engine = content['engine']
         if content['engine'] != 'openmm':
             return self.write(json.dumps({'error': 'unsupported engine'}))
+        else:
+            for filename in files.keys():
+                if filename not in ('state.xml.gz.b64',
+                                    'integrator.xml.gz.b64',
+                                    'system.xml.gz.b64'):
+                    self.write(json.dumps({'error': 'unsupported filename'}))
+                    return
 
         if 'allowed_ws' in content:
             for ws_name in content['allowed_ws']:

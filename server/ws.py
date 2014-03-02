@@ -384,9 +384,9 @@ class PostStreamHandler(BaseHandler):
 
 
 class DeleteStreamHandler(BaseHandler):
-    def put(self):
+    def put(self, stream_id):
         """
-        .. http:put:: /streams/delete
+        .. http:put:: /streams/delete/:stream_id
 
             Delete a stream from the workserver
 
@@ -395,7 +395,7 @@ class DeleteStreamHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "stream_id": "stream_id",
+                    // empty
                 }
 
             :status 200: OK
@@ -403,7 +403,6 @@ class DeleteStreamHandler(BaseHandler):
 
         """
         # delete from database before deleting from disk
-        stream_id = json.loads(self.request.body.decode())['stream_id']
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
         stream = Stream(stream_id, self.db)
@@ -944,7 +943,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/active_streams', ActiveStreamsHandler),
             (r'/streams/activate', ActivateStreamHandler),
             (r'/streams', PostStreamHandler),
-            (r'/streams/delete', DeleteStreamHandler),
+            (r'/streams/delete/(.*)', DeleteStreamHandler),
             (r'/streams/(.*)/(.*)', DownloadHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/core/start', CoreStartHandler),
