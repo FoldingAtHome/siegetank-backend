@@ -797,6 +797,7 @@ class GetTargetHandler(BaseHandler):
                     "striated_ws": ["raynor", "zeratul"],
                     "engine": "openmm"
                     "engine_versions": ["6.0"]
+                    "files": ["filename1", "filename2"],
                 }
 
             .. note:: ``creation_date`` is in seconds since epoch 01/01/1970.
@@ -817,7 +818,8 @@ class GetTargetHandler(BaseHandler):
             'allowed_ws': list(target.smembers('allowed_ws')),
             'striated_ws': list(target.smembers('striated_ws')),
             'engine': target.hget('engine'),
-            'engine_versions': list(target.smembers('engine_versions'))
+            'engine_versions': list(target.smembers('engine_versions')),
+            'files': list(target.smembers('files'))
             }
         self.set_status(200)
         self.write(json.dumps(body))
@@ -918,14 +920,14 @@ class TargetsHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "files": {"file1_name": file1_bin_b64,
-                              "file2_name": file2_bin_b64,
-                              ...
-                              }
                     "steps_per_frame": 100000,
                     "engine": "openmm",
                     "engine_versions": ["6.0", "5.5", "5.2"],
 
+                    "files": {"file1_name": file1_bin_b64,
+                              "file2_name": file2_bin_b64,
+                              ...
+                              } // optional
                     "allowed_ws": ["mengsk", "arcturus"], // optional
                     "stage": "private", "beta", or "public" // optional
                 }
@@ -950,20 +952,17 @@ class TargetsHandler(BaseHandler):
         """
         self.set_status(400)
         content = json.loads(self.request.body.decode())
-        files = content['files']
+
+        if 'files' in content:
+            files = content['files']
+        else:
+            files = dict()
 
         #----------------#
         # verify request #
         #----------------#
         engine = content['engine']
-        if content['engine'] == 'openmm':
-            required_files = {'system.xml.gz.b64', 'integrator.xml.gz.b64'}
-            given_files = set()
-            for filename, filebin in files.items():
-                given_files.add(filename)
-            if given_files != required_files:
-                return self.write(json.dumps({'error': 'missing file'}))
-        else:
+        if content['engine'] != 'openmm':
             return self.write(json.dumps({'error': 'unsupported engine'}))
 
         if 'allowed_ws' in content:
