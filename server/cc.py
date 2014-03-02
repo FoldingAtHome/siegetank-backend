@@ -20,6 +20,7 @@ import tornado.ioloop
 import tornado.web
 import tornado.httpserver
 import tornado.httpclient
+import sys
 
 import json
 import os
@@ -871,7 +872,7 @@ class ListStreamsHandler(BaseHandler):
 class TargetsHandler(BaseHandler):
     def get(self):
         """
-        .. http:post:: /targets
+        .. http:get:: /targets
 
             Return a list of all the targets on the CC. If a manager is
             authenticated, then only his set of targets will be returned.
@@ -894,7 +895,7 @@ class TargetsHandler(BaseHandler):
 
         # if number of targets increases dramatically:
         # 1) try pipelining
-        # 2) add a reverse lookup of donors to targets
+        # 2) add a reverse lookup of managers to targets
         if manager:
             matched_targets = []
             for target_id in target_ids:
