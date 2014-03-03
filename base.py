@@ -25,7 +25,6 @@ class Stream:
 
 
 class Target:
-    @classmethod
     def __init__(self, cc_uri, target_id):
         self.uri = cc_uri
         self._id = target_id
@@ -137,6 +136,13 @@ class Target:
         return self._engine_versions
 
 
+def workserver_status(cc_uri):
+    url = 'https://'+cc_uri+'/ws/status'
+    reply = requests.get(url, verify=is_domain(cc_uri))
+    if reply.status_code == 200:
+        return reply.json()
+
+
 #TODO: DESCRIPTION MUST BE BASE64'D
 def add_target(cc_uri, steps_per_frame, engine, engine_versions,
                description='', stage='private', files=None, allowed_ws=None):
@@ -164,6 +170,8 @@ def add_target(cc_uri, steps_per_frame, engine, engine_versions,
     target = Target(cc_uri, target_id)
     return target
 
+load_target = Target
+
 
 def get_targets(cc_uri):
     """
@@ -174,5 +182,5 @@ def get_targets(cc_uri):
     reply = requests.get(url, verify=is_domain(cc_uri))
     if reply.status_code != 200:
         raise Exception('Cannot list targets')
-    targets = reply.json()
+    targets = reply.json()['targets']
     return targets
