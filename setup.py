@@ -3,8 +3,10 @@
 
 from distutils.core import setup
 
+version = "0.1"
+
 setup(name='siegetank',
-      version='0.1',
+      version=version,
       description='Backend Python driver',
       author='Yutong Zhao',
       author_email='proteneer@gmail.com',
