@@ -582,6 +582,7 @@ class WSStatusHandler(BaseHandler):
             workserver = WorkServer(ws_name, self.db)
             body[ws_name] = {}
             body[ws_name]['url'] = workserver.hget('url')
+            body[ws_name]['http_port'] = workserver.hget('http_port')
             if workserver.hget('fail_count') < self.application._max_ws_fails:
                 body[ws_name]['online'] = True
             else:
