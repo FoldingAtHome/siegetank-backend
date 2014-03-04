@@ -39,10 +39,10 @@ def auth_manager():
 def post_target(auth_token, stage='private'):
     system_url = 'http://www.stanford.edu/~yutongz/system.xml.gz'
     integrator_url = 'http://www.stanford.edu/~yutongz/integrator.xml.gz'
-    system_xml = gzip.decompress(requests.get(system_url).content)
-    integrator_xml = gzip.decompress(requests.get(integrator_url).content)
-    encoded_system = base64.b64encode(gzip.compress(system_xml)).decode()
-    encoded_intg = base64.b64encode(gzip.compress(integrator_xml)).decode()
+    system_gz = requests.get(system_url).content
+    integrator_gz = requests.get(integrator_url).content
+    encoded_system = base64.b64encode(system_gz).decode()
+    encoded_intg = base64.b64encode(integrator_gz).decode()
     message = json.dumps({'description': 'foo',
                           'engine': 'openmm',
                           'engine_versions': ['6.0'],
@@ -60,8 +60,8 @@ def post_target(auth_token, stage='private'):
     return json.loads(reply.content.decode())['target_id']
 
 
-def post_streams(target_id, state_xml, auth_token):
-    encoded_state = base64.b64encode(gzip.compress(state_xml)).decode()
+def post_streams(target_id, state_xml_gz, auth_token):
+    encoded_state = base64.b64encode(state_xml_gz).decode()
     message = json.dumps({'target_id': target_id,
                           'files': {'state.xml.gz.b64': encoded_state}})
     reply = requests.post('https://127.0.0.1:8980/streams',
@@ -108,12 +108,12 @@ if __name__ == '__main__':
     # post a public target
     target_id = post_target(token, stage='public')
     state_url = 'http://www.stanford.edu/~yutongz/state.xml.gz'
-    state_xml = gzip.decompress(requests.get(state_url).content)
+    state_xml_gz = requests.get(state_url).content
     for i in range(10):
-        post_streams(target_id, state_xml, token)
+        post_streams(target_id, state_xml_gz, token)
 
     target_id = post_target(token)
-    post_streams(target_id, state_xml, token)
+    post_streams(target_id, state_xml_gz, token)
 
     # post a private target
     with open('target_ids.log', 'w') as log:
