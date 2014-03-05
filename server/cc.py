@@ -104,6 +104,11 @@ class BaseHandler(tornado.web.RequestHandler):
     def initialize(self):
         self.fetch = self.application.fetch
 
+    def error(self, message):
+        """ Write a message to the output buffer """
+        self.set_status(400)
+        self.write(json.dumps({'error': message}))
+
     @property
     def db(self):
         return self.application.db
@@ -208,7 +213,7 @@ class AddDonorHandler(BaseHandler):
         # see if email exists:
         query = donors.find_one({'email': email})
         if query:
-            return self.write(json.dumps({'error': 'email exists in db!'}))
+            return self.error('email exists in db!')
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
         token = str(uuid.uuid4())
         db_body = {'_id': username,
@@ -219,7 +224,7 @@ class AddDonorHandler(BaseHandler):
         try:
             donors.insert(db_body)
         except:
-            return self.write(json.dumps({'error': username+' exists'}))
+            return self.error(username+' exists')
 
         self.set_status(200)
         self.write(json.dumps({'token': token}))
@@ -318,7 +323,7 @@ class AddManagerHandler(BaseHandler):
         password = content['password']
         role = content['role']
         if not role in ['admin', 'manager']:
-            return self.write(json.dumps({'error': 'bad role'}))
+            return self.error('bad user role')
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
         db_body = {'_id': email,
                    'password_hash': hash_password,
@@ -330,8 +335,7 @@ class AddManagerHandler(BaseHandler):
         try:
             managers.insert(db_body)
         except pymongo.errors.DuplicateKeyError:
-            self.write(json.dumps({'error': email+' exists'}))
-            return
+            return self.error(email+' exists')
 
         self.set_status(200)
         self.write(json.dumps({'token': token}))
@@ -358,6 +362,13 @@ class UpdateTargetHandler(BaseHandler):
                     "description": "description"  //optional
                 }
 
+                .. note:: modifying the allowed workservers will only affect
+                    where future streams will be stored. Recall that an empty
+                    allowed_ws implies all workservers will be used.
+
+                .. note:: modifying engine_versions will only affect future
+                    assignments.
+
             **Example reply**
 
             :status 200: OK
@@ -370,17 +381,31 @@ class UpdateTargetHandler(BaseHandler):
 
         target = Target(target_id, self.db)
 
-        if 'stage' in content:
-            target.hset('stage', content['stage'])
+        # validate request
         if 'allowed_ws' in content:
-            for ws in content['allowed_ws']:
-                target.sadd('allowed_ws', ws)
+            allowed_ws = set(content['allowed_ws'])
+            known_ws = WorkServer.members(self.db)
+            if not allowed_ws.issubset(known_ws):
+                return self.error("allowed_ws not contained within known_ws")
         if 'engine_versions' in content:
-            for version in content['engine_versions']:
-                target.sadd('engine_versions', version)
+            engine_versions = content['engine_versions']
+        if 'stage' in content:
+            if content['stage'] in ['private', 'beta', 'public']:
+                stage = content['stage']
+            else:
+                return self.error('invalid stage')
         if 'description' in content:
-            decoded = base64.b64decode(content['description'])
-            target.hset('description', decoded)
+            description = content['description']
+
+        # execute database transaction
+        pipe = self.db.pipeline()
+        target.sremall('allowed_ws', pipeline=pipe)
+        target.sadd('allowed_ws', *allowed_ws, pipeline=pipe)
+        target.sremall('engine_versions', pipeline=pipe)
+        target.sadd('engine_versions', *engine_versions, pipeline=pipe)
+        target.hset('stage', stage, pipeline=pipe)
+        target.hset('description', description, pipeline=pipe)
+        pipe.execute()
 
         self.set_status(200)
 
@@ -461,14 +486,14 @@ class AssignHandler(BaseHandler):
             query = donors.find_one({'token': donor_token},
                                     fields=['_id'])
             if not query:
-                return self.write(json.dumps({'error': 'bad donor token'}))
+                return self.error('bad donor token')
             donor_id = query['_id']
         else:
             donor_id = None
 
         engine = content['engine']
         if engine != 'openmm':
-            return self.write(json.dumps({'error': 'engine must be openmm'}))
+            return self.error('engine must be openmm')
         engine_version = content['engine_version']
 
         available_targets = list(Target.lookup('engine_versions',
@@ -480,24 +505,24 @@ class AssignHandler(BaseHandler):
             if content['stage'] == 'beta':
                 allowed_stages.append('beta')
             else:
-                return self.write(json.dumps({'error': 'stage must be beta'}))
+                return self.error('stage must be beta')
 
         if 'target_id' in content:
             # make sure the given target_id can be sent to this core
             target_id = content['target_id']
             if not Target.exists(target_id, self.db):
                 err = 'given target is not managed by this cc'
-                return self.write(json.dumps({'error': err}))
+                return self.error(err)
             if not target_id in available_targets:
                 err = 'requested target_id not in available targets'
-                return self.write(json.dumps({'error': err}))
+                return self.error(err)
             target = Target(target_id, self.db)
         else:
             # if no target is specified, then a random target is chosen from a
             # list of available targets for the core's engine version
             if not available_targets:
                 err_msg = 'no available targets matching engine version'
-                return self.write(json.dumps({'error': err_msg}))
+                return self.error(err_msg)
 
             found = False
 
@@ -511,7 +536,7 @@ class AssignHandler(BaseHandler):
             # if we reached here then we didn't find a good target
             if not found:
                 err = 'no public or beta targets available'
-                return self.write(json.dumps({'error': err}))
+                return self.error(err)
 
         steps_per_frame = target.hget('steps_per_frame')
 
@@ -546,7 +571,7 @@ class AssignHandler(BaseHandler):
                 print('HTTP_ERROR::', e)
                 pass
 
-        self.write(json.dumps({'error': 'no free WS available'}))
+        self.error('no free WS available')
 
 
 class DisconnectWSHandler(BaseHandler):
@@ -721,7 +746,7 @@ class DeleteStreamHandler(BaseHandler):
             self.set_status(200)
             self.write(json.dumps({}))
         else:
-            self.write(json.dumps({'error': 'stream not found'}))
+            self.error('stream not found')
 
 
 class PostStreamHandler(BaseHandler):
@@ -762,14 +787,14 @@ class PostStreamHandler(BaseHandler):
         target = Target(target_id, self.db)
         if target.hget('owner') != self.get_current_user():
             self.set_status(401)
-            return self.write(json.dumps({'error': 'target not owned by you'}))
+            return self.error('target not owned by you')
         files = content['files']
         for filename in files:
             if target.hget('engine') == 'openmm':
                 if filename not in ('state.xml.gz.b64',
                                     'integrator.xml.gz.b64',
                                     'system.xml.gz.b64'):
-                    return self.write(json.dumps({'error': 'bad_filename'}))
+                    return self.error('bad filename')
 
         # TODO: ensure the WS we're POSTing to is up
         allowed_workservers = target.smembers('allowed_ws')
@@ -777,7 +802,7 @@ class PostStreamHandler(BaseHandler):
             allowed_workservers = WorkServer.members(self.db)
         if not allowed_workservers:
             self.set_status(400)
-            self.write(json.dumps({'error': 'no available workserver'}))
+            return self.error('no available workserver')
 
         # randomly pick from available workservers
         ws_id = random.sample(allowed_workservers, 1)[0]
@@ -1002,25 +1027,24 @@ class TargetsHandler(BaseHandler):
         #----------------#
         engine = content['engine']
         if content['engine'] != 'openmm':
-            return self.write(json.dumps({'error': 'unsupported engine'}))
+            return self.error('unsupported engine')
         else:
             for filename in files.keys():
                 if filename not in ('state.xml.gz.b64',
                                     'integrator.xml.gz.b64',
                                     'system.xml.gz.b64'):
-                    self.write(json.dumps({'error': 'unsupported filename'}))
-                    return
+                    return self.error('unsupported filename')
 
         if 'allowed_ws' in content:
             for ws_name in content['allowed_ws']:
                 if not WorkServer.exists(ws_name, self.db):
-                    err_msg = {'error': ws_name+' is not connected to this cc'}
-                    return self.write(json.dumps(err_msg))
+                    err_msg = ws_name+' is not connected to this cc'
+                    return self.error(err_msg)
         description = content['description']
         steps_per_frame = content['steps_per_frame']
 
         if steps_per_frame < 5000:
-            return self.write(json.dumps({'error': 'steps_per_frame < 5000'}))
+            return self.error('steps_per_frame < 5000')
 
         #------------#
         # write data #
@@ -1042,8 +1066,13 @@ class TargetsHandler(BaseHandler):
         allowed_versions = set(content['engine_versions'])
         fields['engine_versions'] = allowed_versions
         if 'allowed_ws' in content:
-            allowed_workservers = set(content['allowed_ws'])
-            fields['allowed_ws'] = allowed_workservers
+            allowed_ws = set(content['allowed_ws'])
+            known_ws = WorkServer.members(self.db)
+            if not allowed_ws.issubset(known_ws):
+                err = "allowed_ws is not contained within known_ws"
+                return self.error(err)
+            fields['allowed_ws'] = allowed_ws
+
         fields['files'] = set(files.keys())
 
         Target.create(target_id, self.db, fields)
@@ -1122,7 +1151,7 @@ class DownloadHandler(BaseHandler):
             self.finish()
             return
         except Exception as e:
-            return self.write(json.dumps({'error': str(e)}))
+            return self.error(str(e))
 
 
 class CommandCenter(BaseServerMixin, tornado.web.Application):
@@ -1144,6 +1173,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets', TargetsHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
+            (r'/targets/update/(.*)', UpdateTargetHandler),
             (r'/targets/(.*)/(.*)', DownloadHandler),
             (r'/ws/register', RegisterWSHandler),
             (r'/ws/disconnect', DisconnectWSHandler),

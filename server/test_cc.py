@@ -28,7 +28,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
     @classmethod
     def tearDownClass(self):
-        self.cc.db.flushdb()
         self.cc.shutdown_redis()
         folders = [self.cc.targets_folder]
         for folder in folders:
@@ -37,6 +36,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         super(TestCommandCenter, self).tearDownClass()
 
     def tearDown(self):
+        self.cc.db.flushdb()
         self.cc.mdb.drop_database('users')
         self.cc.mdb.drop_database('community')
         self.cc.mdb.drop_database('targets')
@@ -163,15 +163,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         ws_redis_port = 1234
         ws_redis_pass = 'blackmill'
 
-        redis_options = {
-            'port': ws_redis_port,
-            'requirepass': ws_redis_pass,
-            'logfile': os.devnull
-        }
-
-        test_db = common.init_redis(redis_options)
-        test_db.ping()
-
         body = {'name': ws_name,
                 'url': '127.0.0.1',
                 'http_port': ext_http_port,
@@ -189,7 +180,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         ws = cc.WorkServer(ws_name, self.cc.db)
         self.assertEqual(ws.hget('url'), '127.0.0.1')
         self.assertEqual(ws.hget('http_port'), ext_http_port)
-        test_db.shutdown()
 
     def test_post_target(self):
         email = 'proteneer@gmail.com'
@@ -265,6 +255,67 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         reply = self.fetch('/targets/'+target_id+'/integrator.xml.gz.b64',
                            headers=headers)
         self.assertEqual(reply.body.decode(), fb2)
+
+    def test_update_targets(self):
+        email = 'eisley@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password,
+            'role': 'manager'
+        }
+        rep = self.fetch('/managers', method='POST', body=json.dumps(body))
+        auth = json.loads(rep.body.decode())['token']
+        headers = {'Authorization': auth}
+
+        fb1 = base64.b64encode(os.urandom(1024)).decode()
+        fb2 = base64.b64encode(os.urandom(1024)).decode()
+        description = "Diwakar and John's top secret project"
+        body = {
+            'description': description,
+            'files': {'system.xml.gz.b64': fb1,
+                      'integrator.xml.gz.b64': fb2},
+            'steps_per_frame': 50000,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
+            }
+
+        reply = self.fetch('/targets', method='POST', headers=headers,
+                           body=json.dumps(body))
+        self.assertEqual(reply.code, 200)
+        target_id = json.loads(reply.body.decode())['target_id']
+
+        cc_targets = cc.Target.lookup('engine_versions', '6.0', self.cc.db)
+        self.assertEqual(cc_targets, {target_id})
+
+        description2 = 'hahah'
+
+        body = {
+            'description': description2,
+            'stage': 'public',
+            'allowed_ws': ['ramanujan'],
+            'engine_versions': ['9.9', '5.0']
+        }
+
+        self.test_register_cc()
+
+        reply = self.fetch('/targets/update/'+target_id, method='PUT',
+                           headers=headers, body=json.dumps(body))
+        self.assertEqual(reply.code, 200)
+
+        target = cc.Target(target_id, self.cc.db)
+
+        self.assertEqual(target.hget('description'), description2)
+        self.assertEqual(target.hget('stage'), 'public')
+        self.assertEqual(target.smembers('allowed_ws'), {'ramanujan'})
+        self.assertEqual(target.smembers('engine_versions'), {'9.9', '5.0'})
+
+        cc_targets = cc.Target.lookup('engine_versions', '9.9', self.cc.db)
+        self.assertEqual(cc_targets, {target_id})
+        cc_targets = cc.Target.lookup('engine_versions', '5.0', self.cc.db)
+        self.assertEqual(cc_targets, {target_id})
+        cc_targets = cc.Target.lookup('engine_versions', '6.0', self.cc.db)
+        self.assertEqual(cc_targets, set())
 
     def test_get_targets(self):
         email = 'eisley@gmail.com'

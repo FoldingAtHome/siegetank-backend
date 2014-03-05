@@ -444,7 +444,7 @@ class Entity(metaclass=_entity_metaclass):
         assert type(self.fields[field]) == set
         if field in self.relations or field in self.lookups:
             values = list(self.smembers(field))
-            pipeline.srem(field, *values, pipeline=pipeline)
+            self.srem(field, *values, pipeline=pipeline)
         else:
             pipeline.delete(self.prefix+':'+self._id+':'+field)
 

@@ -158,12 +158,11 @@ class BaseHandler(tornado.web.RequestHandler):
 
 
 def authenticate_core(method):
-    """
-    Decorate handlers whose authorization token maps to a specific stream
-        identifier.
+    """ Decorate handlers whose authorization token maps to a specific stream
+    identifier.
 
-        If the authorization token is valid, then the stream_id is sent to the
-        method as an argument.
+    If the authorization token is valid, then the stream_id is sent to the
+    method as an argument.
 
     """
     @functools.wraps(method)
