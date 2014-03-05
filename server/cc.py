@@ -930,6 +930,26 @@ class ListStreamsHandler(BaseHandler):
         self.write(json.dumps(body))
 
 
+class DeleteTargetHandler(BaseHandler):
+    @authenticate_manager
+    def put(self, target_id):
+        """
+        .. http:put:: /targets/delete/:target_id
+
+            Delete a target from the Command Center. There is no undo button
+            once you call this. It will erase everything pertaining to the
+            target from Command Center and the Workservers.
+
+            This will not affect mongo's communities database in order to
+            preserve stats
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        pass
+
+
 class TargetsHandler(BaseHandler):
     def get(self):
         """
@@ -1171,6 +1191,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/donors/auth', AuthDonorHandler),
             (r'/donors', AddDonorHandler),
             (r'/targets', TargetsHandler),
+            (r'/targets/delete/(.*)', DeleteTargetHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/targets/update/(.*)', UpdateTargetHandler),

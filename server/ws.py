@@ -21,7 +21,6 @@ import time
 import shutil
 import hashlib
 import sys
-
 import base64
 import gzip
 import functools
@@ -197,10 +196,47 @@ class AliveHandler(BaseHandler):
         self.set_status(200)
 
 
+class DeleteTargetHandler(BaseHandler):
+    def put(self, target_id):
+        """
+        .. http:put:: /targets/delete/:target_id
+
+            Delete ``target_id`` from the workserver.
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        self.set_status(400)
+
+        target = Target(target_id, self.db)
+        stream_ids = target.smembers('streams')
+        pipe = self.db.pipeline()
+        for stream_id in stream_ids:
+            try:
+                self.deactivate_stream(stream_id)
+            except KeyError:
+                pass
+            stream_dir = os.path.join(self.application.streams_folder,
+                                      stream_id)
+            shutil.rmtree(stream_dir)
+            # verify=False for performance reasons
+            stream = Stream(stream_id, self.db, verify=False)
+            stream.delete(pipeline=pipe)
+        target_dir = os.path.join(self.application.targets_folder, target_id)
+        shutil.rmtree(target_dir)
+        target.delete(pipeline=pipe)
+        pipe.execute()
+
+        # delete from mongodb
+
+        self.set_status(200)
+
+
 class TargetStreamsHandler(BaseHandler):
     def get(self, target_id):
         """
-        .. http:get:: /targets/streams/(:target_id)
+        .. http:get:: /targets/streams/:target_id
 
             Get a list of streams for the target and their status and frames
 
@@ -945,6 +981,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/streams/delete/(.*)', DeleteStreamHandler),
             (r'/streams/(.*)/(.*)', DownloadHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
+            (r'/targets/delete/(.*)', DeleteTargetHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
             (r'/core/checkpoint', CoreCheckpointHandler),

@@ -293,6 +293,60 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         stream_id, token = self._activate_stream(target_id)
         return target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token
 
+    def test_delete_target(self):
+        target_id = str(uuid.uuid4())
+
+        targets = self.ws.mdb.data.targets
+        body = {
+            '_id': target_id,
+            'owner': self.test_manager,
+        }
+        targets.insert(body)
+
+        fn1 = 'system.xml.gz.b64'
+        fn2 = 'integrator.xml.gz.b64'
+        fn3 = 'state.xml.gz.b64'
+        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
+
+        body = {'target_id': target_id,
+                'target_files': {fn1: fb1, fn2: fb2},
+                'stream_files': {fn3: fb3}
+                }
+
+        total_streams = set()
+
+        for i in range(50):
+            response = self.fetch('/streams', method='POST',
+                                  body=json.dumps(body))
+            self.assertEqual(response.code, 200)
+            total_streams.add(json.loads(response.body.decode())['stream_id'])
+
+        active_streams = set()
+
+        for i in range(10):
+            stream_id, token = self._activate_stream(target_id)
+            active_streams.add(stream_id)
+
+        self.assertEqual(ws.Target.members(self.ws.db), {target_id})
+        self.assertEqual(ws.Stream.members(self.ws.db), total_streams)
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), active_streams)
+        for stream_id in total_streams:
+            stream_dir = os.path.join(self.ws.streams_folder, stream_id)
+            self.assertTrue(os.path.exists(stream_dir))
+        target_dir = os.path.join(self.ws.targets_folder, target_id)
+        self.assertTrue(os.path.exists(target_dir))
+
+        reply = self.fetch('/targets/delete/'+target_id, method='PUT', body='')
+        self.assertEqual(reply.code, 200)
+
+        self.assertEqual(ws.Target.members(self.ws.db), set())
+        self.assertEqual(ws.Stream.members(self.ws.db), set())
+        self.assertEqual(ws.ActiveStream.members(self.ws.db), set())
+        for stream_id in total_streams:
+            stream_dir = os.path.join(self.ws.streams_folder, stream_id)
+            self.assertFalse(os.path.exists(stream_dir))
+        self.assertFalse(os.path.exists(target_dir))
+
     def test_start_stream(self):
         target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
             self._post_and_activate_stream()
