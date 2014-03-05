@@ -13,6 +13,7 @@ known command centers.
 .. autosimple:: PostStreamHandler.post
 .. autosimple:: DeleteStreamHandler.put
 .. autosimple:: ActivateStreamHandler.post
+.. autosimple:: DeleteTargetHandler.put
 
 Core Methods
 ------------

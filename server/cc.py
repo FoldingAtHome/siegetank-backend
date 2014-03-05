@@ -347,9 +347,9 @@ class UpdateTargetHandler(BaseHandler):
         """
         .. http:put:: /target/update/:target_id
 
-        Update certain fields of the target
+            Update certain fields of the target
 
-        :reqheader Authorization: access token of an administrator
+            :reqheader Authorization: Manager’s authorization token
 
             **Example request**
 
@@ -712,6 +712,8 @@ class DeleteStreamHandler(BaseHandler):
 
             Deletes a stream from the server.
 
+            :reqheader Authorization: Manager's authorization token
+
             .. note:: This is a relatively slow method. Partially because 1) we
                 don't know which server the stream is on and 2) we don't know
                 its target so we need to check all workservers.
@@ -757,6 +759,8 @@ class PostStreamHandler(BaseHandler):
         .. http:post:: /streams
 
             Add a new stream to an existing target.
+
+            :reqheader Authorization: Manager's authorization token
 
             **Example request**
 
