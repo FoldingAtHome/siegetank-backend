@@ -20,8 +20,8 @@ import tornado.ioloop
 import tornado.web
 import tornado.httpserver
 import tornado.httpclient
-import sys
 
+import base64
 import json
 import os
 import uuid
@@ -337,17 +337,52 @@ class AddManagerHandler(BaseHandler):
         self.write(json.dumps({'token': token}))
 
 
-class UpdateStageHandler(BaseHandler):
+class UpdateTargetHandler(BaseHandler):
     @authenticate_manager
     def put(self, target_id):
-        """ Update the status of the target
+        """
+        .. http:put:: /target/update/:target_id
 
-        Request:
-            {
-                "stage": private, beta, public
-            }
+        Update certain fields of the target
+
+        :reqheader Authorization: access token of an administrator
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "stage": "private", "beta", "public",  //optional
+                    "allowed_ws": ["foo", "bar"],  //optional
+                    "engine_versions":  ["6.0", "6.5"]  //optional
+                    "description": "description"  //optional
+                }
+
+            **Example reply**
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
 
         """
+        self.set_status(400)
+        content = json.loads(self.request.body.decode())
+
+        target = Target(target_id, self.db)
+
+        if 'stage' in content:
+            target.hset('stage', content['stage'])
+        if 'allowed_ws' in content:
+            for ws in content['allowed_ws']:
+                target.sadd('allowed_ws', ws)
+        if 'engine_versions' in content:
+            for version in content['engine_versions']:
+                target.sadd('engine_versions', version)
+        if 'description' in content:
+            decoded = base64.b64decode(content['description'])
+            target.hset('description', decoded)
+
+        self.set_status(200)
 
 
 def yates_generator(x):
@@ -921,6 +956,7 @@ class TargetsHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
+                    "description": "some JSON compatible description",
                     "steps_per_frame": 100000,
                     "engine": "openmm",
                     "engine_versions": ["6.0", "5.5", "5.2"],
@@ -938,6 +974,8 @@ class TargetsHandler(BaseHandler):
                 all workservers available to this cc will be striated over.
             .. note:: If ``stage`` is not given, then the stage defaults to
                 "private".
+            .. note:: ``description`` must be a JSON compatible string. That
+                means it must not contain double quotation marks and slashes
 
             **Example reply**
 
