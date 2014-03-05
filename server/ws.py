@@ -201,7 +201,9 @@ class DeleteTargetHandler(BaseHandler):
         """
         .. http:put:: /targets/delete/:target_id
 
-            Delete ``target_id`` from the workserver.
+            Delete ``target_id`` from the workserver. Note, even if the target
+            does not exist on this WS the method returns 200 to allow for
+            idempotency.
 
             :status 200: OK
             :status 400: Bad request
@@ -209,7 +211,10 @@ class DeleteTargetHandler(BaseHandler):
         """
         self.set_status(400)
 
-        target = Target(target_id, self.db)
+        try:
+            target = Target(target_id, self.db)
+        except:
+            return self.set_status(200)
         stream_ids = target.smembers('streams')
         pipe = self.db.pipeline()
         for stream_id in stream_ids:
@@ -227,9 +232,6 @@ class DeleteTargetHandler(BaseHandler):
         shutil.rmtree(target_dir)
         target.delete(pipeline=pipe)
         pipe.execute()
-
-        # delete from mongodb
-
         self.set_status(200)
 
 

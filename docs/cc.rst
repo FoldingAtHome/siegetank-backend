@@ -9,6 +9,7 @@ Manager Methods
 .. autosimple:: AddManagerHandler.post
 .. autosimple:: TargetsHandler.post
 .. autosimple:: UpdateTargetHandler.put
+.. autosimple:: DeleteTargetHandler.put
 .. autosimple:: PostStreamHandler.post
 .. autosimple:: DeleteStreamHandler.put
 

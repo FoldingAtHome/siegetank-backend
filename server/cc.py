@@ -21,7 +21,7 @@ import tornado.web
 import tornado.httpserver
 import tornado.httpclient
 
-import base64
+import shutil
 import json
 import os
 import uuid
@@ -897,7 +897,7 @@ class ListStreamsHandler(BaseHandler):
         .. http:get:: /targets/streams/:target_id
 
             Return a list of streams on each striated workserver for
-            *target_id*.
+            ``target_id``.
 
             **Example reply**
 
@@ -926,7 +926,6 @@ class ListStreamsHandler(BaseHandler):
 
         for ws_name in striated_ws:
             reply = yield self.fetch(ws_name, '/targets/streams/'+target_id)
-
             if reply.code == 200:
                 body[ws_name] = json.loads(reply.body.decode())
 
@@ -936,6 +935,7 @@ class ListStreamsHandler(BaseHandler):
 
 class DeleteTargetHandler(BaseHandler):
     @authenticate_manager
+    @tornado.gen.coroutine
     def put(self, target_id):
         """
         .. http:put:: /targets/delete/:target_id
@@ -944,14 +944,26 @@ class DeleteTargetHandler(BaseHandler):
             once you call this. It will erase everything pertaining to the
             target from Command Center and the Workservers.
 
-            This will not affect mongo's communities database in order to
-            preserve stats
+            This will not affect mongo's community database in order to
+            preserve statistics.
 
             :status 200: OK
             :status 400: Bad request
 
         """
-        pass
+        self.set_status(400)
+        target = Target(target_id, self.db)
+        striated_ws = target.smembers('striated_ws')
+        target_dir = os.path.join(self.application.targets_folder, target_id)
+        shutil.rmtree(target_dir)
+        for ws_name in striated_ws:
+            reply = yield self.fetch(ws_name, '/targets/delete/'+target_id)
+            if reply.code == 200:
+                target.srem('striated_ws', ws_name)
+        target.delete()
+        targets = self.mdb.data.targets
+        targets.remove(spec_or_id=target_id)
+        self.set_status(200)
 
 
 class TargetsHandler(BaseHandler):

@@ -659,8 +659,6 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             for ws_stream in body[ws_name]:
                 streams.add(ws_stream)
         self.assertEqual(streams, post_streams)
-
-        self.assertEqual(streams, post_streams)
         self.assertEqual(striated_servers, {'flash', 'jaedong'})
 
         # test assigning
@@ -687,6 +685,24 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             rep = self.wait()
             self.assertEqual(rep.code, 200)
             time.sleep(1)
+
+        # test deleting the target
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/delete/'\
+              +target_id
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     headers=headers, method='PUT', body='')
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
+        # test GET the targets
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     headers=headers)
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
+        reply_target = json.loads(reply.body.decode())['targets']
+        self.assertEqual(reply_target, [])
 
     @classmethod
     def tearDownClass(cls):
