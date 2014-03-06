@@ -16,6 +16,16 @@ class Target:
         self._files = None
         self._streams = None
 
+    def delete(self):
+        """ Delete this target from the Command Center and all associated
+        workservers """
+
+        url = 'https://'+self.uri+'/targets/delete/'+self.id
+        reply = requests.put(url, verify=is_domain(self.uri))
+        if(reply.status_code != 200):
+            print(reply.text)
+            raise Exception('Bad status code')
+
     def add_stream(self, files):
         """ Add a stream to the target. The filenames passed in here must be
         consistent with the filenames used by other streams. Else the behavior
