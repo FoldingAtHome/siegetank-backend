@@ -985,7 +985,8 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
                 }
                 client = tornado.httpclient.HTTPClient()
                 url = properties['url']
-                self.cc_ips.add(socket.gethostbyname(url))
+                hostname = url.split(':')[0]
+                self.cc_ips.add(socket.gethostbyname(hostname))
                 uri = 'https://'+url+'/ws/register'
                 try:
                     rep = client.fetch(uri, method='PUT', connect_timeout=2,
