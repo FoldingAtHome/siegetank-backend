@@ -197,7 +197,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(isfile(os.path.join(targets_dir, target_id, fn1)))
         self.assertFalse(isfile(os.path.join(targets_dir, target_id, fn2)))
 
-        self.assertTrue(self.ws.db.keys('*'), [])
+        print(self.ws.db.keys('*'))
+        self.assertEqual(self.ws.db.keys('*'), [])
 
     def _activate_stream(self, target_id):
         body = {'target_id': target_id}
