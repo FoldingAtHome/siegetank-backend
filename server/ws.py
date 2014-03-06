@@ -226,7 +226,6 @@ class DeleteTargetHandler(BaseHandler):
 
         """
         self.set_status(400)
-
         try:
             target = Target(target_id, self.db)
         except:

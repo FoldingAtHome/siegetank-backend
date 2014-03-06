@@ -957,9 +957,12 @@ class DeleteTargetHandler(BaseHandler):
         target_dir = os.path.join(self.application.targets_folder, target_id)
         shutil.rmtree(target_dir)
         for ws_name in striated_ws:
-            reply = yield self.fetch(ws_name, '/targets/delete/'+target_id)
+            reply = yield self.fetch(ws_name, '/targets/delete/'+target_id,
+                                     method='PUT', body='')
             if reply.code == 200:
                 target.srem('striated_ws', ws_name)
+            else:
+                self.write(reply.body.content)
         target.delete()
         targets = self.mdb.data.targets
         targets.remove(spec_or_id=target_id)
@@ -1136,12 +1139,6 @@ class TargetsHandler(BaseHandler):
 
         return self.write(json.dumps(response))
 
-    # def delete(self):
-    #     # delete all streams
-
-    #     # delete the project
-    #     return
-
 
 class DownloadHandler(BaseHandler):
     @authenticate_manager
@@ -1221,11 +1218,10 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def fetch(self, ws_id, path, **kwargs):
-        """
-        This is a fairly special method. First, it takes care of some boiler
+        """ This is a fairly special method. First, it takes care of boiler
         plate code. Second, it keeps track of how many times a workserver has
         failed. If it has failed one too many times, then the workserver is
-        taken offline.
+        taken offline automatically.
 
         """
         workserver = WorkServer(ws_id, self.db)
@@ -1255,10 +1251,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def check_ws(self):
-        """ Check all workservers to see if they are alive or not.
-
-            This is called once at the beginning, and periodically.
-
+        """ Check all workservers to see if they are alive or not. This is
+        called once at the beginning, and periodically as a callback.
         """
         for ws_name in WorkServer.members(self.db):
             reply = yield self.fetch(ws_name, '/')
@@ -1275,7 +1269,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             self.pulse.start()
 
     def ws_online(self, ws_id):
-        """ returns True if the workserver is online, False otherwise """
+        """ Returns True if the workserver is online, False otherwise """
         ws = WorkServer(ws_id, self.db)
         if ws.hget('fail_count') < self._max_ws_fails:
             return True

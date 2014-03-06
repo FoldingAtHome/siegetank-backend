@@ -521,6 +521,7 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
     def tearDown(self):
         for k, v in self.workservers.items():
             v['httpserver'].stop()
+            v['ws'].db.flushdb()
         self.cc_httpserver.stop()
         self.cc.mdb.users.managers.drop()
         pass
@@ -703,6 +704,12 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
 
         reply_target = json.loads(reply.body.decode())['targets']
         self.assertEqual(reply_target, [])
+
+        self.assertEqual(set(self.cc.db.keys('*')),
+                         set(['ws:jaedong', 'ws:flash', 'wss', 'ws:bisu']))
+
+        for ws in self.workservers:
+            self.assertEqual(self.workservers[ws]['ws'].db.keys('*'), [])
 
     @classmethod
     def tearDownClass(cls):
