@@ -239,12 +239,14 @@ class DeleteTargetHandler(BaseHandler):
                 pass
             stream_dir = os.path.join(self.application.streams_folder,
                                       stream_id)
-            shutil.rmtree(stream_dir)
+            if os.path.exists(stream_dir):
+                shutil.rmtree(stream_dir)
             # verify=False for performance reasons
             stream = Stream(stream_id, self.db, verify=False)
             stream.delete(pipeline=pipe)
         target_dir = os.path.join(self.application.targets_folder, target_id)
-        shutil.rmtree(target_dir)
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir)
         target.delete(pipeline=pipe)
         pipe.execute()
         self.set_status(200)

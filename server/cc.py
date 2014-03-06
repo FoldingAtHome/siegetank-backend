@@ -21,6 +21,7 @@ import tornado.web
 import tornado.httpserver
 import tornado.httpclient
 
+import sys
 import shutil
 import json
 import os
@@ -955,14 +956,15 @@ class DeleteTargetHandler(BaseHandler):
         target = Target(target_id, self.db)
         striated_ws = target.smembers('striated_ws')
         target_dir = os.path.join(self.application.targets_folder, target_id)
-        shutil.rmtree(target_dir)
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir)
         for ws_name in striated_ws:
             reply = yield self.fetch(ws_name, '/targets/delete/'+target_id,
                                      method='PUT', body='')
             if reply.code == 200:
                 target.srem('striated_ws', ws_name)
             else:
-                self.write(reply.body.content)
+                self.write(reply.body.decode())
         target.delete()
         targets = self.mdb.data.targets
         targets.remove(spec_or_id=target_id)
@@ -1074,6 +1076,10 @@ class TargetsHandler(BaseHandler):
                                     'system.xml.gz.b64'):
                     return self.error('unsupported filename')
 
+        engine_versions = set(content['engine_versions'])
+        for k in engine_versions:
+            if type(k) is not str:
+                return self.error('engine version must be a list of strings')
         if 'allowed_ws' in content:
             for ws_name in content['allowed_ws']:
                 if not WorkServer.exists(ws_name, self.db):
@@ -1095,6 +1101,7 @@ class TargetsHandler(BaseHandler):
             'steps_per_frame': steps_per_frame,
             'creation_date': time.time(),
             'engine': engine,
+            'engine_versions': engine_versions,
             'owner': self.get_current_user(),
         }
         if 'stage' in content:
@@ -1102,8 +1109,7 @@ class TargetsHandler(BaseHandler):
                 fields['stage'] = content['stage']
         else:
             fields['stage'] = 'private'
-        allowed_versions = set(content['engine_versions'])
-        fields['engine_versions'] = allowed_versions
+
         if 'allowed_ws' in content:
             allowed_ws = set(content['allowed_ws'])
             known_ws = WorkServer.members(self.db)
@@ -1113,7 +1119,6 @@ class TargetsHandler(BaseHandler):
             fields['allowed_ws'] = allowed_ws
 
         fields['files'] = set(files.keys())
-
         Target.create(target_id, self.db, fields)
 
         target_dir = os.path.join(self.application.targets_folder, target_id)
@@ -1242,7 +1247,11 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                                        **kwargs)
             workserver.hset('fail_count', 0)
             return reply
-        except (tornado.httpclient.HTTPError, socket.gaierror):
+        except (tornado.httpclient.HTTPError, socket.gaierror) as e:
+            if isinstance(e, tornado.httpclient.HTTPError):
+                if e.code != 599:
+                    return reply
+            print('=======Fatal connection failure: ', e)
             workserver.hincrby('fail_count', 1)
             dummy = tornado.httpclient.HTTPRequest(ws_url)
             tempb = io.BytesIO(json.dumps({'error': 'WS down'}).encode())
