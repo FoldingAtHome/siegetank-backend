@@ -20,7 +20,7 @@ import json
 import time
 import shutil
 import hashlib
-import sys
+import socket
 import base64
 import gzip
 import functools
@@ -156,6 +156,21 @@ class BaseHandler(tornado.web.RequestHandler):
             return None
 
 
+def authenticate_cc(method):
+    """ Decorate handlers that require the incoming remote_ip be that of a
+    known command center """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        if not self.request.remote_ip in self.application.cc_ips and\
+                self.request.remote_ip != '127.0.0.1':
+            self.write(json.dumps({'error': 'unauthorized ip'}))
+            return self.set_status(401)
+        else:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 def authenticate_core(method):
     """ Decorate handlers whose authorization token maps to a specific stream
     identifier.
@@ -197,6 +212,7 @@ class AliveHandler(BaseHandler):
 
 
 class DeleteTargetHandler(BaseHandler):
+    @authenticate_cc
     def put(self, target_id):
         """
         .. http:put:: /targets/delete/:target_id
@@ -236,6 +252,7 @@ class DeleteTargetHandler(BaseHandler):
 
 
 class TargetStreamsHandler(BaseHandler):
+    @authenticate_cc
     def get(self, target_id):
         """
         .. http:get:: /targets/streams/:target_id
@@ -274,6 +291,7 @@ class TargetStreamsHandler(BaseHandler):
 
 
 class ActivateStreamHandler(BaseHandler):
+    @authenticate_cc
     def post(self):
         """
         .. http:post:: /streams/activate
@@ -330,6 +348,7 @@ class ActivateStreamHandler(BaseHandler):
 
 
 class PostStreamHandler(BaseHandler):
+    @authenticate_cc
     def post(self):
         """
         .. http:post:: /streams
@@ -421,6 +440,7 @@ class PostStreamHandler(BaseHandler):
 
 
 class DeleteStreamHandler(BaseHandler):
+    @authenticate_cc
     def put(self, stream_id):
         """
         .. http:put:: /streams/delete/:stream_id
@@ -950,6 +970,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
         self.targets_folder = targets_folder
         self.streams_folder = streams_folder
         self.command_centers = command_centers
+        self.cc_ips = set()
 
         # Notify the command centers that this workserver is online
         if command_centers:
@@ -964,6 +985,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
                 }
                 client = tornado.httpclient.HTTPClient()
                 url = properties['url']
+                self.cc_ips.add(socket.gethostbyname(url))
                 uri = 'https://'+url+'/ws/register'
                 try:
                     rep = client.fetch(uri, method='PUT', connect_timeout=2,
