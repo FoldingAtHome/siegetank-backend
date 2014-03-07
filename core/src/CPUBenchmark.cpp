@@ -34,7 +34,7 @@ double CPUBenchmark::speed() {
     gettimeofday(&end, NULL);
     double diff_sec = (end.tv_sec+end.tv_usec/1e6) - 
                       (start.tv_sec+start.tv_usec/1e6);
-    return i/diff_sec;
+    return iterations/diff_sec;
 }
 
 CPUBenchmark::~CPUBenchmark() {
