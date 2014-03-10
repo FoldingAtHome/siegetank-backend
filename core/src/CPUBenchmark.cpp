@@ -2,8 +2,11 @@
 #include <iostream>
 #include <sys/time.h>
 #include <stdexcept>
-
 #include <unistd.h>
+#include <vector>
+#include <complex>
+
+using namespace std;
 
 CPUBenchmark::CPUBenchmark() {
     in = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FFTW_SIZE);
@@ -26,7 +29,7 @@ CPUBenchmark::CPUBenchmark() {
 double CPUBenchmark::speed() {
     timeval start;
     gettimeofday(&start, NULL);
-    const int iterations = 100;
+    const int iterations = 20;
     for(int i=0; i < iterations; i++) {
         fftwf_execute(plan);
     }
@@ -35,6 +38,14 @@ double CPUBenchmark::speed() {
     double diff_sec = (end.tv_sec+end.tv_usec/1e6) - 
                       (start.tv_sec+start.tv_usec/1e6);
     return iterations/diff_sec;
+}
+
+std::vector<std::complex<float> > CPUBenchmark::value() {
+    vector<complex<float> > result(FFTW_SIZE);
+    for(int i=0; i < result.size(); i++) {
+        result[i] = complex<float>(out[i][0], out[i][1]);
+    }
+    return result;
 }
 
 CPUBenchmark::~CPUBenchmark() {

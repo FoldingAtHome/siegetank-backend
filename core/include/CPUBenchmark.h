@@ -1,3 +1,6 @@
+#ifndef CPUBenchmark_H_
+#define CPUBenchmark_H_
+
 #include "Benchmark.h"
 #include <fftw3.h>
 
@@ -9,6 +12,8 @@ public:
 
     double speed();
 
+    std::vector<std::complex<float> > value();
+
     ~CPUBenchmark();
 
 private:
@@ -17,3 +22,5 @@ private:
     fftwf_plan plan;
 
 };
+
+#endif

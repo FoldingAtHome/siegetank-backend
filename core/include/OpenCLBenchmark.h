@@ -1,3 +1,6 @@
+#ifndef OpenCLBenchmark_H_
+#define OpenCLBenchmark_H_
+
 #include "Benchmark.h"
 #include <clFFT.h>
 
@@ -5,9 +8,11 @@ class OpenCLBenchmark : public Benchmark {
 
 public:
 
-    OpenCLBenchmark(cl_device_id deviceId, cl_platform_id platformId);
+    OpenCLBenchmark(int platformIndex, int deviceIndex);
 
     double speed();
+
+    std::vector<std::complex<float> > value();
 
     ~OpenCLBenchmark();
 
@@ -23,3 +28,5 @@ private:
     cl_mem device_out;
 
 };
+
+#endif
