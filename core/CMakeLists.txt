@@ -1,5 +1,7 @@
 cmake_minimum_required (VERSION 2.6)
 
+
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Valid Options: Debug, Release, RelWithDebIfno" FORCE)
 endif()
@@ -33,6 +35,13 @@ link_directories(${OPENMM_INSTALL_DIR}/lib/plugins)
 set(openmm_libraries OpenMM_static)
 
 enable_testing()
+
+set(BUILD_BENCHMARK TRUE CACHE BOOL "Build benchmarking code or not")
+
+if(BUILD_BENCHMARK)
+    add_subdirectory(clfft/src)
+endif()
+
 add_subdirectory(tests)
 
 if(CORE_TYPE STREQUAL "CPU")
