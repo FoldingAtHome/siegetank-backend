@@ -34,7 +34,7 @@ OpenCLBenchmark::OpenCLBenchmark(int platformIndex, int deviceIndex) :
 
     clGetDeviceIDs(platforms[platformIndex], CL_DEVICE_TYPE_ALL, MAX_DEVICES,
                    devices, &devices_n);
-    
+
     if(deviceIndex > devices_n) {
         throw std::runtime_error("deviceIndex < devices_n");
     }
@@ -55,10 +55,11 @@ OpenCLBenchmark::OpenCLBenchmark(int platformIndex, int deviceIndex) :
     for(int i=0;i < FFTW_SIZE*2; i++) {
         host_out[i] = 0;
         if(i % 2 == 0)
-            host_in[i] = 0.1;
+            host_in[i] = 1;
         else
-            host_in[i] = -0.2;
+            host_in[i] = 2;
     }
+
     /* Prepare OpenCL memory objects and place data inside them. */
     device_in = clCreateBuffer(ctx, CL_MEM_READ_WRITE,
                                FFTW_SIZE*2*sizeof(*host_in), NULL, &err);

@@ -42,6 +42,7 @@ double CPUBenchmark::speed() {
 
 std::vector<std::complex<float> > CPUBenchmark::value() {
     vector<complex<float> > result(FFTW_SIZE);
+    fftwf_execute(plan);
     for(int i=0; i < result.size(); i++) {
         result[i] = complex<float>(out[i][0], out[i][1]);
     }

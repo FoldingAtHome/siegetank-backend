@@ -3,12 +3,14 @@
 #include <iostream>
 #include <stdexcept>
 #include <math.h>
+#include <stdlib.h>
 
 using namespace std;
 
-void testEquivalence() {
+void testEquivalence(int platformId, int deviceId) {
     vector<complex<float> > cpuResult = CPUBenchmark().value();
-    vector<complex<float> > oclResult = OpenCLBenchmark(0, 0).value();
+    vector<complex<float> > oclResult = OpenCLBenchmark(platformId, deviceId).value();
+
     if(cpuResult.size() != oclResult.size()) {
         throw std::runtime_error("results differ in size");
     }
@@ -21,15 +23,24 @@ void testEquivalence() {
 }
 
 void testCPUBenchmarkSpeed() {
-    CPUBenchmark().speed();
+    cout << "CPU Speed: " << CPUBenchmark().speed() << endl;
 }
 
-void testOpenCLBenchmarkSpeed() {
-    CPUBenchmark().speed();
+void testOpenCLBenchmarkSpeed(int platformId, int deviceId) {
+    cout << "OpenCL Speed: " << OpenCLBenchmark(platformId, deviceId).speed() << endl;
 }
 
-int main() {
-    testEquivalence();
+int main(int argc, char **argv) {
+    
+    int platformId = 0;
+    int deviceId = 0;
+
+    if(argc == 3) {
+        platformId = atoi(argv[1]);
+        deviceId = atoi(argv[2]);
+    }
+
     testCPUBenchmarkSpeed();
-    testOpenCLBenchmarkSpeed();
+    testEquivalence(platformId, deviceId);
+    testOpenCLBenchmarkSpeed(platformId, deviceId);
 }
