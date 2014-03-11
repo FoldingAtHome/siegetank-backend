@@ -26,7 +26,7 @@
 # variables.  These contain debug/optimized keywords when
 # a debugging library is found.
 #
-#   FFTW_LIBRARIES - libfftw
+#   FFTW_LIBRARIES - libfftw3f libfftw3f_threads
 #
 # Accepts the following variables as input:
 #
@@ -46,7 +46,7 @@
 if( DEFINED ENV{FFTW_ROOT} )
 	set( FFTW_ROOT $ENV{FFTW_ROOT} CACHE PATH "Environment variable defining the root of FFTW" )
 else( )
-	set( FFTW_ROOT "/usr/lib" CACHE PATH "Environment variable defining the root of FFTW" )
+	set( FFTW_ROOT "$ENV{HOME}/fftw_install" CACHE PATH "Environment variable defining the root of FFTW" )
 endif( )
 
 find_path(FFTW_INCLUDE_DIRS
@@ -65,7 +65,7 @@ find_path(FFTW_INCLUDE_DIRS
 mark_as_advanced( FFTW_INCLUDE_DIRS )
 
 find_library( FFTW_SINGLE_PRECISION_LIBRARIES
-	NAMES fftw3f libfftw3f-3
+	NAMES fftw3f
 	HINTS
 		${FFTW_ROOT}
 		${FFTW_ROOT}/lib
@@ -74,25 +74,25 @@ find_library( FFTW_SINGLE_PRECISION_LIBRARIES
 	PATHS
 		/usr/lib
 		/usr/local/lib
-	DOC "FFTW dynamic library"
+	DOC "FFTW static library"
 )
+
+find_library( FFTW_SINGLE_PRECISION_THREADS_LIBRARIES
+    NAMES fftw3f_threads
+    HINTS
+        ${FFTW_ROOT}
+        ${FFTW_ROOT}/lib
+        $ENV{FFTW_ROOT}
+        $ENV{FFTW_ROOT}/lib
+    PATHS
+        /usr/lib
+        /usr/local/lib
+    DOC "FFTW static library"
+)
+
 mark_as_advanced( FFTW_SINGLE_PRECISION_LIBRARIES )
 
-find_library( FFTW_DOUBLE_PRECISION_LIBRARIES
-	NAMES fftw3 libfftw3-3
-	HINTS
-		${FFTW_ROOT}
-		${FFTW_ROOT}/lib
-		$ENV{FFTW_ROOT}
-		$ENV{FFTW_ROOT}/lib
-	PATHS
-		/usr/lib
-		/usr/local/lib
-	DOC "FFTW dynamic library"
-)
-mark_as_advanced( FFTW_DOUBLE_PRECISION_LIBRARIES )
-
-set( FFTW_LIBRARIES ${FFTW_SINGLE_PRECISION_LIBRARIES} ${FFTW_DOUBLE_PRECISION_LIBRARIES} )
+set( FFTW_LIBRARIES ${FFTW_SINGLE_PRECISION_LIBRARIES} ${FFTW_SINGLE_PRECISION_THREADS_LIBRARIES})
 mark_as_advanced( FFTW_LIBRARIES )
 
 include( FindPackageHandleStandardArgs )

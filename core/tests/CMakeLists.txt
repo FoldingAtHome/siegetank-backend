@@ -1,15 +1,13 @@
-set(FFTW_INSTALL_DIR "~/fftw_install" CACHE PATH "FFTW install folder")
-
 if(BUILD_BENCHMARK)
     add_executable(test_benchmark test_benchmark.cpp)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../benchmark)
     include_directories(${CORE_ROOT_DIR}/clfft_install/include)
-    include_directories(${FFTW_INSTALL_DIR}/include)
+    include_directories(${FFTW_INCLUDE_DIRS})
     if(APPLE)
         set(CLFFT_LIB_PATH ${CORE_ROOT_DIR}/clfft_install/lib64/import/libclFFT.a)
     endif()
     link_directories(${FFTW_INSTALL_DIR}/lib)
-    target_link_libraries(test_benchmark ${CLFFT_LIB_PATH} ${OPENCL_LIBRARY} ${FFTW_INSTALL_DIR}/lib/libfftw3f.a ${FFTW_INSTALL_DIR}/lib/libfftw3f_threads.a Benchmark)
+    target_link_libraries(test_benchmark ${CLFFT_LIB_PATH} ${OPENCL_LIBRARY} ${FFTW_LIBRARIES} Benchmark)
 endif()
 
 # link_directories(${Core_BINARY_DIR})
