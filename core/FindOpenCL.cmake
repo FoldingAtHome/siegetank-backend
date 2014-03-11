@@ -46,13 +46,12 @@
 #    target_link_libraries(foo ${OPENCL_LIBRARIES})
 #
 #-----------------------
-if( DEFINED ENV{AMDAPPSDKROOT} )
-	set( OPENCL_ROOT $ENV{AMDAPPSDKROOT} CACHE PATH "Environment variable defining the root of OPENCL implementation" )
-elseif( DEFINED ENV{CUDA_PATH} )
-        set( OPENCL_ROOT $ENV{CUDA_PATH} CACHE PATH "Environment variable defining the root of OPENCL implementation" )
-else( )
-	set( OPENCL_ROOT "/usr/lib" CACHE PATH "Environment variable defining the root of OPENCL implementation" )
-endif( )
+
+if(DEFINED ENV{OPENCL_ROOT})
+    set(OPENCL_ROOT $ENV{OPENCL_ROOT} CACHE PATH "Environment variable defining the root of OpenMM")
+else()
+    set(OPENCL_ROOT /usr/local/cuda CACHE PATH "Environment variable defining the root of OpenMM")
+endif()
 
 find_path(OPENCL_INCLUDE_DIRS
 	NAMES OpenCL/cl.h CL/cl.h
@@ -64,9 +63,8 @@ find_path(OPENCL_INCLUDE_DIRS
 		/usr/local/include
 	DOC "OpenCL header file path"
 )
-mark_as_advanced( OPENCL_INCLUDE_DIRS )
 
-message(STATUS "----------------" ${OPENCL_INCLUDE_DIRS})
+mark_as_advanced( OPENCL_INCLUDE_DIRS )
 
 # Search for 64bit libs if FIND_LIBRARY_USE_LIB64_PATHS is set to true in the global environment, 32bit libs else
 get_property( LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS )

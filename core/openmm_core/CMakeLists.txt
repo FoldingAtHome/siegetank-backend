@@ -5,36 +5,26 @@ endif()
 find_package(OpenMM REQUIRED)
 
 file(GLOB OpenMMCoreSources "*.cpp")
-set(OpenMMCoreSources ${OpenMMCoreSources})
-
-set(OPENMM_INSTALL_DIR "~/openmm_install" CACHE FILEPATH "OpenMM 6.0 install folder")
 set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
-include_directories("${OPENMM_INSTALL_DIR}/include")
 set(CORE_VERSION 1)
 add_definitions(-DCORE_VERSION=${CORE_VERSION})
 
-link_directories(${OPENMM_INSTALL_DIR}/lib)
-link_directories(${OPENMM_INSTALL_DIR}/lib/plugins)
-set(openmm_libraries OpenMM_static)
-
 enable_testing()
 
-set(ADDITIONAL_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
-
 if(CORE_TYPE STREQUAL "CPU")
-    set(ADDITIONAL_LIBRARIES OpenMMCPU_static OpenMMPME_static ${FFTW_LIBRARIES})
+    set(ADDITIONAL_LIBRARIES ${FFTW_LIBRARIES})
     add_definitions(-DUSE_PME_PLUGIN)
     add_definitions(-DOPENMM_CPU)
 elseif(CORE_TYPE STREQUAL "OpenCL")
-    set(ADDITIONAL_LIBRARIES OpenMMOpenCL_static ${OPENCL_LIBRARIES})
+    set(ADDITIONAL_LIBRARIES ${OPENCL_LIBRARIES})
     add_definitions(-DOPENMM_OPENCL)
 elseif(CORE_TYPE STREQUAL "CUDA")
-    set(DRIVER_PATH "/usr/lib/nvidia-current/" CACHE STRING "Driver Location")
+    set(CUDA_DRIVER_PATH "/usr/lib/nvidia-current/" CACHE STRING "Driver Location")
     set(CUFFT_PATH "/usr/local/cuda/lib64" CACHE STRING "CUFFT Location")
-    link_directories(${DRIVER_PATH})
+    link_directories(${CUDA_DRIVER_PATH})
     link_directories(${CUFFT_PATH})
-    set(openmm_libraries OpenMMCUDA_static cuda cufft ${openmm_libraries})
+    set(ADDITIONAL_LIBRARIES cuda cufft)
     add_definitions(-DOPENMM_CUDA)
 else()
     message(FATAL_ERROR "Bad CORE_TYPE" )
@@ -42,5 +32,7 @@ endif()
 
 set(CORE_NAME ocore_${CORE_TYPE})
 
+include_directories(${OPENMM_INCLUDE_DIRS})
+
 add_executable(${CORE_NAME} ${OpenMMCoreSources})
-target_link_libraries(${CORE_NAME} Core ${CMAKE_THREAD_LIBS_INIT} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${openmm_libraries} ${ADDITIONAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(${CORE_NAME} Core ${CMAKE_THREAD_LIBS_INIT} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${OPENMM_LIBRARIES} ${ADDITIONAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

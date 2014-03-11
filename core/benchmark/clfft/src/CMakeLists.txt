@@ -53,6 +53,7 @@ set( CLFFT_VERSION "${CLFFT_VERSION_MAJOR}.${CLFFT_VERSION_MINOR}.${CLFFT_VERSIO
 set( CLFFT_SOVERSION 2 )
 
 set( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR} )
+set( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/../../../ )
 
 # On windows, it's convenient to change the default install prefix such that it does NOT point to 'program files'
 # Need to check out CMAKE_RUNTIME_OUTPUT_DIRECTORY variable, and see if that eliminates the need to modify install path
@@ -149,7 +150,9 @@ else( )
 endif( )
 
 # This will define OPENCL_FOUND
-find_package( OpenCL )
+find_package( OpenCL REQUIRED )
+
+include_directories(OPENCL_INCLUDE_DIRS)
 
 # This will define FFTW_FOUND
 # find_package( FFTW )
