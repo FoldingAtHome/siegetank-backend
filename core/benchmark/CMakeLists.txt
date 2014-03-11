@@ -6,6 +6,8 @@ elseif(UNIX)
     set(OPENCL_ROOT /usr/local/cuda CACHE PATH "OpenCL Directory")
 endif()
 
+message('BUILDING EXTERNAL')
+
 ExternalProject_Add(clfft
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/clfft/src
     # do NOT put quotations marks around the PATH

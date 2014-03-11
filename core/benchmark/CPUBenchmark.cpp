@@ -5,24 +5,25 @@
 #include <unistd.h>
 #include <vector>
 #include <complex>
+#include <stdlib.h>
 
 using namespace std;
 
-CPUBenchmark::CPUBenchmark() {
-    in = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FFTW_SIZE);
-    out = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FFTW_SIZE);
+CPUBenchmark::CPUBenchmark(int fftw_size) : Benchmark(fftw_size) {
+    in = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * fftw_size);
+    out = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * fftw_size);
     int ret = fftwf_init_threads();
 #ifndef _WIN32
     int numCPU = sysconf( _SC_NPROCESSORS_ONLN );
 #endif
     fftwf_plan_with_nthreads(numCPU);
-    plan = fftwf_plan_dft_1d(FFTW_SIZE, in, out, FFTW_FORWARD, FFTW_MEASURE);
+    plan = fftwf_plan_dft_1d(fftw_size, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
     if(!ret)
         throw std::runtime_error("Could not initialize fftw");
-
-    for(int i = 0; i < FFTW_SIZE; i++) {
-        in[i][0] = 1;
-        in[i][1] = 2;
+    srand(1); // reset seed
+    for(int i=0; i < fftw_size; i++) {
+        in[i][0] = (float) rand()/RAND_MAX;
+        in[i][1] = (float) rand()/RAND_MAX;
     }
 }
 
@@ -41,7 +42,7 @@ double CPUBenchmark::speed() {
 }
 
 std::vector<std::complex<float> > CPUBenchmark::value() {
-    vector<complex<float> > result(FFTW_SIZE);
+    vector<complex<float> > result(fftw_size);
     fftwf_execute(plan);
     for(int i=0; i < result.size(); i++) {
         result[i] = complex<float>(out[i][0], out[i][1]);

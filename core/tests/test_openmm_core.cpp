@@ -1,4 +1,4 @@
-#include <openmm/OpenMMCore.h>
+#include <OpenMMCore.h>
 #include <map>
 #include <string>
 #include <stdexcept>

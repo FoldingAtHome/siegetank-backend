@@ -4,20 +4,22 @@
 #include <complex>
 #include <vector>
 
-//static const int FFTW_SIZE = 64;
-static const int FFTW_SIZE = 8388608;
-//static const int FFTW_SIZE = 262144;
-
 class Benchmark {
 
 public:
 
-    Benchmark() {};
+    Benchmark(int fftw_size) : fftw_size(fftw_size) {};
 
     virtual double speed() = 0;
 
     // get the value of the fft
     virtual std::vector<std::complex<float> > value() = 0;
+
+protected:
+
+    static const int default_fftw_size = 8388608;
+
+    const int fftw_size;
 
 };
 

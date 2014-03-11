@@ -8,7 +8,7 @@ class OpenCLBenchmark : public Benchmark {
 
 public:
 
-    OpenCLBenchmark(int platformIndex, int deviceIndex);
+    OpenCLBenchmark(int platformIndex, int deviceIndex, int fftw_size = Benchmark::default_fftw_size);
 
     double speed();
 

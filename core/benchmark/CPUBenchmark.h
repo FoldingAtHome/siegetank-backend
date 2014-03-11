@@ -8,7 +8,7 @@ class CPUBenchmark : public Benchmark {
 
 public:
 
-    CPUBenchmark();
+    CPUBenchmark(int fftw_size = Benchmark::default_fftw_size);
 
     double speed();
 

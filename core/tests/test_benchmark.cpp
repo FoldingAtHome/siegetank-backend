@@ -14,9 +14,16 @@ void testEquivalence(int platformId, int deviceId) {
     if(cpuResult.size() != oclResult.size()) {
         throw std::runtime_error("results differ in size");
     }
+
     for(int i=0; i < cpuResult.size(); i++) {
         complex<float> diff = cpuResult[i] - oclResult[i];
-        if(fabs(diff.real()) > 1e-6 || fabs(diff.imag()) > 1e-6) {
+        double tolerance = 1e-5*abs(cpuResult[i]);
+        double error = fabs(abs(cpuResult[i])-abs(oclResult[i]));
+        if(error > tolerance) {
+            cout << "test, threshold: " << error << " " << tolerance << endl;
+            cout << cpuResult[i] << endl;
+            cout << oclResult[i] << endl;
+            cout << i << " " << diff << endl;
             throw std::runtime_error("results differ");
         }
     }
@@ -41,6 +48,6 @@ int main(int argc, char **argv) {
     }
 
     testCPUBenchmarkSpeed();
-    testEquivalence(platformId, deviceId);
     testOpenCLBenchmarkSpeed(platformId, deviceId);
+    testEquivalence(platformId, deviceId);
 }

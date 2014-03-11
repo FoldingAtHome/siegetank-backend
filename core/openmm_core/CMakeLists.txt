@@ -2,14 +2,13 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Valid Options: Debug, Release, RelWithDebIfno" FORCE)
 endif()
 
+find_package(OpenMM REQUIRED)
+
 file(GLOB OpenMMCoreSources "*.cpp")
 set(OpenMMCoreSources ${OpenMMCoreSources})
 
 set(OPENMM_INSTALL_DIR "~/openmm_install" CACHE FILEPATH "OpenMM 6.0 install folder")
 set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
-
-find_package(OpenSSL)
-find_package(Threads)
 
 include_directories("${OPENMM_INSTALL_DIR}/include")
 set(CORE_VERSION 1)
@@ -44,5 +43,4 @@ endif()
 set(CORE_NAME ocore_${CORE_TYPE})
 
 add_executable(${CORE_NAME} ${OpenMMCoreSources})
-# Note: order matters here!
-target_link_libraries(${CORE_NAME} Core ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${openmm_libraries} ${ADDITIONAL_LIBRARIES})
+target_link_libraries(${CORE_NAME} Core ${CMAKE_THREAD_LIBS_INIT} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${openmm_libraries} ${ADDITIONAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})

@@ -66,6 +66,8 @@ find_path(OPENCL_INCLUDE_DIRS
 )
 mark_as_advanced( OPENCL_INCLUDE_DIRS )
 
+message(STATUS "----------------" ${OPENCL_INCLUDE_DIRS})
+
 # Search for 64bit libs if FIND_LIBRARY_USE_LIB64_PATHS is set to true in the global environment, 32bit libs else
 get_property( LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS )
 
