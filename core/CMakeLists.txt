@@ -36,12 +36,6 @@ set(openmm_libraries OpenMM_static)
 
 enable_testing()
 
-set(BUILD_BENCHMARK TRUE CACHE BOOL "Build benchmarking code or not")
-
-if(BUILD_BENCHMARK)
-    add_subdirectory(clfft/src)
-endif()
-
 add_subdirectory(tests)
 
 if(CORE_TYPE STREQUAL "CPU")

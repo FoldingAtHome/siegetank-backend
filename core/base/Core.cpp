@@ -168,7 +168,7 @@ void Core::_initialize_session(const Poco::URI &cc_uri) {
     std::string ssl_string;
 
     // hacky as hell :)
-    #include <root_certs.h>
+    #include "root_certs.h"
 
     stringstream ss;
     ss << ssl_string;
