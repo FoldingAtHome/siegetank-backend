@@ -87,7 +87,7 @@ find_library( FFTW_SINGLE_PRECISION_THREADS_LIBRARIES
     PATHS
         /usr/lib
         /usr/local/lib
-    DOC "FFTW static library"
+    DOC "FFTW static threading library"
 )
 
 mark_as_advanced( FFTW_SINGLE_PRECISION_LIBRARIES )

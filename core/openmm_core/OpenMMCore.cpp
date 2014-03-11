@@ -14,10 +14,10 @@
 #include <ctime>
 #include <sstream>
 #include <OpenMM.h>
-#include <XTCWriter.h>
-#include <OpenMMCore.h>
-#include <kbhit.h>
-#include <StateTests.h>
+#include "XTCWriter.h"
+#include "OpenMMCore.h"
+#include "kbhit.h"
+#include "StateTests.h"
 
 using namespace std;
 

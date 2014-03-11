@@ -152,7 +152,7 @@ endif( )
 find_package( OpenCL )
 
 # This will define FFTW_FOUND
-find_package( FFTW )
+# find_package( FFTW )
 
 if( (${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION} VERSION_LESS 2.8) ) 
 	message( STATUS "Cmake version 2.8 or greater needed to use GTest" )
