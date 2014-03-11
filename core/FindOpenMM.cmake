@@ -70,5 +70,5 @@ include(FindPackageHandleStandardArgs)
 FIND_PACKAGE_HANDLE_STANDARD_ARGS(OpenMM DEFAULT_MSG OPENMM_LIBRARIES OPENMM_INCLUDE_DIRS)
 
 if( NOT OPENMM_FOUND )
-    message(STATUS "FindOpenMM Failed to locate necessary libraries")
+    message(STATUS "FindOpenMM failed to locate necessary libraries")
 endif()

@@ -34,14 +34,3 @@ add_test(test_core test_core)
 #     add_test(${test_root} ${Core_BINARY_DIR}/${test_root})
 # endforeach()
 #
-
-add_executable(test_openmm_core test_openmm_core.cpp)
-target_link_libraries(test_openmm_core ${OPENMM_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-
-# set(test_openmm_progs "test_openmm_core.cpp")
-# foreach(test_prog ${test_openmm_progs})
-#    get_filename_component(test_root ${test_prog} NAME_WE)
-#     add_executable(${test_root} ${test_prog} ${OpenMMCoreSources})
-#     target_link_libraries(${test_root} ${poco_libraries} ${openmm_libraries} ${OPENSSL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
-#     add_test(${test_root} ${Core_BINARY_DIR}/${test_root})
-# endforeach()

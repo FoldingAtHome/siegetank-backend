@@ -3,8 +3,11 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(OpenMM REQUIRED)
+include_directories(${OPENMM_INCLUDE_DIRS})
 
 file(GLOB OpenMMCoreSources "*.cpp")
+list(REMOVE_ITEM OpenMMCoreSources main.cpp)
+
 set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
 set(CORE_VERSION 1)
@@ -30,9 +33,11 @@ else()
     message(FATAL_ERROR "Bad CORE_TYPE" )
 endif()
 
+set(OPENMM_CORE_DEPENDENCIES ${CMAKE_THREAD_LIBS_INIT} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${OPENMM_LIBRARIES} ${ADDITIONAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+mark_as_advanced(OPENMM_CORE_DEPENDENCIES)
+
+add_library(OpenMMCore STATIC ${OpenMMCoreSources})
 set(CORE_NAME ocore_${CORE_TYPE})
-
-include_directories(${OPENMM_INCLUDE_DIRS})
-
-add_executable(${CORE_NAME} ${OpenMMCoreSources})
-target_link_libraries(${CORE_NAME} Core ${CMAKE_THREAD_LIBS_INIT} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${OPENMM_LIBRARIES} ${ADDITIONAL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+add_executable(${CORE_NAME} main.cpp)
+target_link_libraries(${CORE_NAME} OpenMMCore Core ${OPENMM_CORE_DEPENDENCIES})
+add_subdirectory(tests)
