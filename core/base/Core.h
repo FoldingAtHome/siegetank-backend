@@ -31,13 +31,13 @@ public:
     _target_id.
     */
     void startStream(const Poco::URI &cc_uri,
-                      std::map<std::string, std::string> &target_files,
-                      std::map<std::string, std::string> &stream_files);
+                     std::map<std::string, std::string> &target_files,
+                     std::map<std::string, std::string> &stream_files);
 
     /* Send frame files to the WS. This method automatically base64 encodes
        the file */
-    void sendFrameFiles(const std::map<std::string, std::string> &files,
-                          int frame_count = 1, bool gzip=false) const;
+    void sendFrame(const std::map<std::string, std::string> &files,
+                   int frame_count=1, float speed=0, bool gzip=false) const;
 
     /* Send checkpoint files to the WS. This method automatically base64
        encodes the files, and adds '.b64' to the suffix. If gzip is true, the 

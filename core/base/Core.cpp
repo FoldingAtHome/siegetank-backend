@@ -306,15 +306,18 @@ void Core::startStream(const Poco::URI &cc_uri,
     }
 }
 
-void Core::sendFrameFiles(const map<string, string> &files, 
-    int frame_count, bool gzip) const {
+void Core::sendFrame(const map<string, string> &files, 
+    int frame_count, float speed, bool gzip) const {
 
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
     stringstream frame_count_str;
     frame_count_str << frame_count;
+    stringstream speed_str;
+    speed_str << speed;
     string message;
     message += "{";
     message += "\"frames\":"+frame_count_str.str()+",";
+    message += "\"speed\":"+speed_str.str()+",";
     message += "\"files\":{";
     for(map<string, string>::const_iterator it=files.begin();
         it != files.end(); it++) {
@@ -338,7 +341,7 @@ void Core::sendFrameFiles(const map<string, string> &files,
     Poco::Net::HTTPResponse response;
     _session->receiveResponse(response);
     if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::sendFrameFiles bad status code");
+        throw std::runtime_error("Core::sendFrame bad status code");
     }
 }
 

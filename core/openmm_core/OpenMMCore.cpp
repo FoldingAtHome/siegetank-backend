@@ -308,7 +308,7 @@ void OpenMMCore::checkFrameWrite(int current_step) {
         xtcwriter.append(current_step, state.getTime(), box, positions);
         map<string, string> frame_files;
         frame_files["frames.xtc"] = frame_stream.str();
-        sendFrameFiles(frame_files);
+        sendFrame(frame_files);
         // write checkpoint
         ostringstream checkpoint;
         OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);

@@ -149,7 +149,7 @@ void test_initialize_and_start() {
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.sendFrameFiles(frame_files, 1);
+        core.sendFrame(frame_files);
     }
 
     core.sendHeartbeat();
@@ -162,7 +162,20 @@ void test_initialize_and_start() {
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.sendFrameFiles(frame_files, 1, true);
+        core.sendFrame(frame_files, 1, 35.9);
+    }
+
+    core.sendHeartbeat();
+
+    for(int i=0; i < 10; i++) {
+        string filename1("frames.xtc");
+        string filedata1 = gen_random(100);
+        string filename2("log.txt");
+        string filedata2("derpderp.txt");
+        map<string, string> frame_files;
+        frame_files[filename1] = filedata1;
+        frame_files[filename2] = filedata2;
+        core.sendFrame(frame_files, 1, 38.9, true);
     }
 
     core.sendHeartbeat();
@@ -181,7 +194,7 @@ void test_initialize_and_start() {
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
         int count = (rand()%100)+1;
-        core.sendFrameFiles(frame_files, count);
+        core.sendFrame(frame_files, count);
     }
 
     core.sendHeartbeat();
