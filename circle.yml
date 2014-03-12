@@ -28,6 +28,7 @@ dependencies:
     - cd ../; tar xvf backend/fftw_install.tar.gz
     - cd core && mkdir build && cd build && cmake ../ -DPOCO_ROOT="/home/ubuntu/fftw_install" -DPOCO_ROOT=/home/ubuntu/poco152_install -DOPENMM_ROOT=/home/ubuntu/openmm_install -DCMAKE_BUILD_TYPE=Release && make
 
+
   cache_directories:
     - "poco-1.5.2-all"
     - "../poco152_install"
