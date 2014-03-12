@@ -69,25 +69,26 @@ mark_as_advanced( OPENCL_INCLUDE_DIRS )
 # Search for 64bit libs if FIND_LIBRARY_USE_LIB64_PATHS is set to true in the global environment, 32bit libs else
 get_property( LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS )
 
-if( LIB64 )
-	find_library( OPENCL_LIBRARIES
-		NAMES OpenCL
-		HINTS
-			${OPENCL_ROOT}/lib
-			ENV AMDAPPSDKROOT/lib
-		DOC "OpenCL dynamic library path"
-		PATH_SUFFIXES x86_64 x64
-	)
-else( )
-	find_library( OPENCL_LIBRARIES
-		NAMES OpenCL
-		HINTS
-			${OPENCL_ROOT}/lib
-			ENV AMDAPPSDKROOT/lib
-		DOC "OpenCL dynamic library path"
-		PATH_SUFFIXES x86 Win32
-	)
-endif( )
+#if( LIB64 )
+find_library( OPENCL_LIBRARIES
+	NAMES OpenCL
+	HINTS
+		${OPENCL_ROOT}/lib
+		${OPENCL_ROOT}/lib64  # intel
+		ENV AMDAPPSDKROOT/lib
+	DOC "OpenCL dynamic library path"
+	PATH_SUFFIXES x86_64 x64
+)
+#else( )
+#	find_library( OPENCL_LIBRARIES
+# 		NAMES OpenCL
+# 		HINTS
+# 			${OPENCL_ROOT}/lib
+# 			ENV AMDAPPSDKROOT/lib
+# 		DOC "OpenCL dynamic library path"
+# 		PATH_SUFFIXES x86 Win32
+# 	)
+# endif( )
 mark_as_advanced( OPENCL_LIBRARIES )
 
 include( FindPackageHandleStandardArgs )
