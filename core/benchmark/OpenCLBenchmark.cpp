@@ -10,7 +10,8 @@
 
 using namespace std;
 
-OpenCLBenchmark::OpenCLBenchmark(int platformIndex, int deviceIndex, int fftw_size) :
+OpenCLBenchmark::OpenCLBenchmark(int platformIndex, int deviceIndex,
+                                 int fftw_size) :
     Benchmark(fftw_size),
     host_in(NULL),
     host_out(NULL) {
@@ -88,7 +89,7 @@ double OpenCLBenchmark::speed() {
     cl_int err;
     timeval start;
     gettimeofday(&start, NULL);
-    const int iterations = 17;
+    const int iterations = 7;
     for(int i=0; i < iterations; i++) {
         err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1,
                                     &queue, 0, NULL, NULL, &device_in,
@@ -99,7 +100,10 @@ double OpenCLBenchmark::speed() {
     gettimeofday(&end, NULL);
     double diff_sec = (end.tv_sec+end.tv_usec/1e6) - 
                       (start.tv_sec+start.tv_usec/1e6);
-    return iterations/diff_sec;
+    double step_speed = iterations/diff_sec;
+    average = (average*average_n+step_speed)/(average_n+1);
+    average_n += 1;
+    return average;
 }
 
 std::vector<std::complex<float> > OpenCLBenchmark::value() {

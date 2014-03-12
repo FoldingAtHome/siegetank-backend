@@ -30,7 +30,7 @@ CPUBenchmark::CPUBenchmark(int fftw_size) : Benchmark(fftw_size) {
 double CPUBenchmark::speed() {
     timeval start;
     gettimeofday(&start, NULL);
-    const int iterations = 20;
+    const int iterations = 2;
     for(int i=0; i < iterations; i++) {
         fftwf_execute(plan);
     }
@@ -38,7 +38,10 @@ double CPUBenchmark::speed() {
     gettimeofday(&end, NULL);
     double diff_sec = (end.tv_sec+end.tv_usec/1e6) - 
                       (start.tv_sec+start.tv_usec/1e6);
-    return iterations/diff_sec;
+    double step_speed = iterations/diff_sec;
+    average = (average*average_n+step_speed)/(average_n+1);
+    average_n += 1;
+    return average;
 }
 
 std::vector<std::complex<float> > CPUBenchmark::value() {

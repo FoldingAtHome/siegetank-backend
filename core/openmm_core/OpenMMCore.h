@@ -4,6 +4,7 @@
 #include "Core.h"
 #include <OpenMM.h>
 #include <sstream>
+#include <Benchmark.h>
 
 class OpenMMCore : public Core {
 
@@ -43,6 +44,11 @@ private:
     OpenMM::Context* _ref_context;
     OpenMM::Context* _core_context;
     OpenMM::System* _shared_system;
+
+#ifdef USE_BENCHMARK
+    Benchmark* _benchmark;
+    double _current_speed;
+#endif
 
     std::string _checkpoint_xml;
 

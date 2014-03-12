@@ -16,6 +16,7 @@ ExternalProject_Add(clfft
 
 file(GLOB BenchmarkSources *.cpp)
 ExternalProject_Get_Property(clfft install_dir)
+set(CLFFT_INSTALL_DIR ${install_dir})
 include_directories(${OPENCL_ROOT}/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/clfft/src/include)
 include_directories(${install_dir}/include)

@@ -104,6 +104,7 @@ class ActiveStream(Entity):
               'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
               'frame_hash': str,  # md5sum of the received frame
+              'speed': float,  # hardware speed
               'buffer_files': {str},  # set of frame files sent
               }
 
@@ -584,8 +585,9 @@ class CoreFrameHandler(BaseHandler):
                     "files" : {
                         "frames.xtc.b64": "file.b64",
                         "log.txt.gz.b64": "file.gz.b64"
-                    }
-                    "frames": 25  // optional, number of frames in the files
+                    },
+                    "frames": 25,  // optional, number of frames in the files
+                    "speed": 0  // speed of the machine in 1D 2^23 fft/sec
                 }
 
             :status 200: OK
@@ -635,6 +637,10 @@ class CoreFrameHandler(BaseHandler):
             frame_count = 1
         files = content['files']
         streams_folder = self.application.streams_folder
+
+        if 'speed' in content:
+            speed = min(content['speed'], 350.0)
+            active_stream.hset('speed', speed)
 
         # empty the set
         active_stream.sremall('buffer_files')
