@@ -1,6 +1,7 @@
 # test_benchmark.cpp
 if(BUILD_BENCHMARK)
     add_executable(test_benchmark test_benchmark.cpp)
+
     include_directories(${OPENCL_INCLUDE_DIRS})
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../benchmark)
     include_directories(${CORE_ROOT_DIR}/clfft_install/include)
@@ -10,6 +11,17 @@ if(BUILD_BENCHMARK)
     endif()
     link_directories(${FFTW_INSTALL_DIR}/lib)
     target_link_libraries(test_benchmark Benchmark ${OPENCL_LIBRARIES} ${CLFFT_LIB_PATH} ${OPENCL_LIBRARIES} ${FFTW_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+
+    STRING(FIND ${OPENCL_INCLUDE_DIRS} "intel" IS_INTEL)
+    STRING(FIND ${OPENCL_INCLUDE_DIRS} "Framework" APPLE_OPENCL)
+    if(${IS_INTEL} GREATER -1 OR ${APPLE_OPENCL} GREATER -1)
+        message(STATUS '----TRUE' ${IS_INTEL} ${APPLE_OPENCL})
+        add_test(test_benchmark test_benchmark 0 1 )
+    else()
+        message(STATUS '----FALSE' ${IS_INTEL} ${APPLE_OPENCL})
+        add_test(test_benchmark test_benchmark 0 0)
+    endif()
+
 endif()
 
 add_executable(test_core test_core.cpp)

@@ -17,7 +17,7 @@ void testEquivalence(int platformId, int deviceId) {
 
     for(int i=0; i < cpuResult.size(); i++) {
         complex<float> diff = cpuResult[i] - oclResult[i];
-        double tolerance = 1e-5*abs(cpuResult[i]);
+        double tolerance = 1e-3*abs(cpuResult[i]);
         double error = fabs(abs(cpuResult[i])-abs(oclResult[i]));
         if(error > tolerance) {
             cout << "test, threshold: " << error << " " << tolerance << endl;
