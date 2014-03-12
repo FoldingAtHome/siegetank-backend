@@ -35,7 +35,7 @@ dependencies:
 test:
   post:
     - cd core/build; ../tests/start_services
-    - cd core/build; make test
+    - cd core/build; make test; ../tests/stop_services
 
 deployment:
   production:

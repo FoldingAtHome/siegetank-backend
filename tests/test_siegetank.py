@@ -98,7 +98,7 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.description, target.description)
         self.assertEqual(target.files, target.files)
         self.assertEqual(target.allowed_ws, [])
-        self.assertAlmostEqual(target.creation_date, creation_time, places=1)
+        self.assertAlmostEqual(target.creation_date, creation_time, places=0)
         self.assertEqual(siegetank.get_targets(self.cc_uri), [target.id])
 
         stream_ids = set()
