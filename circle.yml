@@ -31,8 +31,6 @@ dependencies:
   cache_directories:
     - "poco-1.5.2-all"
     - "../poco152_install"
-    - "../openmm_install"
-    - "../fftw_install"
 
 test:
   post:
