@@ -14,11 +14,12 @@ if(BUILD_BENCHMARK)
 
     STRING(FIND ${OPENCL_INCLUDE_DIRS} "intel" IS_INTEL)
     STRING(FIND ${OPENCL_INCLUDE_DIRS} "Framework" APPLE_OPENCL)
-    if(${IS_INTEL} GREATER -1 OR ${APPLE_OPENCL} GREATER -1)
-        message(STATUS '----TRUE' ${IS_INTEL} ${APPLE_OPENCL})
-        add_test(test_benchmark test_benchmark 0 1 )
+
+    if(${IS_INTEL} GREATER -1)
+        #add_test(test_benchmark test_benchmark 0 1)
+    elseif(${APPLE_OPENCL} GREATER -1)
+        add_test(test_benchmark test_benchmark 0 1)
     else()
-        message(STATUS '----FALSE' ${IS_INTEL} ${APPLE_OPENCL})
         add_test(test_benchmark test_benchmark 0 0)
     endif()
 
