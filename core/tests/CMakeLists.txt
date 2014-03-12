@@ -9,7 +9,7 @@ if(BUILD_BENCHMARK)
         set(CLFFT_LIB_PATH ${CORE_ROOT_DIR}/clfft_install/lib64/import/libclFFT.a)
     endif()
     link_directories(${FFTW_INSTALL_DIR}/lib)
-    target_link_libraries(test_benchmark Benchmark ${OPENCL_LIBRARIES} ${CLFFT_LIB_PATH} ${OPENCL_LIBRARIES} ${FFTW_LIBRARIES})
+    target_link_libraries(test_benchmark Benchmark ${OPENCL_LIBRARIES} ${CLFFT_LIB_PATH} ${OPENCL_LIBRARIES} ${FFTW_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 endif()
 
 add_executable(test_core test_core.cpp)
