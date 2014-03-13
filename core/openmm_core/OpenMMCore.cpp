@@ -20,12 +20,15 @@
 #include "StateTests.h"
 
 #ifdef USE_BENCHMARK
+    #include "OpenMMBenchmark.h"
+/*
     #ifdef OPENMM_CPU
         #include <CPUBenchmark.h>
     #endif
     #ifdef OPENMM_OPENCL
         #include <OpenCLBenchmark.h>
     #endif
+*/
 #endif
 
 using namespace std;
@@ -157,7 +160,7 @@ static void status_header(ostream &out) {
         << setw(10) << "stream"
         << setw(10) << "tpf"
         << setw(9) << "ns/day"
-        << setw(10) << "ffts/sec"
+        << setw(10) << "pps"
         << setw(8) << "frames"
         << setw(11) << "steps";
     out << "\n";
@@ -167,13 +170,13 @@ void OpenMMCore::initialize(string cc_uri) {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
     registerCpuPlatform();
-    #ifdef USE_BENCHMARK
-        _benchmark = new CPUBenchmark();
-    #endif
     #ifdef USE_PME_PLUGIN
         registerCpuPmeKernelFactories();
     #endif
     string platform_name("CPU");
+    #ifdef USE_BENCHMARK
+        _benchmark = new OpenMMBenchmark(platform_name);
+    #endif
 #elif OPENMM_CUDA
     registerCudaPlatform();
     string platform_name("CUDA");
@@ -245,6 +248,7 @@ void OpenMMCore::initialize(string cc_uri) {
     cout << "ok";
     _ref_context->setState(*initial_state);
     _core_context->setState(*initial_state);
+    delete(initial_state);
     changemode(0);
 }
 

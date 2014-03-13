@@ -89,7 +89,7 @@ double OpenCLBenchmark::speed() {
     cl_int err;
     timeval start;
     gettimeofday(&start, NULL);
-    const int iterations = 7;
+    const int iterations = 1000;
     for(int i=0; i < iterations; i++) {
         err = clfftEnqueueTransform(planHandle, CLFFT_FORWARD, 1,
                                     &queue, 0, NULL, NULL, &device_in,

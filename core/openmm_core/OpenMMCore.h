@@ -4,7 +4,10 @@
 #include "Core.h"
 #include <OpenMM.h>
 #include <sstream>
-#include <Benchmark.h>
+
+#ifdef USE_BENCHMARK
+    #include "OpenMMBenchmark.h"
+#endif
 
 class OpenMMCore : public Core {
 
@@ -46,7 +49,7 @@ private:
     OpenMM::System* _shared_system;
 
 #ifdef USE_BENCHMARK
-    Benchmark* _benchmark;
+    OpenMMBenchmark* _benchmark;
     double _current_speed;
 #endif
 

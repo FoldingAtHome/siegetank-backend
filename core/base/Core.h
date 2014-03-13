@@ -89,7 +89,7 @@ protected:
     /* where the log data is being piped to */
     std::ostream& _logstream;
 
-    /* time the job started */
+    /* time the job started in seconds since epoch */
     const int _start_time;
     
     std::string _stream_id;

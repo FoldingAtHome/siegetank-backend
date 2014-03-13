@@ -114,7 +114,7 @@ Core::Core(int checkpoint_send_interval,
     _logstream(_logstring),
     _checkpoint_send_interval(checkpoint_send_interval),
     _start_time(time(NULL)),
-    _heartbeat_interval(15),
+    _heartbeat_interval(60),
     _session(NULL),
     _engine(engine),
     _engine_version(engine_version) {
