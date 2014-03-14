@@ -15,16 +15,15 @@ public:
     // return the speed
     virtual double speed();
 
-    double averageSpeed() const { return average; };
-
 private:
 
-    double average;
-
     int start_time;
+
     double time_elapsed;
 
     long long total_iterations;
+
+    std::string platformName;
 
     OpenMM::Context *ctxt;
 

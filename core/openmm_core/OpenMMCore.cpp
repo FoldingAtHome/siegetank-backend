@@ -182,12 +182,12 @@ void OpenMMCore::initialize(string cc_uri) {
     string platform_name("CUDA");
 #elif OPENMM_OPENCL
     registerOpenCLPlatform();
+    string platform_name("OpenCL");
     #ifdef USE_BENCHMARK
         int platformIndex = 0;
         int deviceIndex = 0;
-        _benchmark = new OpenCLBenchmark(platformIndex,deviceIndex);
+        _benchmark = new OpenMMBenchmark(platform_name);
     #endif
-    string platform_name("OpenCL");
 #else
     BAD DEFINE
 #endif
@@ -341,6 +341,7 @@ void OpenMMCore::main() {
         long long current_step = 0;
         changemode(1);
         status_header(cout);
+        double benchmark_speed = 0;
         while(true) {
             if(current_step % 10 == 0) {
                 update_status(target_id,
@@ -348,10 +349,8 @@ void OpenMMCore::main() {
                               timePerFrame(current_step),
                               nsPerDay(current_step),
                               current_step/_frame_write_interval,
-                              current_step
-                              #ifdef USE_BENCHMARK
-                              ,_benchmark->averageSpeed()
-                              #endif
+                              current_step,
+                              benchmark_speed
                               );
             }
             if(exit()) {
@@ -369,7 +368,7 @@ void OpenMMCore::main() {
             checkFrameWrite(current_step);
             if(shouldHeartbeat()) { 
                 #ifdef USE_BENCHMARK
-                _benchmark->speed();
+                benchmark_speed = _benchmark->speed();
                 #endif
                 sendHeartbeat();
             }

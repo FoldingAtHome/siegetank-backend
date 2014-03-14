@@ -7,11 +7,12 @@
 using namespace OpenMM;
 using namespace std;
 
-OpenMMBenchmark::OpenMMBenchmark(string platformName, 
+OpenMMBenchmark::OpenMMBenchmark(string platform, 
                                  std::map<std::string, std::string> contextProperties) :
                                  total_iterations(0),
-                                 time_elapsed(5) {
+                                 time_elapsed(0) {
     
+    platformName = platform;
     timeval start;
     gettimeofday(&start, NULL);
     ifstream sys_stream("B_System.xml", ios::in | ios::binary);
@@ -29,15 +30,18 @@ OpenMMBenchmark::OpenMMBenchmark(string platformName,
     double diff_sec = (end.tv_sec+end.tv_usec/1e6) - 
                       (start.tv_sec+start.tv_usec/1e6);
 
+    time_elapsed += diff_sec;
+
     cout << "Initializing constructors took " << diff_sec << " sec" << endl;
 }
 
 double OpenMMBenchmark::speed() {
-    timeval start;
-    gettimeofday(&start, NULL);
-    const int iterations = 15;
+    const int iterations(platformName == "OpenCL" || platformName == "CUDA"
+                         ? 35 : 15);
     total_iterations += iterations;
     ctxt->setState(*initial_state);
+    timeval start;
+    gettimeofday(&start, NULL);
     intg->step(iterations);
     ctxt->getState(OpenMM::State::Positions  | OpenMM::State::Velocities | 
                    OpenMM::State::Parameters | OpenMM::State::Energy | 
@@ -46,10 +50,7 @@ double OpenMMBenchmark::speed() {
     gettimeofday(&end, NULL);
     time_elapsed += (end.tv_sec+end.tv_usec/1e6) - 
                     (start.tv_sec+start.tv_usec/1e6);
-    average = total_iterations/time_elapsed;
-
-    return average;
-}
+    return total_iterations/time_elapsed;}
 
 OpenMMBenchmark::~OpenMMBenchmark() {
     delete ctxt;
