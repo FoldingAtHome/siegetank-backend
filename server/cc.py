@@ -1202,6 +1202,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         self.base_init(cc_name, redis_options, mongo_options)
         self.cc_pass = cc_pass
         self.targets_folder = targets_folder
+        if not os.path.exists(targets_folder):
+            os.makedirs(targets_folder)
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
             (r'/managers/auth', AuthManagerHandler),

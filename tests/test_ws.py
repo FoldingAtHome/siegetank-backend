@@ -543,8 +543,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         active_stream = ws.ActiveStream(stream_id, self.ws.db)
         stream = ws.Stream(stream_id, self.ws.db)
 
-        speed = 138.33
-
         # PUT 20 frames
         for count in range(n_frames):
             frame_bin = os.urandom(1024)
@@ -552,14 +550,12 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             body = {
                 'files': {'frames.xtc.b64':
                           base64.b64encode(frame_bin).decode()},
-                'speed': speed
                 }
             response = self.fetch('/core/frame', headers=headers,
                                   body=json.dumps(body), method='PUT')
             self.assertEqual(response.code, 200)
 
         self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
-        self.assertEqual(active_stream.hget('speed'), speed)
 
         streams_dir = self.ws.streams_folder
         buffer_path = os.path.join(streams_dir, stream_id, 'buffer_frames.xtc')

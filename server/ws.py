@@ -414,7 +414,7 @@ class PostStreamHandler(BaseHandler):
                 self.write(json.dumps({'error': 'inconsistent stream files'}))
                 return
 
-        stream_id = str(uuid.uuid4())
+        stream_id = str(uuid.uuid4())+':'+self.application.name
         stream_dir = os.path.join(self.application.streams_folder, stream_id)
         if not os.path.exists(stream_dir):
             os.makedirs(stream_dir)
@@ -973,6 +973,10 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
         self.command_centers = command_centers
         self.cc_ips = set()
 
+        if not os.path.exists(targets_folder):
+            os.makedirs(targets_folder)
+        if not os.path.exists(streams_folder):
+            os.makedirs(streams_folder)
         # Notify the command centers that this workserver is online
         if command_centers:
             for cc_name, properties in command_centers.items():
