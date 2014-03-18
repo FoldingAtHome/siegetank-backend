@@ -11,8 +11,6 @@ find_package(Threads REQUIRED)
 
 include_directories(${POCO_INCLUDE_DIRS})
 
-set(BUILD_BENCHMARK TRUE CACHE BOOL "Whether or not to build the benchmark")
-
 include_directories(base)
 set(CORE_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 

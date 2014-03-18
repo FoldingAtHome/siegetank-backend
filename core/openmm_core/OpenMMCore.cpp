@@ -19,18 +19,6 @@
 #include "kbhit.h"
 #include "StateTests.h"
 
-#ifdef USE_BENCHMARK
-    #include "OpenMMBenchmark.h"
-/*
-    #ifdef OPENMM_CPU
-        #include <CPUBenchmark.h>
-    #endif
-    #ifdef OPENMM_OPENCL
-        #include <OpenCLBenchmark.h>
-    #endif
-*/
-#endif
-
 using namespace std;
 
 extern "C" void registerSerializationProxies();
@@ -44,17 +32,9 @@ extern "C" void registerCudaPlatform();
 OpenMMCore::OpenMMCore(int checkpoint_send_interval):
     Core(checkpoint_send_interval, "openmm", "6.0") {
 
-#ifdef USE_BENCHMARK
-    _benchmark = NULL;
-    _current_speed = 0;
-#endif
-
 }
 
 OpenMMCore::~OpenMMCore() {
-#ifdef USE_BENCHMARK
-    delete(_benchmark);
-#endif
     // renable proper keyboard input
     changemode(0);
 }
@@ -110,12 +90,11 @@ void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
     _logstream << "    Found: " << numAtoms << " atoms, " << sys->getNumForces() << " forces." << std::endl;
 }
 
-static void update_status(string target_id, string stream_id, int seconds_per_frame, 
-                          float ns_per_day, int frames, long long steps, float speed=0, ostream &out = cout) {
+static string format_time(int input_seconds) {
 
-    int hours = seconds_per_frame/(60*60);
-    int minutes = (seconds_per_frame-hours*60*60)/60;
-    int seconds = seconds_per_frame%60;
+    int hours = input_seconds/(60*60);
+    int minutes = (input_seconds-hours*60*60)/60;
+    int seconds = input_seconds%60;
 
     stringstream tpf;
     // hours are added conditionally
@@ -143,12 +122,22 @@ static void update_status(string target_id, string stream_id, int seconds_per_fr
         tpf << "00";
     }
 
+    return tpf.str();
+}
+
+static void update_status(string target_id,
+                          string stream_id,
+                          int seconds_per_frame, 
+                          float ns_per_day,
+                          int frames,
+                          long long steps,
+                          ostream &out = cout) {
+
     out << "\r";
     out << setw(10) << target_id.substr(0,8) 
         << setw(10) << stream_id.substr(0,8)
-        << setw(10) << tpf.str() << "  "
+        << setw(10) << format_time(seconds_per_frame) << "  "
         << setw(7) << std::fixed << std::setprecision(2) << ns_per_day
-        << setw(10) << std::fixed << std::setprecision(2) << speed
         << setw(8) << frames
         << setw(11) << steps;
     out << flush;
@@ -160,7 +149,6 @@ static void status_header(ostream &out) {
         << setw(10) << "stream"
         << setw(10) << "tpf"
         << setw(9) << "ns/day"
-        << setw(10) << "pps"
         << setw(8) << "frames"
         << setw(11) << "steps";
     out << "\n";
@@ -174,20 +162,12 @@ void OpenMMCore::initialize(string cc_uri) {
         registerCpuPmeKernelFactories();
     #endif
     string platform_name("CPU");
-    #ifdef USE_BENCHMARK
-        _benchmark = new OpenMMBenchmark(platform_name);
-    #endif
 #elif OPENMM_CUDA
     registerCudaPlatform();
     string platform_name("CUDA");
 #elif OPENMM_OPENCL
     registerOpenCLPlatform();
     string platform_name("OpenCL");
-    #ifdef USE_BENCHMARK
-        int platformIndex = 0;
-        int deviceIndex = 0;
-        _benchmark = new OpenMMBenchmark(platform_name);
-    #endif
 #else
     BAD DEFINE
 #endif
@@ -341,7 +321,6 @@ void OpenMMCore::main() {
         long long current_step = 0;
         changemode(1);
         status_header(cout);
-        double benchmark_speed = 0;
         while(true) {
             if(current_step % 10 == 0) {
                 update_status(target_id,
@@ -349,9 +328,7 @@ void OpenMMCore::main() {
                               timePerFrame(current_step),
                               nsPerDay(current_step),
                               current_step/_frame_write_interval,
-                              current_step,
-                              benchmark_speed
-                              );
+                              current_step);
             }
             if(exit()) {
                 changemode(0);
@@ -367,9 +344,6 @@ void OpenMMCore::main() {
             }
             checkFrameWrite(current_step);
             if(shouldHeartbeat()) { 
-                #ifdef USE_BENCHMARK
-                benchmark_speed = _benchmark->speed();
-                #endif
                 sendHeartbeat();
             }
             if(shouldSendCheckpoint()) {
