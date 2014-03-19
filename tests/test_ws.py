@@ -526,9 +526,37 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         # test downloading the frames again
         manager_headers = {'Authorization': self.auth_token}
         response = self.fetch('/streams/'+stream_id+'/frames.xtc',
-                              headers = manager_headers)
+                              headers=manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
+
+    def test_start_stop_stream(self):
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
+
+        headers = {'Authorization': self.auth_token}
+
+        self.assertTrue(ws.ActiveStream.exists(stream_id, self.ws.db))
+
+        response = self.fetch('/streams/stop/'+stream_id, headers=headers,
+                              method='PUT', body='')
+        self.assertEqual(response.code, 200)
+        self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
+        stream = ws.Stream(stream_id, self.ws.db)
+        target = ws.Target(target_id, self.ws.db)
+
+        self.assertEqual(stream.hget('status'), 'STOPPED')
+        self.assertEqual(target.zrange('queue', 0, -1), [])
+
+        response = self.fetch('/streams/start/'+stream_id, headers=headers,
+                              method='PUT', body='')
+
+        self.assertEqual(response.code, 200)
+        self.assertEqual(stream.hget('status'), 'OK')
+        self.assertEqual(target.zrange('queue', 0, -1), [stream_id])
+
+        stream_id_activated, token_id = self._activate_stream(target_id)
+        self.assertEqual(stream_id, stream_id_activated)
 
     def test_put_frame(self):
         target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \

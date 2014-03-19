@@ -89,9 +89,9 @@ from server.apollo import Entity, zset, relate
 
 class Stream(Entity):
     prefix = 'stream'
-    fields = {'frames': int,            # total number of frames completed
-              'status': str,            # 'OK', 'DISABLED'
-              'error_count': int,       # number of consecutive errors
+    fields = {'frames': int,  # total number of frames completed
+              'status': str,  # 'OK', 'STOPPED'
+              'error_count': int,  # number of consecutive errors
               }
 
 
@@ -297,7 +297,8 @@ class ActivateStreamHandler(BaseHandler):
         """
         .. http:post:: /streams/activate
 
-            Activate and return the highest priority stream of a target.
+            Activate and return the highest priority stream of a target by
+            popping the head of the priority queue.
 
             **Example request**
 
@@ -438,6 +439,80 @@ class PostStreamHandler(BaseHandler):
         response = {'stream_id': stream_id}
         self.set_status(200)
         self.write(json.dumps(response))
+
+
+class StartStreamHandler(BaseHandler):
+    @authenticate_cc
+    def put(self, stream_id):
+        """
+        .. http:put:: /streams/start/:stream_id
+
+            Start a stream on the workserver and set its status to **OK**.
+
+            **Example request**:
+
+            .. sourcecode:: javascript
+
+                {
+                    // empty
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+        """
+        if not Stream.exists(stream_id, self.db):
+            return self.set_status(400)
+
+        stream = Stream(stream_id, self.db)
+        target_id = stream.hget('target')
+        target = Target(target_id, self.db)
+
+        if stream.hget('status') != 'OK':
+            pipeline = self.db.pipeline()
+            stream.hset('status', 'OK', pipeline=pipeline)
+            count = stream.hget('frames')
+            target.zadd('queue', stream_id, count, pipeline=pipeline)
+            pipeline.execute()
+
+        return self.set_status(200)
+
+
+class StopStreamHandler(BaseHandler):
+    @authenticate_cc
+    def put(self, stream_id):
+        """
+        .. http:put:: /streams/stop/:stream_id
+
+            Stop a stream on the workserver and set its status to **STOPPED**
+
+            **Example request**:
+
+            .. sourcecode:: javascript
+
+                {
+                    // empty
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        if not Stream.exists(stream_id, self.db):
+            return self.set_status(400)
+
+        self.deactivate_stream(stream_id)
+
+        stream = Stream(stream_id, self.db)
+        target_id = stream.hget('target')
+        target = Target(target_id, self.db)
+
+        if stream.hget('status') != 'STOPPED':
+            pipeline = self.db.pipeline()
+            stream.hset('status', 'STOPPED', pipeline=pipeline)
+            target.zrem('queue', stream_id, pipeline=pipeline)
+            pipeline.execute()
+
+        return self.set_status(200)
 
 
 class DeleteStreamHandler(BaseHandler):
@@ -1008,6 +1083,8 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/active_streams', ActiveStreamsHandler),
             (r'/streams/activate', ActivateStreamHandler),
             (r'/streams', PostStreamHandler),
+            (r'/streams/start/(.*)', StartStreamHandler),
+            (r'/streams/stop/(.*)', StopStreamHandler),
             (r'/streams/delete/(.*)', DeleteStreamHandler),
             (r'/streams/(.*)/(.*)', DownloadHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),

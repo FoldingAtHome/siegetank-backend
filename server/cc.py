@@ -361,6 +361,7 @@ class UpdateTargetHandler(BaseHandler):
                     "allowed_ws": ["foo", "bar"],  //optional
                     "engine_versions":  ["6.0", "6.5"]  //optional
                     "description": "description"  //optional
+                    "status": "OK" or "STOPPED"  // optional
                 }
 
                 .. note:: modifying the allowed workservers will only affect
@@ -715,12 +716,6 @@ class DeleteStreamHandler(BaseHandler):
 
             :reqheader Authorization: Manager's authorization token
 
-            .. note:: This is a relatively slow method. Partially because 1) we
-                don't know which server the stream is on and 2) we don't know
-                its target so we need to check all workservers.
-
-            :reqheader Authorization: Manager's authorization token
-
             **Example request**
 
             .. sourcecode:: javascript
@@ -734,22 +729,14 @@ class DeleteStreamHandler(BaseHandler):
             :status 401: Unauthorized
 
         """
-        # this is a relatively slow method. Partially because 1) we don't know
-        # which server the stream is on, and 2) we don't know its target so
-        # we don't know which servers its striating over
         self.set_status(400)
-        found = False
-        for ws_name in WorkServer.members(self.db):
-            rep = yield self.fetch(ws_name, '/streams/delete/'+stream_id,
-                                   method='PUT', body='')
-            if rep.code == 200:
-                found = True
-                break
-        if found:
-            self.set_status(200)
-            self.write(json.dumps({}))
-        else:
+        ws_name = stream_id.split(':')[1]
+        rep = yield self.fetch(ws_name, '/streams/delete/'+stream_id,
+                               method='PUT', body='')
+        if rep.code != 200:
             self.error('stream not found')
+        self.set_status(200)
+        self.write(json.dumps({}))
 
 
 class PostStreamHandler(BaseHandler):
