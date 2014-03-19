@@ -785,7 +785,7 @@ class CoreCheckpointHandler(BaseHandler):
         # 2) Identify the frame files and their frame number:
         #    eg. a file called 5_something is a frame file, with a frame number
         #        of 5, and a filename of something
-        # 3) Remove all frame files with a frame number than that of the
+        # 3) Remove all frame files with a frame number greater than # of the
         #    checkpoint, as well as all buffer files
         # 4) Rename checkpoint files to their proper names.
 
@@ -797,7 +797,7 @@ class CoreCheckpointHandler(BaseHandler):
         buffer_frames = active_stream.hget('buffer_frames')
         total_frames = stream_frames + buffer_frames
 
-        # Important check for idempotency
+        # Important to check for idempotency
         if buffer_frames == 0:
             return self.set_status(200)
         streams_folder = self.application.streams_folder
@@ -825,8 +825,8 @@ class CoreCheckpointHandler(BaseHandler):
 
         # 4) delete old checkpoint safely
         for filename, bytes in content['files'].items():
-            dst = os.path.join(buffers_folder, 'chkpt_'+str(stream_frames)+'_'+
-                                               filename)
+            dst = os.path.join(buffers_folder,
+                               'chkpt_'+str(stream_frames)+'_'+filename)
             os.remove(dst)
 
         stream.hincrby('frames', buffer_frames)
@@ -850,13 +850,10 @@ class CoreStopHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "error": "error message b64",  // optional
-                    "debug_files": {"file1_name": "file1_bin_b64",
-                                    "file2_name": "file2_bin_b64"
-                                    } // optional
+                    "error": "message_b64",  // optional
                 }
 
-            .. note:: ``error`` is b64 encoded
+            .. note:: ``error`` must be b64 encoded.
 
             :status 200: OK
             :status 400: Bad request
@@ -869,9 +866,9 @@ class CoreStopHandler(BaseHandler):
             stream.hincrby('error_count', 1)
             message = base64.b64decode(content['error']).decode()
             log_path = os.path.join(self.application.streams_folder,
-                                    stream_id, 'log.txt')
+                                    stream_id, 'error_log.txt')
             with open(log_path, 'a') as handle:
-                handle.write(time.strftime("%c")+' | '+message)
+                handle.write(time.strftime("%c")+'\n'+message)
 
         self.set_status(200)
         self.deactivate_stream(stream_id)

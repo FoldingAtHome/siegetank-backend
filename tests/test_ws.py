@@ -692,6 +692,9 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body))
         self.assertEqual(response.code, 200)
         self.assertEqual(stream.hget('error_count'), 1)
+        error_path = os.path.join(self.ws.streams_folder,
+                                  stream_id, 'error_log.txt')
+        self.assertTrue(b'NaN' in open(error_path, 'rb').read())
         self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
         self.assertFalse(target.zscore('queue', stream_id) is None)
         buffer_path = os.path.join(self.ws.streams_folder,
