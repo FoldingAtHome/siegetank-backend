@@ -447,7 +447,7 @@ class StartStreamHandler(BaseHandler):
         """
         .. http:put:: /streams/start/:stream_id
 
-            Start a stream on the workserver and set its status to **OK**.
+            Start a stream and set its status to **OK**.
 
             **Example request**:
 
@@ -470,6 +470,7 @@ class StartStreamHandler(BaseHandler):
         if stream.hget('status') != 'OK':
             pipeline = self.db.pipeline()
             stream.hset('status', 'OK', pipeline=pipeline)
+            stream.hset('error_count', 0, pipeline=pipeline)
             count = stream.hget('frames')
             target.zadd('queue', stream_id, count, pipeline=pipeline)
             pipeline.execute()
@@ -483,7 +484,7 @@ class StopStreamHandler(BaseHandler):
         """
         .. http:put:: /streams/stop/:stream_id
 
-            Stop a stream on the workserver and set its status to **STOPPED**
+            Stop a stream and set its status to **STOPPED**
 
             **Example request**:
 
@@ -499,19 +500,15 @@ class StopStreamHandler(BaseHandler):
         """
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
-
         self.deactivate_stream(stream_id)
-
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
-
         if stream.hget('status') != 'STOPPED':
             pipeline = self.db.pipeline()
             stream.hset('status', 'STOPPED', pipeline=pipeline)
             target.zrem('queue', stream_id, pipeline=pipeline)
             pipeline.execute()
-
         return self.set_status(200)
 
 
@@ -521,7 +518,7 @@ class DeleteStreamHandler(BaseHandler):
         """
         .. http:put:: /streams/delete/:stream_id
 
-            Delete a stream from the workserver
+            Delete a stream
 
             **Example request**:
 
@@ -1133,24 +1130,30 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             self.deactivate_stream(dead_stream)
 
     def deactivate_stream(self, stream_id):
-        active_stream = ActiveStream(stream_id, self.db)
+        # activation happens atomically so we can deactivate without too much
+        # worrying about atomicity
+        try:
+            active_stream = ActiveStream(stream_id, self.db)
+        except KeyError:
+            pass
+        else:
+            self.db.zrem('heartbeats', stream_id)
+            buffer_files = active_stream.smembers('buffer_files')
+            for fname in buffer_files:
+                fname = 'buffer_'+fname
+                buffer_path = os.path.join(self.streams_folder,
+                                           stream_id, fname)
+                if os.path.exists(buffer_path):
+                    os.remove(buffer_path)
 
-        self.db.zrem('heartbeats', stream_id)
-        buffer_files = active_stream.smembers('buffer_files')
-        for fname in buffer_files:
-            fname = 'buffer_'+fname
-            buffer_path = os.path.join(self.streams_folder, stream_id, fname)
-            if os.path.exists(buffer_path):
-                os.remove(buffer_path)
-
-        active_stream.delete()
-        # push this stream back into queue
-        stream = Stream(stream_id, self.db)
-        frames_completed = stream.hget('frames')
-        target = Target(stream.hget('target'), self.db)
-        # TODO: to a check to make sure the stream's status is OK. Check the
-        # error count, if it's too high, then the stream is stopped
-        target.zadd('queue', stream_id, frames_completed)
+            active_stream.delete()
+            # push this stream back into queue
+            stream = Stream(stream_id, self.db)
+            frames_completed = stream.hget('frames')
+            target = Target(stream.hget('target'), self.db)
+            # TODO: to a check to make sure the stream's status is OK. Check
+            # the error count, if it's too high, then the stream is stopped
+            target.zadd('queue', stream_id, frames_completed)
 
 #########################
 # Defined here globally #

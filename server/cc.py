@@ -32,6 +32,7 @@ import bcrypt
 import pymongo
 import io
 import socket
+import functools
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import authenticate_manager
@@ -87,7 +88,7 @@ class Target(Entity):
               'steps_per_frame': int,  # number of steps per frame
               'files': {str},  # files shared by all streams
               'creation_date': float,  # in linux time.time()
-              'stage': str,  # private, beta, public
+              'stage': str,  # disabled, private, beta, public
               'allowed_ws': {str},  # ws to allow striation on
               'engine': str,  # openmm or terachem
               'engine_versions': {str},  # allowed core_versions
@@ -705,14 +706,35 @@ class RegisterWSHandler(BaseHandler):
         return self.write(json.dumps({}))
 
 
-class DeleteStreamHandler(BaseHandler):
+def routed(method, stream_id):
+    """ Decorator for handlers related to streams that must be routed to the
+    correct ws
+
+    """
+    @functools.wraps(method)
+    def wrapper(self, stream_id):
+        self.set_status(400)
+        ws_name = stream_id.split(':')[1]
+        method = __name__.upper()
+        rep = yield self.fetch(ws_name, self.request.path,
+                               method=method, body='')
+        if rep.code != 200:
+            self.error('stream not found')
+        self.set_status(200)
+        self.write(json.dumps({}))
+
+    return wrapper
+
+
+class RoutedStreamHandler(BaseHandler):
     @authenticate_manager
     @tornado.gen.coroutine
     def put(self, stream_id):
         """
-        .. http:put:: /streams/delete/:stream_id
+        .. http:put:: /streams/[start,stop,delete]/:stream_id
 
-            Deletes a stream from the server.
+            Deletes a stream from the server. This method routes to the
+            appropriate ws automatically.
 
             :reqheader Authorization: Manager's authorization token
 
@@ -731,12 +753,10 @@ class DeleteStreamHandler(BaseHandler):
         """
         self.set_status(400)
         ws_name = stream_id.split(':')[1]
-        rep = yield self.fetch(ws_name, '/streams/delete/'+stream_id,
-                               method='PUT', body='')
-        if rep.code != 200:
-            self.error('stream not found')
-        self.set_status(200)
-        self.write(json.dumps({}))
+        rep = yield self.fetch(ws_name, self.request.path,
+                               method='PUT', body=self.request.body)
+        self.set_status(rep.code)
+        self.write(rep.body)
 
 
 class PostStreamHandler(BaseHandler):
@@ -1207,7 +1227,9 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/ws/disconnect', DisconnectWSHandler),
             (r'/ws/status', WSStatusHandler),
             (r'/streams', PostStreamHandler),
-            (r'/streams/delete/(.*)', DeleteStreamHandler)
+            (r'/streams/delete/(.*)', RoutedStreamHandler),
+            (r'/streams/start/(.*)', RoutedStreamHandler),
+            (r'/streams/stop/(.*)', RoutedStreamHandler)
             ])
 
     @tornado.gen.coroutine
@@ -1236,15 +1258,16 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                                        **kwargs)
             workserver.hset('fail_count', 0)
             return reply
-        except (tornado.httpclient.HTTPError, socket.gaierror) as e:
+        except (tornado.httpclient.HTTPError, IOError) as e:
             if isinstance(e, tornado.httpclient.HTTPError):
-                if e.code != 599:
-                    return reply
-            print('=======Fatal connection failure: ', e)
+                code = e.code
+                body = io.BytesIO(e.response.body)
+            else:
+                code = 503
+                body = io.BytesIO(json.dumps({'error': 'ws down'}).encode())
             workserver.hincrby('fail_count', 1)
             dummy = tornado.httpclient.HTTPRequest(ws_url)
-            tempb = io.BytesIO(json.dumps({'error': 'WS down'}).encode())
-            reply = tornado.httpclient.HTTPResponse(dummy, 503, buffer=tempb)
+            reply = tornado.httpclient.HTTPResponse(dummy, code, buffer=body)
             return reply
 
     @tornado.gen.coroutine

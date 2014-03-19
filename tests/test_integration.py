@@ -353,6 +353,21 @@ class Test(tornado.testing.AsyncTestCase):
                 streams.add(ws_stream)
         self.assertEqual(streams, post_streams)
 
+        # stop and start random stream
+        stream_id = random.sample(streams, 1)[0]
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/streams/stop/'\
+              +stream_id
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     headers=headers, method='PUT', body='{}')
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+        uri = 'https://'+url+':'+str(self.cc_hport)+'/streams/start/'\
+              +stream_id
+        client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
+                     headers=headers, method='PUT', body='{}')
+        reply = self.wait()
+        self.assertEqual(reply.code, 200)
+
         # delete a random stream
         stream_id = random.sample(streams, 1)[0]
         uri = 'https://'+url+':'+str(self.cc_hport)+'/streams/delete/'\
