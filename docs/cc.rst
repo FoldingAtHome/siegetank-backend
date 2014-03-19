@@ -11,7 +11,7 @@ Manager Methods
 .. autosimple:: UpdateTargetHandler.put
 .. autosimple:: DeleteTargetHandler.put
 .. autosimple:: PostStreamHandler.post
-.. autosimple:: DeleteStreamHandler.put
+.. autosimple:: RoutedStreamHandler.put
 
 Core Methods
 ------------

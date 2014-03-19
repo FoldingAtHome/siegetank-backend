@@ -6,11 +6,12 @@ WS REST API
 Command Center Methods
 ----------------------
 
-These methods on the workserver can only be issued by IPs matching that of
-known command centers.
+These methods on the workserver can only be issued by IPs matching that of known command centers.
 
 .. autosimple:: TargetStreamsHandler.get
 .. autosimple:: PostStreamHandler.post
+.. autosimple:: StartStreamHandler.put
+.. autosimple:: StopStreamHandler.put
 .. autosimple:: DeleteStreamHandler.put
 .. autosimple:: ActivateStreamHandler.post
 .. autosimple:: DeleteTargetHandler.put

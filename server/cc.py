@@ -706,26 +706,6 @@ class RegisterWSHandler(BaseHandler):
         return self.write(json.dumps({}))
 
 
-def routed(method, stream_id):
-    """ Decorator for handlers related to streams that must be routed to the
-    correct ws
-
-    """
-    @functools.wraps(method)
-    def wrapper(self, stream_id):
-        self.set_status(400)
-        ws_name = stream_id.split(':')[1]
-        method = __name__.upper()
-        rep = yield self.fetch(ws_name, self.request.path,
-                               method=method, body='')
-        if rep.code != 200:
-            self.error('stream not found')
-        self.set_status(200)
-        self.write(json.dumps({}))
-
-    return wrapper
-
-
 class RoutedStreamHandler(BaseHandler):
     @authenticate_manager
     @tornado.gen.coroutine
