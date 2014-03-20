@@ -85,7 +85,6 @@ class Target(Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
               'owner': str,  # owner of the target,
-              'steps_per_frame': int,  # number of steps per frame
               'files': {str},  # files shared by all streams
               'creation_date': float,  # in linux time.time()
               'stage': str,  # disabled, private, beta, public
@@ -137,6 +136,17 @@ class BaseHandler(tornado.web.RequestHandler):
             return query['role']
         except:
             return None
+
+    def load_target_options(self, target_id):
+        options_path = os.path.join(self.application.targets_folder,
+                                    target_id, 'options')
+
+        if os.path.exists(options_path):
+            with open(options_path, 'r') as handle:
+                options = json.loads(handle.read())
+                return options
+        else:
+            return dict()
 
 
 class AuthDonorHandler(BaseHandler):
@@ -457,7 +467,10 @@ class AssignHandler(BaseHandler):
                 {
                     "token": "6lk2j5-tpoi2p6-poipoi23",
                     "url": "https://raynor.stanford.edu:1234/core/start",
-                    "steps_per_frame": 50000
+                    "options": {
+                        "steps_per_frame": 50000,
+                        "xtc_precision": 4
+                    }
                 }
 
             :status 200: OK
@@ -541,7 +554,7 @@ class AssignHandler(BaseHandler):
                 err = 'no public or beta targets available'
                 return self.error(err)
 
-        steps_per_frame = target.hget('steps_per_frame')
+        options = self.load_target_options(target_id)
 
         # shuffle and find an online workserver
         striated_servers = list(filter(lambda x: self.application.ws_online(x),
@@ -565,7 +578,7 @@ class AssignHandler(BaseHandler):
                     token = rep_content["token"]
                     body = {
                         'token': token,
-                        'steps_per_frame': steps_per_frame,
+                        'options': options,
                         'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
                     }
                     self.write(body)
@@ -843,7 +856,6 @@ class GetTargetHandler(BaseHandler):
                 {
                     "description": "Some secret project",
                     "owner": "diwakar@gmail.com",
-                    "steps_per_frame": 50000,
                     "creation_date": 1392784469,
                     "stage": "beta",
                     "allowed_ws": ["raynor", "zeratul", "kerrigan"],
@@ -851,6 +863,9 @@ class GetTargetHandler(BaseHandler):
                     "engine": "openmm"
                     "engine_versions": ["6.0"]
                     "files": ["filename1", "filename2"],
+                    "options": {
+                        "steps_per_frame": 50000,
+                    }
                 }
 
             .. note:: ``creation_date`` is in seconds since epoch 01/01/1970.
@@ -861,18 +876,19 @@ class GetTargetHandler(BaseHandler):
         """
         self.set_status(400)
         target = Target(target_id, self.db)
+        options = self.load_target_options(target_id)
         # get a list of streams
         body = {
             'description': target.hget('description'),
             'owner': target.hget('owner'),
-            'steps_per_frame': target.hget('steps_per_frame'),
             'creation_date': target.hget('creation_date'),
             'stage': target.hget('stage'),
             'allowed_ws': list(target.smembers('allowed_ws')),
             'striated_ws': list(target.smembers('striated_ws')),
             'engine': target.hget('engine'),
             'engine_versions': list(target.smembers('engine_versions')),
-            'files': list(target.smembers('files'))
+            'files': list(target.smembers('files')),
+            'options': options
             }
         self.set_status(200)
         self.write(body)
@@ -1010,7 +1026,6 @@ class TargetsHandler(BaseHandler):
 
                 {
                     "description": "some JSON compatible description",
-                    "steps_per_frame": 100000,
                     "engine": "openmm",
                     "engine_versions": ["6.0", "5.5", "5.2"],
 
@@ -1018,8 +1033,16 @@ class TargetsHandler(BaseHandler):
                               "file2_name": file2_bin_b64,
                               ...
                               } // optional
+
                     "allowed_ws": ["mengsk", "arcturus"], // optional
                     "stage": "private", "beta", or "public" // optional
+
+                    "options": { // optional depending on core
+                        "steps_per_frame": 50000, // optional
+                        "xtc_precision": 3, // optional
+                        "discard_water": True  // optional
+                        ...
+                    }
                 }
 
             .. note:: If ``allowed_ws`` is specified, then we striate streams
@@ -1028,7 +1051,9 @@ class TargetsHandler(BaseHandler):
             .. note:: If ``stage`` is not given, then the stage defaults to
                 "private".
             .. note:: ``description`` must be a JSON compatible string. That
-                means it must not contain double quotation marks and slashes
+                means it must not contain double quotation marks and slashes.
+            .. note:: ``options`` should pertain to the target as a whole.
+                Stream specific options are not available yet.
 
             **Example reply**
 
@@ -1042,6 +1067,7 @@ class TargetsHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        # TODO: shove target descriptions to mongodb
         self.set_status(400)
         content = json.loads(self.request.body.decode())
 
@@ -1073,10 +1099,6 @@ class TargetsHandler(BaseHandler):
                     err_msg = ws_name+' is not connected to this cc'
                     return self.error(err_msg)
         description = content['description']
-        steps_per_frame = content['steps_per_frame']
-
-        if steps_per_frame < 5000:
-            return self.error('steps_per_frame < 5000')
 
         #------------#
         # write data #
@@ -1085,7 +1107,6 @@ class TargetsHandler(BaseHandler):
 
         fields = {
             'description': description,
-            'steps_per_frame': steps_per_frame,
             'creation_date': time.time(),
             'engine': engine,
             'engine_versions': engine_versions,
@@ -1115,6 +1136,11 @@ class TargetsHandler(BaseHandler):
             file_path = os.path.join(target_dir, filename)
             with open(file_path, 'wb') as handle:
                 handle.write(filebin.encode())
+        if 'options' in content:
+            options = content['options']
+            file_path = os.path.join(target_dir, 'options')
+            with open(file_path, 'w') as handle:
+                handle.write(json.dumps(options))
 
         targets = self.mdb.data.targets
         cc_id = self.application.name

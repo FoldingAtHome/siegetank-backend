@@ -201,9 +201,9 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         body = {
             'description': description,
             'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
-            'steps_per_frame': 50000,
             'engine': 'openmm',
             'engine_versions': ['6.0'],
+            'options': {'steps_per_frame': 50000}
             }
 
         reply = self.fetch('/targets', method='POST', headers=headers,
@@ -219,7 +219,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(cc.Target.exists(target_id, self.cc.db))
         target = cc.Target(target_id, self.cc.db)
         self.assertEqual(target.hget('description'), description)
-        self.assertEqual(target.hget('steps_per_frame'), 50000)
         self.assertEqual(target.hget('stage'), 'private')
         self.assertEqual(target.hget('engine'), 'openmm')
         self.assertEqual(target.hget('owner'), email)
@@ -235,10 +234,10 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         body = {
             'description': description,
             'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
-            'steps_per_frame': 50000,
             'engine': 'openmm',
             'engine_versions': ['6.0'],
             'stage': 'public',
+            'options': {'steps_per_frame': 50000},
             }
 
         reply = self.fetch('/targets', method='POST', headers=headers,
@@ -275,7 +274,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
             'description': description,
             'files': {'system.xml.gz.b64': fb1,
                       'integrator.xml.gz.b64': fb2},
-            'steps_per_frame': 50000,
+            'options': {'steps_per_frame': 50000},
             'engine': 'openmm',
             'engine_versions': ['6.0'],
             }
@@ -335,11 +334,12 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
             fb1 = base64.b64encode(os.urandom(1024)).decode()
             fb2 = base64.b64encode(os.urandom(1024)).decode()
             description = "Diwakar and John's top secret project"
+            options = {'steps_per_frame': 50000}
             body = {
                 'description': description,
                 'files': {'system.xml.gz.b64': fb1,
                           'integrator.xml.gz.b64': fb2},
-                'steps_per_frame': 50000,
+                'options': options,
                 'engine': 'openmm',
                 'engine_versions': ['6.0'],
                 }
@@ -355,6 +355,15 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
         reply = self.fetch('/targets/info/'+target_ids[0])
         self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+        self.assertEqual(content['description'], description)
+        self.assertEqual(content['owner'], 'eisley@gmail.com')
+        self.assertEqual(set(content['files']),
+                         {'system.xml.gz.b64', 'integrator.xml.gz.b64'})
+        self.assertEqual(content['stage'], 'private')
+        self.assertEqual(content['engine'], 'openmm')
+        self.assertEqual(content['engine_versions'], ['6.0'])
+        self.assertEqual(content['options'], options)
 
         # add a new manager and post a bunch of targets
         email = 'diwakar@gmail.com'
@@ -378,7 +387,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
                 'description': description,
                 'files': {'system.xml.gz.b64': fb1,
                           'integrator.xml.gz.b64': fb2},
-                'steps_per_frame': 50000,
+                'options': {'steps_per_frame': 50000},
                 'engine': 'openmm',
                 'engine_versions': ['6.0'],
                 }

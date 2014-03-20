@@ -8,7 +8,7 @@ class Target:
         self.uri = cc_uri
         self._id = target_id
         self._description = None
-        self._steps_per_frame = None
+        self._options = None
         self._creation_date = None
         self._allowed_ws = None
         self._engine = None
@@ -72,7 +72,7 @@ class Target:
             raise Exception('Failed to load target info')
         info = json.loads(reply.text)
         self._description = info['description']
-        self._steps_per_frame = info['steps_per_frame']
+        self._options = info['options']
         self._creation_date = info['creation_date']
         self._allowed_ws = info['allowed_ws']
         self._engine = info['engine']
@@ -110,11 +110,11 @@ class Target:
         return self._description
 
     @property
-    def steps_per_frame(self):
-        """ Get the number of steps per frame """
-        if not self._steps_per_frame:
+    def options(self):
+        """ Get the options for this target """
+        if not self._options:
             self.reload_info()
-        return self._steps_per_frame
+        return self._options
 
     @property
     def creation_date(self):
@@ -155,18 +155,22 @@ def workserver_status(cc_uri):
 
 
 #TODO: DESCRIPTION MUST BE BASE64'D
-def add_target(cc_uri, steps_per_frame, engine, engine_versions,
+def add_target(cc_uri, options, engine, engine_versions,
                description='', stage='private', files=None, allowed_ws=None):
     """
     Add a target to be managed by the workserver at ``cc_uri``. Currently
     supported ``engine`` is 'openmm'.
+
+    ``options`` is a dictionary of target/core specific options like
+    steps_per_frame, discard_water, xtc_precision
+
     """
 
     body = {}
 
     if files:
         body['files'] = encode_files(files)
-    body['steps_per_frame'] = steps_per_frame
+    body['options'] = options
     body['engine'] = engine
     assert type(engine_versions) == list
     body['engine_versions'] = engine_versions

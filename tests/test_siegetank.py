@@ -74,7 +74,7 @@ class TestSiegeTank(unittest.TestCase):
         encoded_system = base64.b64encode(system_gz).decode()
         encoded_intg = base64.b64encode(integrator_gz).decode()
 
-        spf = 10000
+        options = {'steps_per_frame': 10000}
         engine = 'openmm'
         engine_versions = ['5.5', '9.9']
         description = 'some test case'
@@ -84,7 +84,7 @@ class TestSiegeTank(unittest.TestCase):
 
         creation_time = time.time()
         target = siegetank.base.add_target(self.cc_uri,
-                                           steps_per_frame=spf,
+                                           options=options,
                                            engine=engine,
                                            engine_versions=engine_versions,
                                            description=description,
@@ -92,7 +92,7 @@ class TestSiegeTank(unittest.TestCase):
                                            files=files
                                            )
 
-        self.assertEqual(target.steps_per_frame, spf)
+        self.assertEqual(target.options, options)
         self.assertEqual(target.engine, engine)
         self.assertEqual(set(target.engine_versions), set(engine_versions))
         self.assertEqual(target.description, target.description)

@@ -46,7 +46,7 @@ def post_target(auth_token, stage='private'):
     message = json.dumps({'description': 'foo',
                           'engine': 'openmm',
                           'engine_versions': ['6.0'],
-                          'steps_per_frame': 10000,
+                          'options': {'steps_per_frame': 10000},
                           'files': {'system.xml.gz.b64': encoded_system,
                                     'integrator.xml.gz.b64': encoded_intg
                                     },

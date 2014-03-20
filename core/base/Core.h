@@ -23,7 +23,7 @@ public:
     /* Main MD loop */
     virtual void main();
 
-    /* Start the stream and fetch files and their names */
+    /* Start the stream, fetch files and their names */
     void startStream(const Poco::URI &cc_uri,
                      std::map<std::string, std::string> &target_files,
                      std::map<std::string, std::string> &stream_files);

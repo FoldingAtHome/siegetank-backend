@@ -222,7 +222,15 @@ void Core::initializeSession(const Poco::URI &cc_uri) {
         Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
         ws_uri = object->get("uri").convert<std::string>();
         _auth_token = object->get("token").convert<std::string>();
-        _frame_write_interval = object->get("steps_per_frame").convert<int>();
+
+        // extract _frame_write_interval
+        {
+        Poco::Dynamic::Var temp_obj = object->get("options");
+        Poco::JSON::Object::Ptr object_ptr = temp_obj.extract<Poco::JSON::Object::Ptr>();
+        _frame_write_interval = object_ptr->get("steps_per_frame").convert<int>();
+        }
+
+
         parser.reset();
         }
     
@@ -239,6 +247,7 @@ void Core::initializeSession(const Poco::URI &cc_uri) {
 void Core::startStream(const Poco::URI &cc_uri,
                         map<string, string> &target_files,
                         map<string, string> &stream_files) {
+
     if(_session == NULL)
         initializeSession(cc_uri);
     Poco::Net::HTTPRequest request("GET", _ws_uri.getPath());
