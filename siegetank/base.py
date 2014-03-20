@@ -17,8 +17,7 @@ class Target:
         self._streams = None
 
     def delete(self):
-        """ Delete this target from the Command Center and all associated
-        workservers """
+        """ Delete this target from the backend """
 
         url = 'https://'+self.uri+'/targets/delete/'+self.id
         reply = requests.put(url, verify=is_domain(self.uri))
@@ -161,8 +160,8 @@ def add_target(cc_uri, options, engine, engine_versions,
     Add a target to be managed by the workserver at ``cc_uri``. Currently
     supported ``engine`` is 'openmm'.
 
-    ``options`` is a dictionary of target/core specific options like
-    steps_per_frame, discard_water, xtc_precision
+    ``options`` is a dictionary of core specific options like steps_per_frame,
+    discard_water, xtc_precision, etc.
 
     """
 
