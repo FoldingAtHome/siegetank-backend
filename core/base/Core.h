@@ -11,7 +11,6 @@
 #include <sstream>
 
 class Core {
-
 public:
 
     // checkpoint_send_interval is in number of times per day (user config)
@@ -24,12 +23,7 @@ public:
     /* Main MD loop */
     virtual void main();
 
-    /* Start the stream and fetch files. If the files end in .gz or .gz.b64
-    then the suffixes and stripped, and the contents are processed for you. 
-
-    The method initializes members _frame_write_interval, _stream_id, and 
-    _target_id.
-    */
+    /* Start the stream and fetch files and their names */
     void startStream(const Poco::URI &cc_uri,
                      std::map<std::string, std::string> &target_files,
                      std::map<std::string, std::string> &stream_files);
@@ -51,7 +45,7 @@ public:
             'state.xml' -> 'state.xml.b64'
     */
     void sendCheckpointFiles(const std::map<std::string, std::string> &files,
-                               bool gzip=false) const;
+                             bool gzip=false) const;
 
     /* Disengage the core from the stream and destroys the session */
     void stopStream(std::string error_msg = "");
@@ -102,15 +96,15 @@ private:
     /* how often we send heartbeats in seconds */
     const int _heartbeat_interval;
 
-    /* used by should_send_checkpoint() to determine if we need to checkpoint */
+    /* used by should_send_checkpoint() to see if we need to checkpoint */
     int _next_checkpoint_time;
 
-    /* used by should_heartbeat() to determine when we should send a heartbeat */
+    /* used by should_heartbeat() to see when we should send a heartbeat */
     int _next_heartbeat_time;
 
     /* Get an assignment from the command center, and initializes _session so
     we can start the stream the from the workserver */
-    void _initialize_session(const Poco::URI &cc_uri);
+    void initializeSession(const Poco::URI &cc_uri);
 
     Poco::Net::HTTPSClientSession* _session;
 

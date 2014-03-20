@@ -109,7 +109,7 @@ class BaseHandler(tornado.web.RequestHandler):
     def error(self, message):
         """ Write a message to the output buffer """
         self.set_status(400)
-        self.write(json.dumps({'error': message}))
+        self.write({'error': message})
 
     @property
     def db(self):
@@ -182,7 +182,7 @@ class AuthDonorHandler(BaseHandler):
         else:
             return self.status(401)
         self.set_status(200)
-        self.write(json.dumps({'token': new_token}))
+        self.write({'token': new_token})
 
 
 class AddDonorHandler(BaseHandler):
@@ -229,7 +229,7 @@ class AddDonorHandler(BaseHandler):
             return self.error(username+' exists')
 
         self.set_status(200)
-        self.write(json.dumps({'token': token}))
+        self.write({'token': token})
 
 
 class AuthManagerHandler(BaseHandler):
@@ -274,7 +274,7 @@ class AuthManagerHandler(BaseHandler):
         else:
             return self.status(401)
         self.set_status(200)
-        self.write(json.dumps({'token': new_token}))
+        self.write({'token': new_token})
 
 
 class AddManagerHandler(BaseHandler):
@@ -340,7 +340,7 @@ class AddManagerHandler(BaseHandler):
             return self.error(email+' exists')
 
         self.set_status(200)
-        self.write(json.dumps({'token': token}))
+        self.write({'token': token})
 
 
 class UpdateTargetHandler(BaseHandler):
@@ -568,7 +568,7 @@ class AssignHandler(BaseHandler):
                         'steps_per_frame': steps_per_frame,
                         'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
                     }
-                    self.write(json.dumps(body))
+                    self.write(body)
                     return self.set_status(200)
             except tornado.httpclient.HTTPError as e:
                 print('HTTP_ERROR::', e)
@@ -616,7 +616,7 @@ class DisconnectWSHandler(BaseHandler):
         ws = WorkServer(name, self.db)
         ws.hset('fail_count', self.application._max_ws_fails)
         self.set_status(200)
-        return self.write(json.dumps({}))
+        return self.write(dict())
 
 
 class WSStatusHandler(BaseHandler):
@@ -651,7 +651,7 @@ class WSStatusHandler(BaseHandler):
             else:
                 body[ws_name]['online'] = False
         self.set_status(200)
-        return self.write(json.dumps(body))
+        return self.write(body)
 
 
 class RegisterWSHandler(BaseHandler):
@@ -703,7 +703,7 @@ class RegisterWSHandler(BaseHandler):
         self.application.add_ws(name, url, http_port)
         print('WS '+content['name']+' is now connected')
         self.set_status(200)
-        return self.write(json.dumps({}))
+        return self.write(dict())
 
 
 class RoutedStreamHandler(BaseHandler):
@@ -875,7 +875,7 @@ class GetTargetHandler(BaseHandler):
             'files': list(target.smembers('files'))
             }
         self.set_status(200)
-        self.write(json.dumps(body))
+        self.write(body)
 
 
 class ListStreamsHandler(BaseHandler):
@@ -918,7 +918,7 @@ class ListStreamsHandler(BaseHandler):
                 body[ws_name] = json.loads(reply.body.decode())
 
         self.set_status(200)
-        self.write(json.dumps(body))
+        self.write(body)
 
 
 class DeleteTargetHandler(BaseHandler):
@@ -991,9 +991,9 @@ class TargetsHandler(BaseHandler):
                 target = Target(target_id, self.db)
                 if target.hget('owner') == manager:
                     matched_targets.append(target_id)
-            return self.write(json.dumps({'targets': list(matched_targets)}))
+            return self.write({'targets': list(matched_targets)})
         else:
-            return self.write(json.dumps({'targets': list(target_ids)}))
+            return self.write({'targets': list(target_ids)})
 
     @authenticate_manager
     def post(self):
@@ -1129,7 +1129,7 @@ class TargetsHandler(BaseHandler):
         self.set_status(200)
         response = {'target_id': target_id}
 
-        return self.write(json.dumps(response))
+        return self.write(response)
 
 
 class DownloadHandler(BaseHandler):

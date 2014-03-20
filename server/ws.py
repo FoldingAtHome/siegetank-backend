@@ -163,7 +163,7 @@ def authenticate_cc(method):
     def wrapper(self, *args, **kwargs):
         if not self.request.remote_ip in self.application.cc_ips and\
                 self.request.remote_ip != '127.0.0.1':
-            self.write(json.dumps({'error': 'unauthorized ip'}))
+            self.write({'error': 'unauthorized ip'})
             return self.set_status(401)
         else:
             return method(self, *args, **kwargs)
@@ -184,7 +184,7 @@ def authenticate_core(method):
         try:
             token = self.request.headers['Authorization']
         except:
-            self.write(json.dumps({'error': 'missing Authorization header'}))
+            self.write({'error': 'missing Authorization header'})
             return self.set_status(401)
 
         stream_id = ActiveStream.lookup('auth_token', token, self.db)
@@ -192,7 +192,7 @@ def authenticate_core(method):
         if stream_id:
             return method(self, stream_id)
         else:
-            self.write(json.dumps({'error': 'bad Authorization header'}))
+            self.write({'error': 'bad Authorization header'})
             return self.set_status(401)
 
     return wrapper
@@ -288,7 +288,7 @@ class TargetStreamsHandler(BaseHandler):
             body[stream_id]['status'] = stream.hget('status')
             body[stream_id]['frames'] = stream.hget('frames')
         self.set_status(200)
-        self.write(json.dumps(body))
+        self.write(body)
 
 
 class ActivateStreamHandler(BaseHandler):
@@ -344,9 +344,9 @@ class ActivateStreamHandler(BaseHandler):
             reply = {}
             reply["token"] = token
             self.set_status(200)
-            return self.write(json.dumps(reply))
+            return self.write(reply)
         else:
-            return self.write(json.dumps(dict()))
+            return self.write(dict())
 
 
 class PostStreamHandler(BaseHandler):
@@ -412,7 +412,7 @@ class PostStreamHandler(BaseHandler):
         else:
             target = Target(target_id, self.db)
             if target.smembers('stream_files') != stream_files.keys():
-                self.write(json.dumps({'error': 'inconsistent stream files'}))
+                self.write({'error': 'inconsistent stream files'})
                 return
 
         stream_id = str(uuid.uuid4())+':'+self.application.name
@@ -438,7 +438,7 @@ class PostStreamHandler(BaseHandler):
 
         response = {'stream_id': stream_id}
         self.set_status(200)
-        self.write(json.dumps(response))
+        self.write(response)
 
 
 class StartStreamHandler(BaseHandler):
@@ -629,7 +629,7 @@ class CoreStartHandler(BaseHandler):
         reply['target_id'] = target_id
 
         self.set_status(200)
-        return self.write(json.dumps(reply))
+        return self.write(reply)
 
 
 class CoreFrameHandler(BaseHandler):
@@ -702,7 +702,7 @@ class CoreFrameHandler(BaseHandler):
             frame_count = content['frames']
             if frame_count < 1:
                 self.set_status(400)
-                return self.write(json.dumps({'error': 'frames < 1'}))
+                return self.write({'error': 'frames < 1'})
         else:
             frame_count = 1
         files = content['files']
@@ -912,7 +912,7 @@ class ActiveStreamsHandler(BaseHandler):
                 reply[target][stream_id]['start_time'] = start_time
                 reply[target][stream_id]['total_frames'] = total_frames
                 reply[target][stream_id]['buffer_frames'] = buffer_frames
-        self.write(json.dumps(reply))
+        self.write(reply)
 
 
 class DownloadHandler(BaseHandler):
@@ -977,7 +977,7 @@ class DownloadHandler(BaseHandler):
                 return self.set_status(200)
         except Exception as e:
             print('DownloadHandler Exception', str(e))
-            return self.write(json.dumps({'error': str(e)}))
+            return self.write({'error': str(e)})
 
 
 class CoreHeartbeatHandler(BaseHandler):

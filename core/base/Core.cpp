@@ -152,7 +152,7 @@ static string parse_error(const string& body) {
     return error;
 }
 
-void Core::_initialize_session(const Poco::URI &cc_uri) {
+void Core::initializeSession(const Poco::URI &cc_uri) {
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(cc_uri.getHost())) {
         cout << "USING SSL:" << " " << cc_uri.getHost() << endl;
@@ -240,7 +240,7 @@ void Core::startStream(const Poco::URI &cc_uri,
                         map<string, string> &target_files,
                         map<string, string> &stream_files) {
     if(_session == NULL)
-        _initialize_session(cc_uri);
+        initializeSession(cc_uri);
     Poco::Net::HTTPRequest request("GET", _ws_uri.getPath());
     request.set("Authorization", _auth_token);
     _session->sendRequest(request);
