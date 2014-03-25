@@ -7,6 +7,7 @@ import base64
 import json
 import shutil
 import glob
+import random
 
 import siegetank.base
 import requests
@@ -99,14 +100,35 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.files, target.files)
         self.assertEqual(target.allowed_ws, [])
         self.assertAlmostEqual(target.creation_date, creation_time, places=0)
-        self.assertEqual(siegetank.get_targets(self.cc_uri), [target.id])
+        target_ids = set()
+        for k in siegetank.get_targets(self.cc_uri):
+            target_ids.add(k.id)
+        self.assertEqual(target_ids, {target.id})
+        self.assertEqual(target.download('system.xml.gz.b64'),
+                         encoded_system.encode())
+        self.assertEqual(target.download('integrator.xml.gz.b64'),
+                         encoded_intg.encode())
 
-        stream_ids = set()
         for i in range(50):
-            stream_ids.add(target.add_stream(files={'state.xml.gz.b64':
-                                                    encoded_state}))
+            target.add_stream(files={'state.xml.gz.b64': encoded_state})
 
-        # check for stream here
+        stream = random.sample(target.streams, 1)[0]
+        self.assertEqual(stream.status, 'OK')
+        self.assertEqual(stream.frames, 0)
+        self.assertEqual(stream.download('state.xml.gz.b64'),
+                         encoded_state.encode())
+
+        new_binary = base64.b64encode(b'hehehe').decode()
+
+        stream.stop()
+        stream.replace('state.xml.gz.b64', new_binary)
+        self.assertEqual(stream.download('state.xml.gz.b64'),
+                         new_binary.encode())
+        stream.delete()
+
+        #self.assertEqual(target.streams, stream_ids.remove)
+
+        # finish to make sure we dont have this extra set
 
         target.delete()
-        self.assertEqual(siegetank.get_targets(self.cc_uri), [])
+        self.assertEqual(siegetank.get_targets(self.cc_uri), set())

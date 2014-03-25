@@ -267,6 +267,38 @@ class DeleteTargetHandler(BaseHandler):
         self.set_status(200)
 
 
+class StreamInfoHandler(BaseHandler):
+    def get(self, stream_id):
+        """
+        .. http:get:: /streams/info/:stream_id
+
+            Get information about a particular stream
+
+            **Example reply**:
+
+            .. sourcecode:: javascript
+
+            {
+                "status": "OK",
+                "frames": 235,
+                "error_count": 0,
+            }
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        self.set_status(400)
+        stream = Stream(stream_id, self.db)
+        body = {
+            'status': stream.hget('status'),
+            'frames': stream.hget('frames'),
+            'error_count': stream.hget('error_count')
+        }
+        self.set_status(200)
+        self.write(body)
+
+
 class TargetStreamsHandler(BaseHandler):
     @authenticate_cc
     def get(self, target_id):
@@ -464,6 +496,8 @@ class StartStreamHandler(BaseHandler):
 
             Start a stream and set its status to **OK**.
 
+            :reqheader Authorization: manager authorization token
+
             **Example request**:
 
             .. sourcecode:: javascript
@@ -503,6 +537,8 @@ class StopStreamHandler(BaseHandler):
 
             Stop a stream and set its status to **STOPPED**
 
+            :reqheader Authorization: manager authorization token
+
             **Example request**:
 
             .. sourcecode:: javascript
@@ -539,6 +575,8 @@ class DeleteStreamHandler(BaseHandler):
         .. http:put:: /streams/delete/:stream_id
 
             Delete a stream
+
+            :reqheader Authorization: manager authorization token
 
             **Example request**:
 
@@ -1011,6 +1049,8 @@ class DownloadHandler(BaseHandler):
                 because the additional 33 percent overhead is far too much for
                 large trajectory files.
 
+            :reqheader Authorization: manager authorization token
+
             :resheader Content-Type: application/octet-stream
             :resheader Content-Disposition: attachment; filename=filename
 
@@ -1174,6 +1214,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/active_streams', ActiveStreamsHandler),
             (r'/streams/activate', ActivateStreamHandler),
             (r'/streams', PostStreamHandler),
+            (r'/streams/info/(.*)', StreamInfoHandler),
             (r'/streams/start/(.*)', StartStreamHandler),
             (r'/streams/stop/(.*)', StopStreamHandler),
             (r'/streams/delete/(.*)', DeleteStreamHandler),

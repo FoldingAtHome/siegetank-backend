@@ -9,6 +9,11 @@ workservers = dict()
 
 def login(cc, token):
     """ Set the credentials into a singleton. """
+    url = 'https://'+cc+'/managers/verify'
+    headers = {'Authorization': token}
+    reply = requests.get(url, verify=is_domain(cc), headers=headers)
+    if reply.status_code != 200:
+        raise ValueError("Bad token")
     global auth_token
     auth_token = token
     global login_cc
@@ -75,26 +80,60 @@ class Stream(Base):
     def __init__(self, stream_id):
         self._frames = None
         self._status = None
+        self._error_count = None
         self._id = stream_id
         ws_name = stream_id.split(':')[1]
         global workservers
         ws_uri = workservers[ws_name]['url']
         super(Stream, self).__init__(ws_uri)
 
+    def __repr__(self):
+        return '<stream '+self.id+'>'
+
     def start(self):
-        pass
+        reply = self._put('/streams/start/'+self.id)
+        if reply.status_code != 200:
+            print(reply.text)
+            raise Exception('Bad status code')
+        self.reload_info()
 
     def stop(self):
-        pass
+        reply = self._put('/streams/stop/'+self.id)
+        if reply.status_code != 200:
+            print(reply.text)
+            raise Exception('Bad status code')
+        self.reload_info()
 
     def delete(self):
-        pass
+        reply = self._put('/streams/delete/'+self.id)
+        if reply.status_code != 200:
+            print(reply.text)
+            raise Exception('Bad status code')
+        self._id = None
 
     def download(self, filename):
-        pass
+        reply = self._get('/streams/download/'+self.id+'/'+filename)
+        return reply.content
 
-    def replace(self, filename, filedata, gzip=False):
-        pass
+    def replace(self, filename, filedata):
+        body = json.dumps({
+            "stream_files": {filename: filedata}
+        })
+        reply = self._put('/streams/replace/'+self.id, body=body)
+        if reply.status_code != 200:
+            print(reply.text)
+            raise Exception('Bad status code')
+
+    def reload_info(self):
+        reply = self._get('/streams/info/'+self.id)
+        content = json.loads(reply.text)
+        self._frames = content['frames']
+        self._status = content['status']
+        self._error_count = content['error_count']
+
+    @property
+    def files(self):
+        return self._files
 
     @property
     def id(self):
@@ -102,11 +141,21 @@ class Stream(Base):
 
     @property
     def frames(self):
+        if not self._id:
+            self.reload_info()
         return self._frames
 
     @property
     def status(self):
+        if not self._status:
+            self.reload_info()
         return self._status
+
+    @property
+    def error_count(self):
+        if not self._error_count:
+            self.reload_info()
+        return self._error_count
 
 
 class Target(Base):
@@ -128,19 +177,23 @@ class Target(Base):
         self._streams = None
         super(Target, self).__init__(cc_uri)
 
+    def __repr__(self):
+        return '<target '+self.id+'>'
+
     def delete(self):
         """ Delete this target from the backend """
         reply = self._put('/targets/delete/'+self.id)
-        if(reply.status_code != 200):
+        if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
+        self._id = None
 
     def download(self, filename):
         """ Download a target file from the command center """
         reply = self._get('/targets/download/'+self._id+'/'+filename)
-        if(reply.status_code != 200):
-            print(reply.text)
+        if reply.status_code != 200:
             raise Exception('Bad status_code')
+        return reply.content
 
     def add_stream(self, files):
         """ Add a stream to the target. The filenames passed in here must be
@@ -155,23 +208,17 @@ class Target(Base):
             "files": encode_files(files),
         }
         reply = self._post('/streams', json.dumps(body))
-        if(reply.status_code != 200):
+        if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
         else:
+            #TODO: return Stream object? or return at all?
             return json.loads(reply.text)['stream_id']
-
-    def delete_stream(self, stream_id):
-        """ Delete ``stream_id`` from the target """
-        reply = self._put('/streams/delete/'+stream_id)
-        if(reply.status_code != 200):
-            print(reply.text, reply.status_code)
-            raise Exception('Failed to delete stream')
 
     def reload_streams(self):
         """ Reload the list of streams available on the command center. """
         reply = self._get('/targets/streams/'+self.id)
-        if(reply.status_code != 200):
+        if reply.status_code != 200:
             raise Exception('Failed to load target streams')
         stream_info = json.loads(reply.text)
         self._streams = set()
@@ -184,7 +231,7 @@ class Target(Base):
     def reload_info(self):
         """ Reload the target's information from the commmand center. """
         reply = self._get('/targets/info/'+self.id)
-        if(reply.status_code != 200):
+        if reply.status_code != 200:
             raise Exception('Failed to load target info')
         info = json.loads(reply.text)
         self._description = info['description']
@@ -214,8 +261,7 @@ class Target(Base):
     @property
     def streams(self):
         """ Load the list of streams owned by this target """
-        if not self._streams:
-            self.reload_streams()
+        self.reload_streams()
         return self._streams
 
     @property
@@ -300,6 +346,7 @@ def add_target(options, engine, engine_versions, cc_uri=None,
     return target
 
 load_target = Target
+load_stream = Stream
 
 
 def get_targets(cc_uri=None):
@@ -317,5 +364,8 @@ def get_targets(cc_uri=None):
     reply = requests.get(url, verify=is_domain(cc_uri))
     if reply.status_code != 200:
         raise Exception('Cannot list targets')
-    targets = reply.json()['targets']
+    target_ids = reply.json()['targets']
+    targets = set()
+    for target_id in target_ids:
+        targets.add(Target(target_id, cc_uri))
     return targets

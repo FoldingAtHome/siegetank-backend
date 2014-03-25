@@ -242,10 +242,28 @@ class AddDonorHandler(BaseHandler):
         self.write({'token': token})
 
 
+class VerifyManagerHandler(BaseHandler):
+    @authenticate_manager
+    def get(self):
+        """
+        .. http:post:: /managers/validate
+
+            Validate an authentication token.
+
+            :reqheader Authorization: access token of a manager
+
+            :status 200: OK
+            :status 400: Unauthorized
+
+        """
+        self.set_status(200)
+        return
+
+
 class AuthManagerHandler(BaseHandler):
     def post(self):
         """
-        .. http:post:: /auth
+        .. http:post:: /managers/auth
 
             Generate a new authorization token for the manager
 
@@ -1219,6 +1237,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             os.makedirs(targets_folder)
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
+            (r'/managers/verify', VerifyManagerHandler),
             (r'/managers/auth', AuthManagerHandler),
             (r'/managers', AddManagerHandler),
             (r'/donors/auth', AuthDonorHandler),
