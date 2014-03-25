@@ -21,7 +21,6 @@ import tornado.web
 import tornado.httpserver
 import tornado.httpclient
 
-import sys
 import shutil
 import json
 import os
@@ -31,8 +30,6 @@ import time
 import bcrypt
 import pymongo
 import io
-import socket
-import functools
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import authenticate_manager
@@ -121,11 +118,14 @@ class BaseHandler(tornado.web.RequestHandler):
     def get_current_user(self):
         try:
             header_token = self.request.headers['Authorization']
-            mdb = self.mdb.users
-            query = mdb.managers.find_one({'token': header_token},
-                                          fields=['_id'])
+        except KeyError:
+            return None
+        managers = self.mdb.users.managers
+        query = managers.find_one({'token': header_token},
+                                  fields=['_id'])
+        if query:
             return query['_id']
-        except:
+        else:
             return None
 
     # TODO: refactor to common
@@ -372,7 +372,6 @@ class UpdateTargetHandler(BaseHandler):
                     "allowed_ws": ["foo", "bar"],  //optional
                     "engine_versions":  ["6.0", "6.5"]  //optional
                     "description": "description"  //optional
-                    "status": "OK" or "STOPPED"  // optional
                 }
 
                 .. note:: modifying the allowed workservers will only affect
@@ -657,8 +656,9 @@ class WSStatusHandler(BaseHandler):
         for ws_name in WorkServer.members(self.db):
             workserver = WorkServer(ws_name, self.db)
             body[ws_name] = {}
-            body[ws_name]['url'] = workserver.hget('url')
-            body[ws_name]['http_port'] = workserver.hget('http_port')
+            host = workserver.hget('url')
+            port = workserver.hget('http_port')
+            body[ws_name]['url'] = host+':'+str(port)
             if workserver.hget('fail_count') < self.application._max_ws_fails:
                 body[ws_name]['online'] = True
             else:
@@ -746,8 +746,9 @@ class RoutedStreamHandler(BaseHandler):
         """
         self.set_status(400)
         ws_name = stream_id.split(':')[1]
-        rep = yield self.fetch(ws_name, self.request.path,
-                               method='PUT', body=self.request.body)
+        rep = yield self.fetch(ws_name, self.request.path, method='PUT',
+                               body=self.request.body,
+                               headers=self.request.headers)
         self.set_status(rep.code)
         self.write(rep.body)
 
@@ -931,7 +932,7 @@ class ListStreamsHandler(BaseHandler):
         for ws_name in striated_ws:
             reply = yield self.fetch(ws_name, '/targets/streams/'+target_id)
             if reply.code == 200:
-                body[ws_name] = json.loads(reply.body.decode())
+                body.update(json.loads(reply.body.decode()))
 
         self.set_status(200)
         self.write(body)
@@ -1163,10 +1164,9 @@ class DownloadHandler(BaseHandler):
     @tornado.gen.coroutine
     def get(self, target_id, filename):
         """
-        .. http:get:: /targets/:target_id/:filename
+        .. http:get:: /targets/download/:target_id/:filename
 
-            Download file ``filename`` from ``target_id``. The files you can
-            specify are the target_files specified when POSTing the target.
+            Download a file ``filename`` in ``target_files``.
 
             :resheader Content-Type: application/octet-stream
             :resheader Content-Disposition: attachment; filename=frames.xtc
@@ -1228,7 +1228,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/info/(.*)', GetTargetHandler),
             (r'/targets/streams/(.*)', ListStreamsHandler),
             (r'/targets/update/(.*)', UpdateTargetHandler),
-            (r'/targets/(.*)/(.*)', DownloadHandler),
+            (r'/targets/download/(.*)/(.*)', DownloadHandler),
             (r'/ws/register', RegisterWSHandler),
             (r'/ws/disconnect', DisconnectWSHandler),
             (r'/ws/status', WSStatusHandler),

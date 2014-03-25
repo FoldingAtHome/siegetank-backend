@@ -150,10 +150,19 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         target_id = str(uuid.uuid4())
         fn1, fn2, fn3, fn4 = (str(uuid.uuid4()) for i in range(4))
         fb1, fb2, fb3, fb4 = (str(uuid.uuid4()) for i in range(4))
+
+        targets = self.ws.mdb.data.targets
+        body = {
+            '_id': target_id,
+            'owner': self.test_manager,
+        }
+        targets.insert(body)
+
         body = {'target_id': target_id,
                 'target_files': {fn1: fb1, fn2: fb2},
                 'stream_files': {fn3: fb3, fn4: fb4}
                 }
+
         response = self.fetch('/streams', method='POST', body=json.dumps(body))
         self.assertEqual(response.code, 200)
         stream_id1 = json.loads(response.body.decode())['stream_id']
@@ -171,9 +180,12 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         stream_id2 = json.loads(response.body.decode())['stream_id']
         self.assertEqual(target.smembers('streams'), {stream_id1, stream_id2})
 
+        headers = {'Authorization': self.auth_token}
+
         response = self.fetch('/streams/delete/'+stream_id1,
                               method='PUT',
-                              body=json.dumps(body))
+                              body=json.dumps(body),
+                              headers=headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(target.smembers('streams'), {stream_id2})
 
@@ -185,7 +197,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         body = {'stream_id': stream_id2}
         response = self.fetch('/streams/delete/'+stream_id2,
                               method='PUT',
-                              body=json.dumps(body))
+                              body=json.dumps(body),
+                              headers=headers)
         self.assertEqual(response.code, 200)
         self.assertFalse(ws.Target.exists(target_id, self.ws.db))
         self.assertFalse(isfile(os.path.join(streams_dir, stream_id2, fn5)))
@@ -398,17 +411,60 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
         self.assertEqual(sids, {stream_id2, stream_id})
 
+    def test_replace_stream(self):
+        target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
+            self._post_and_activate_stream()
+
+        m_headers = {'Authorization': self.auth_token}
+
+        new_bin = str(uuid.uuid4())
+        body = json.dumps({
+            "stream_files": {fn3: new_bin}
+            })
+
+        # make sure stream must be stopped first
+        response = self.fetch('/streams/replace/'+stream_id, body=body,
+                              headers=m_headers, method='PUT')
+        self.assertEqual(response.code, 400)
+
+        response = self.fetch('/streams/stop/'+stream_id, body='',
+                              headers=m_headers, method='PUT')
+        self.assertEqual(response.code, 200)
+
+        response = self.fetch('/streams/download/'+stream_id+'/'+fn3,
+                              headers=m_headers)
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body.decode(), fb3)
+
+        response = self.fetch('/streams/replace/'+stream_id, body=body,
+                              headers=m_headers, method='PUT')
+        self.assertEqual(response.code, 200)
+
+        response = self.fetch('/streams/download/'+stream_id+'/'+fn3,
+                              headers=m_headers)
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body.decode(), new_bin)
+
     def test_download_stream(self):
         target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
             self._post_and_activate_stream()
 
         headers = {'Authorization': token}
+        manager_headers = {'Authorization': self.auth_token}
+
         response = self.fetch('/core/start', headers=headers, method='GET')
         self.assertEqual(response.code, 200)
 
         frame_buffer = bytes()
         n_frames = 25
         active_stream = ws.ActiveStream(stream_id, self.ws.db)
+
+        # download a non-frame file that has not been replaced yet
+        response = self.fetch('/streams/download/'+stream_id+'/'+fn3,
+                              headers=manager_headers)
+
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body.decode(), fb3)
 
         # PUT 25 frames
         for count in range(n_frames):
@@ -436,10 +492,9 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
         # download the frames
-        manager_headers = {'Authorization': self.auth_token}
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+
+        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
                               headers=manager_headers)
-        print(response.body)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
 
@@ -461,7 +516,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         buffer_path = os.path.join(streams_dir, stream_id, 'buffer_frames.xtc')
 
         # download the frames
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
                               headers=manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, old_buffer)
@@ -474,10 +529,18 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
         # download the frames
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
                               headers=manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
+
+        # download a non-frame file that has been replaced by checkpoint
+        response = self.fetch('/streams/download/'+stream_id+'/'+fn3,
+                              headers=manager_headers)
+
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.body, checkpoint_bin)
+
 
     def test_put_frame_variadic(self):
         target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
@@ -525,7 +588,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
         # test downloading the frames again
         manager_headers = {'Authorization': self.auth_token}
-        response = self.fetch('/streams/'+stream_id+'/frames.xtc',
+        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
                               headers=manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)

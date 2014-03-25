@@ -248,11 +248,11 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(target.hget('stage'), 'public')
 
         # test download the file
-        reply = self.fetch('/targets/'+target_id+'/system.xml.gz.b64',
+        reply = self.fetch('/targets/download/'+target_id+'/system.xml.gz.b64',
                            headers=headers)
         self.assertEqual(reply.body.decode(), fb1)
-        reply = self.fetch('/targets/'+target_id+'/integrator.xml.gz.b64',
-                           headers=headers)
+        reply = self.fetch('/targets/download/'+target_id+
+                           '/integrator.xml.gz.b64', headers=headers)
         self.assertEqual(reply.body.decode(), fb2)
 
     def test_update_targets(self):

@@ -32,19 +32,20 @@ class Test(tornado.testing.AsyncTestCase):
 
         redis_options = {'port': cls.ws_rport, 'logfile': os.devnull}
         external_options = {'external_http_port': cls.ws_hport}
+        mongo_options = {
+            'host': 'localhost',
+            'port': 27017
+        }
 
         cls.ws = ws.WorkServer(ws_name='mengsk',
                                external_options=external_options,
                                redis_options=redis_options,
+                               mongo_options=mongo_options,
                                targets_folder='ws_targets',
                                streams_folder='ws_streams')
 
         redis_options = {'port': cls.cc_rport, 'logfile': os.devnull}
 
-        mongo_options = {
-            'host': 'localhost',
-            'port': 27017
-        }
 
         cls.cc = cc.CommandCenter(cc_name='goliath',
                                   cc_pass=None,
@@ -348,9 +349,8 @@ class Test(tornado.testing.AsyncTestCase):
         body = json.loads(reply.body.decode())
 
         streams = set()
-        for ws_name in body:
-            for ws_stream in body[ws_name]:
-                streams.add(ws_stream)
+        for stream_name in body:
+            streams.add(stream_name)
         self.assertEqual(streams, post_streams)
 
         # stop and start random stream
@@ -386,9 +386,8 @@ class Test(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         body = json.loads(reply.body.decode())
         streams = set()
-        for ws_name in body:
-            for ws_stream in body[ws_name]:
-                streams.add(ws_stream)
+        for stream_name in body:
+            streams.add(stream_name)
         post_streams.remove(stream_id)
         self.assertEqual(streams, post_streams)
 
@@ -670,10 +669,10 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         streams = set()
         striated_servers = set()
 
-        for ws_name in body:
+        for stream_name in body:
+            ws_name = stream_name.split(':')[1]
             striated_servers.add(ws_name)
-            for ws_stream in body[ws_name]:
-                streams.add(ws_stream)
+            streams.add(stream_name)
         self.assertEqual(streams, post_streams)
         self.assertEqual(striated_servers, {'flash', 'jaedong'})
 

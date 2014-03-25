@@ -38,7 +38,7 @@ class TestSiegeTank(unittest.TestCase):
 
         token = siegetank.generate_token(self.cc_uri, 'test_user@gmail.com',
                                          'test_pass')
-        siegetank.login(token)
+        siegetank.login(self.cc_uri, token)
 
     def tearDown(self):
         try:
@@ -83,7 +83,7 @@ class TestSiegeTank(unittest.TestCase):
                  }
 
         creation_time = time.time()
-        target = siegetank.base.add_target(self.cc_uri,
+        target = siegetank.base.add_target(cc_uri=self.cc_uri,
                                            options=options,
                                            engine=engine,
                                            engine_versions=engine_versions,

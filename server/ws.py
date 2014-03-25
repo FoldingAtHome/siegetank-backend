@@ -146,7 +146,10 @@ class BaseHandler(tornado.web.RequestHandler):
         return self.application.deactivate_stream
 
     def get_current_user(self):
-        header_token = self.request.headers['Authorization']
+        try:
+            header_token = self.request.headers['Authorization']
+        except KeyError:
+            return None
         managers = self.mdb.users.managers
         query = managers.find_one({'token': header_token},
                                   fields=['_id'])
@@ -154,6 +157,18 @@ class BaseHandler(tornado.web.RequestHandler):
             return query['_id']
         else:
             return None
+
+    def get_stream_owner(self, stream_id):
+        stream = Stream(stream_id, self.db)
+        target_id = stream.hget('target')
+        query = self.mdb.data.targets.find_one({'_id': target_id},
+                                               fields=['owner'])
+        return query['owner']
+
+    def error(self, message):
+        """ Write a message to the output buffer """
+        self.set_status(400)
+        self.write({'error': message})
 
 
 def authenticate_cc(method):
@@ -442,7 +457,7 @@ class PostStreamHandler(BaseHandler):
 
 
 class StartStreamHandler(BaseHandler):
-    @authenticate_cc
+    @authenticate_manager
     def put(self, stream_id):
         """
         .. http:put:: /streams/start/:stream_id
@@ -462,6 +477,8 @@ class StartStreamHandler(BaseHandler):
         """
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
+        if self.get_stream_owner(stream_id) != self.get_current_user():
+            return self.set_status(401)
 
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
@@ -479,7 +496,7 @@ class StartStreamHandler(BaseHandler):
 
 
 class StopStreamHandler(BaseHandler):
-    @authenticate_cc
+    @authenticate_manager
     def put(self, stream_id):
         """
         .. http:put:: /streams/stop/:stream_id
@@ -500,6 +517,9 @@ class StopStreamHandler(BaseHandler):
         """
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
+        if self.get_stream_owner(stream_id) != self.get_current_user():
+            return self.set_status(401)
+
         self.deactivate_stream(stream_id)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
@@ -513,7 +533,7 @@ class StopStreamHandler(BaseHandler):
 
 
 class DeleteStreamHandler(BaseHandler):
-    @authenticate_cc
+    @authenticate_manager
     def put(self, stream_id):
         """
         .. http:put:: /streams/delete/:stream_id
@@ -535,6 +555,8 @@ class DeleteStreamHandler(BaseHandler):
         # delete from database before deleting from disk
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
+        if self.get_stream_owner(stream_id) != self.get_current_user():
+            return self.set_status(401)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -915,19 +937,82 @@ class ActiveStreamsHandler(BaseHandler):
         self.write(reply)
 
 
+class ReplaceHandler(BaseHandler):
+    @authenticate_manager
+    @tornado.gen.coroutine
+    def put(self, stream_id):
+        """
+        .. http:put:: /streams/replace/:stream_id
+
+            Replace files in ``stream_files`` with other files.
+
+            :reqheader Authorization: manager authorization token
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "stream_files": {"state.xml.gz.b64": "newfile_3.b64"}
+                }
+
+            **Example reply**:
+
+            .. sourcecode:: javascript
+
+                {
+                    // empty
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        stream = Stream(stream_id, self.db)
+        if self.get_stream_owner(stream_id) != self.get_current_user():
+            self.set_status(401)
+        if stream.hget('status') != 'STOPPED':
+            return self.error('stream must be stopped first')
+
+        target_id = stream.hget('target')
+        target = Target(target_id, self.db)
+
+        content = json.loads(self.request.body.decode())
+        stream_files = content['stream_files']
+        stream_dir = os.path.join(self.application.streams_folder, stream_id)
+        for filename, binary in stream_files.items():
+            if not filename in target.smembers('stream_files'):
+                self.error(filename+' is not in stream_files')
+        for filename, binary in stream_files.items():
+            with open(os.path.join(stream_dir, filename), 'w') as handle:
+                handle.write(binary)
+
+        return
+
+
 class DownloadHandler(BaseHandler):
     @authenticate_manager
     @tornado.gen.coroutine
     def get(self, stream_id, filename):
         """
-        .. http:get:: /streams/:stream_id/:filename
+        .. http:get:: /streams/download/:stream_id/:filename
 
-            Download file ``filename`` from ``stream_id``. This function
-            concatenates the list of frames on the fly by reading the files and
-            writing chunks.
+            Download file ``filename`` from ``stream_id``. ``filename`` can be
+            either a file in *stream_files* or a frame file posted by the core.
+            If it is a frame file, then the frames are concatenated on the fly
+            before returning.
+
+            .. note:: Even if ``filename`` is not found, this handler will
+                return an empty file with the status code set to 200. This is
+                because we cannot distinguish between a frame file that has not
+                been received from that of a non-existent file.
+
+            .. note:: This is so far the only method that is not in JSON format
+                because the additional 33 percent overhead is far too much for
+                large trajectory files.
 
             :resheader Content-Type: application/octet-stream
-            :resheader Content-Disposition: attachment; filename=frames.xtc
+            :resheader Content-Disposition: attachment; filename=filename
 
             :status 200: OK
             :status 400: Bad request
@@ -944,19 +1029,31 @@ class DownloadHandler(BaseHandler):
 
         try:
             stream = Stream(stream_id, self.db)
+            if self.get_stream_owner(stream_id) != self.get_current_user():
+                self.set_status(401)
+
             target_id = stream.hget('target')
+            target = Target(target_id, self.db)
 
-            query = self.mdb.data.targets.find_one({'_id': target_id},
-                                                   fields=['owner'])
-            # query should never be none
-            if query['owner'] != self.get_current_user():
+            buf_size = 4096
+            # check if filename is a stream file
+            if filename in target.smembers('stream_files'):
+                filepath = os.path.join(stream_dir, filename)
+                self.set_status(200)
+                with open(filepath, 'rb') as f:
+                    while True:
+                        data = f.read(buf_size)
+                        if not data:
+                            break
+                        self.write(data)
+                        yield tornado.gen.Task(self.flush)
+                self.finish()
                 return
-
-            if stream.hget('frames') > 0:
+            # assume file is a frame file that needs concatenation
+            elif stream.hget('frames') > 0:
                 files = [f for f in os.listdir(stream_dir)
                          if (filename in f and 'buffer_' not in f)]
                 files = sorted(files, key=lambda k: int(k.split('_')[0]))
-                buf_size = 4096
                 self.set_header('Content-Type', 'application/octet-stream')
                 self.set_header('Content-Disposition',
                                 'attachment; filename='+filename)
@@ -1080,7 +1177,8 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/streams/start/(.*)', StartStreamHandler),
             (r'/streams/stop/(.*)', StopStreamHandler),
             (r'/streams/delete/(.*)', DeleteStreamHandler),
-            (r'/streams/(.*)/(.*)', DownloadHandler),
+            (r'/streams/download/(.*)/(.*)', DownloadHandler),
+            (r'/streams/replace/(.*)', ReplaceHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/targets/delete/(.*)', DeleteTargetHandler),
             (r'/core/start', CoreStartHandler),
