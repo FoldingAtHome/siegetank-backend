@@ -1,5 +1,6 @@
 import requests
 import json
+import base64
 from siegetank.util import is_domain, encode_files
 
 auth_token = None
@@ -8,7 +9,7 @@ workservers = dict()
 
 
 def login(cc, token):
-    """ Set the credentials into a singleton. """
+    """ Login to a particular command center using the generated token. """
     url = 'https://'+cc+'/managers/verify'
     headers = {'Authorization': token}
     reply = requests.get(url, verify=is_domain(cc), headers=headers)
@@ -23,7 +24,7 @@ def login(cc, token):
 
 
 def generate_token(cc, email, password):
-    """ Generate a token and automatically set login credentials """
+    """ Generate a login token and login automatically. """
     data = {
         "email": email,
         "password": password
@@ -38,7 +39,7 @@ def generate_token(cc, email, password):
 
 
 def refresh_workservers(cc):
-    """ Update and return the status of the workservers """
+    """ Update and return the status of the workservers owned by `cc` """
     global workservers
     url = 'https://'+cc+'/ws/status'
     reply = requests.get(url, verify=is_domain(cc))
@@ -78,6 +79,8 @@ class Base:
 
 class Stream(Base):
     def __init__(self, stream_id):
+        """ Retrieve an existing stream object """
+
         self._frames = None
         self._status = None
         self._error_count = None
@@ -88,9 +91,11 @@ class Stream(Base):
         super(Stream, self).__init__(ws_uri)
 
     def __repr__(self):
-        return '<stream '+self.id+'>'
+        frames = str(self._frames)
+        return '<stream '+self.id+' s:'+self._status+' f:'+frames+'>'
 
     def start(self):
+        """ Start this stream. """
         reply = self._put('/streams/start/'+self.id)
         if reply.status_code != 200:
             print(reply.text)
@@ -98,6 +103,7 @@ class Stream(Base):
         self.reload_info()
 
     def stop(self):
+        """ Stop this stream. """
         reply = self._put('/streams/stop/'+self.id)
         if reply.status_code != 200:
             print(reply.text)
@@ -105,6 +111,10 @@ class Stream(Base):
         self.reload_info()
 
     def delete(self):
+        """ Delete this stream from the workserver. You must take care to not
+        use this stream object anymore afterwards.
+
+        """
         reply = self._put('/streams/delete/'+self.id)
         if reply.status_code != 200:
             print(reply.text)
@@ -112,10 +122,25 @@ class Stream(Base):
         self._id = None
 
     def download(self, filename):
+        """ Download a file from the stream.
+
+        :param filename: ``filename`` can be produced by the core,
+            or it can be a stream_file
+
+        """
         reply = self._get('/streams/download/'+self.id+'/'+filename)
         return reply.content
 
     def replace(self, filename, filedata):
+        """ Replace a file on the stream.
+
+        :param filename: name of the file, eg. state.xml.gz.b64
+        :param filedata: base64 encoded data
+
+        """
+
+        base64.b64decode(filedata)
+
         body = json.dumps({
             "stream_files": {filename: filedata}
         })
@@ -133,26 +158,31 @@ class Stream(Base):
 
     @property
     def files(self):
+        """ Get the stream_files """
         return self._files
 
     @property
     def id(self):
+        """ Get the stream's id """
         return self._id
 
     @property
     def frames(self):
+        """ Get the number of frames completed so far """
         if not self._id:
             self.reload_info()
         return self._frames
 
     @property
     def status(self):
+        """ Get the status of the stream """
         if not self._status:
             self.reload_info()
         return self._status
 
     @property
     def error_count(self):
+        """ Get the number of errors this stream has encountered """
         if not self._error_count:
             self.reload_info()
         return self._error_count
@@ -160,7 +190,7 @@ class Stream(Base):
 
 class Target(Base):
     def __init__(self, target_id, cc_uri=None):
-        """ Add a new target to the command center. """
+        """ Retrieve an existing target object """
         global login_cc
         if cc_uri is None:
             cc_uri = login_cc
@@ -189,7 +219,11 @@ class Target(Base):
         self._id = None
 
     def download(self, filename):
-        """ Download a target file from the command center """
+        """ Download a target file from the command center.
+
+        :param filename: a particular target_file to retrieve
+
+        """
         reply = self._get('/targets/download/'+self._id+'/'+filename)
         if reply.status_code != 200:
             raise Exception('Bad status_code')
@@ -201,6 +235,7 @@ class Target(Base):
         is undefined.
 
         :param files: a dictionary of filenames to binaries
+
         """
         assert isinstance(files, dict)
         body = {
@@ -216,7 +251,7 @@ class Target(Base):
             return json.loads(reply.text)['stream_id']
 
     def reload_streams(self):
-        """ Reload the list of streams available on the command center. """
+        """ Reload the target's set of streams """
         reply = self._get('/targets/streams/'+self.id)
         if reply.status_code != 200:
             raise Exception('Failed to load target streams')
@@ -229,7 +264,7 @@ class Target(Base):
             self._streams.add(stream_object)
 
     def reload_info(self):
-        """ Reload the target's information from the commmand center. """
+        """ Reload the target's information """
         reply = self._get('/targets/info/'+self.id)
         if reply.status_code != 200:
             raise Exception('Failed to load target info')
@@ -249,18 +284,14 @@ class Target(Base):
 
     @property
     def files(self):
-        """ Get the list of files used by the target
-
-        .. note:: Does not return the stream files
-
-        """
+        """ Get the target's list of filenames """
         if not self._files:
             self.reload_info()
         return self._files
 
     @property
     def streams(self):
-        """ Load the list of streams owned by this target """
+        """ Get the set of streams in this target """
         self.reload_streams()
         return self._streams
 
@@ -313,8 +344,18 @@ def add_target(options, engine, engine_versions, cc_uri=None,
     """ Add a target to be managed by the workserver at ``cc_uri``. Currently
     supported ``engine`` is 'openmm'.
 
-    ``options`` is a dictionary of core specific options like steps_per_frame,
+    ``options`` is a dictionary of ,
     discard_water, xtc_precision, etc.
+
+    :param options: dict, core specific options like ``steps_per_frame``.
+    :param engine: str, eg. ``openmm``
+    :param engine_versions: str, eg ``6.0``
+    :param cc_uri: str, which cc to add the target to, eg. flash.stanford.edu
+    :param description: str, JSON safe plain text description
+    :param stage: str, stage of the target, allowed values are 'disabled',
+        'private', 'beta', 'public'
+    :param allowed_ws: str, which workserver we striated on. If None, then the
+        target will be striated over across all available workservers.
 
     """
     if cc_uri is None:
@@ -350,11 +391,9 @@ load_stream = Stream
 
 
 def get_targets(cc_uri=None):
-    """
-    Return a list of targets on the CC. If you are logged in, then this method
-    returns your list of targets.
+    """ Return a set of targets on the CC owned by you. If ``cc_uri`` is not
+    provided, then this retrieves the targets on the cc specified during login.
 
-    .. note:: You do not need to prefix ``cc_uri`` with http
     """
     if cc_uri is None:
         cc_uri = login_cc

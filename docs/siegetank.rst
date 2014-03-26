@@ -2,10 +2,10 @@ Siegetank Python API
 ====================
 
 .. automodule:: siegetank.base
-   :members:
+    :members:
 
-Target Methods
---------------
+.. autoclass:: Stream
+    :members:
 
 .. autoclass:: Target
     :members:
