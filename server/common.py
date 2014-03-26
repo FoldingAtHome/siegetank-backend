@@ -131,8 +131,7 @@ class BaseServerMixin():
 
         if mongo_options:
             host = mongo_options['host']
-            port = mongo_options['port']
-            self.mdb = pymongo.MongoClient(host=host, port=port)
+            self.mdb = pymongo.MongoClient(host)
             self.mdb.community.donors.ensure_index("token")
 
         signal.signal(signal.SIGINT, self.shutdown)

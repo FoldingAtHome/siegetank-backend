@@ -82,6 +82,42 @@ from server.apollo import Entity, zset, relate
 # When the WS dies, we can recreate the entire redis database using data from
 # the disk! This implies we don't actually need to save an rdb.
 
+# stats layout
+
+#######################
+# database: community #
+#######################
+# collection: fragments
+# document layout:
+# {
+#     "_id": default_id
+#     "stream_id": stream_id, [indexed]
+#     "start": start_time,
+#     "end": end_time,
+#     "frames": 23,
+#     "donor": JesseV [indexed]
+# }
+# collection: donors
+# document layout:
+# {
+#     "_id": JesseV
+#     "email": jvictors@gmail.com
+#     "password": hashed password
+#     "token": uuid4
+#     "team": EVGA
+# }
+
+######################
+# database: internal #
+######################
+# collection: managers
+# document layout:
+# {
+#   "_id": dshukla@stanford.edu
+#   "password" hashed password
+#   "token": uuid4
+# }
+
 
 class Stream(Entity):
     prefix = 'stream'

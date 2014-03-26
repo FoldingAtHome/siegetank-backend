@@ -46,7 +46,6 @@ class Test(tornado.testing.AsyncTestCase):
 
         redis_options = {'port': cls.cc_rport, 'logfile': os.devnull}
 
-
         cls.cc = cc.CommandCenter(cc_name='goliath',
                                   cc_pass=None,
                                   redis_options=redis_options,

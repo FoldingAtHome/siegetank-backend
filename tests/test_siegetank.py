@@ -124,9 +124,19 @@ class TestSiegeTank(unittest.TestCase):
         stream.replace('state.xml.gz.b64', new_binary)
         self.assertEqual(stream.download('state.xml.gz.b64'),
                          new_binary.encode())
+
+        correct_ids = set()
+        for s in target.streams:
+            correct_ids.add(s.id)
+
+        correct_ids.remove(stream.id)
         stream.delete()
 
-        #self.assertEqual(target.streams, stream_ids.remove)
+        test_ids = set()
+        for s in target.streams:
+            test_ids.add(s.id)
+
+        self.assertEqual(correct_ids, test_ids)
 
         # finish to make sure we dont have this extra set
 

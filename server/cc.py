@@ -39,7 +39,7 @@ from server.apollo import Entity, relate
 # stats system for each work server.
 
 # CC uses Antirez's redis extensively as NoSQL store mainly because of its
-# blazing fast speed, atomicity across different proccesses, and database
+# blazing fast speed, atomicity across different processes, and database
 # recovery features. Note: binary blobs such as states, systems, and frames are
 # written directly to disk instead
 
@@ -70,7 +70,6 @@ class WorkServer(Entity):
     fields = {'url': str,  # http request url (verify based on if IP or not)
               'http_port': int,  # ws http port
               'fail_count': int,  # number of times a request has failed
-              #'assigns': zset(str),  # assigns per day
               }
 
 WorkServer.add_lookup('ip', injective=True)
@@ -1030,17 +1029,15 @@ class TargetsHandler(BaseHandler):
 
                     "files": {"file1_name": file1_bin_b64,
                               "file2_name": file2_bin_b64,
-                              ...
                               } // optional
 
                     "allowed_ws": ["mengsk", "arcturus"], // optional
                     "stage": "private", "beta", or "public" // optional
 
                     "options": { // optional depending on core
-                        "steps_per_frame": 50000, // optional
-                        "xtc_precision": 3, // optional
-                        "discard_water": True  // optional
-                        ...
+                        "steps_per_frame": 50000, // optional (supported)
+                        "xtc_precision": 3, // optional (not supported)
+                        "discard_water": True  // optional (not supported)
                     }
                 }
 
@@ -1279,6 +1276,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def check_ws(self):
         """ Check all workservers to see if they are alive or not. This is
         called once at the beginning, and periodically as a callback.
+
         """
         for ws_name in WorkServer.members(self.db):
             reply = yield self.fetch(ws_name, '/')
