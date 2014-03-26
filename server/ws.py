@@ -966,7 +966,7 @@ class ActiveStreamsHandler(BaseHandler):
                 active_stream = ActiveStream(stream_id, self.db)
                 donor = active_stream.hget('donor')
                 start_time = active_stream.hget('start_time')
-                active_frames = active_stream.hget('active_frames')
+                active_frames = active_stream.hget('total_frames')
                 buffer_frames = active_stream.hget('buffer_frames')
                 reply[target][stream_id]['donor'] = donor
                 reply[target][stream_id]['start_time'] = start_time
