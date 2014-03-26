@@ -270,6 +270,7 @@ class StreamInfoHandler(BaseHandler):
                 "status": "OK",
                 "frames": 235,
                 "error_count": 0,
+                "active": true
             }
 
             :status 200: OK
@@ -281,7 +282,8 @@ class StreamInfoHandler(BaseHandler):
         body = {
             'status': stream.hget('status'),
             'frames': stream.hget('frames'),
-            'error_count': stream.hget('error_count')
+            'error_count': stream.hget('error_count'),
+            'active': ActiveStream.exists(stream_id, self.db)
         }
         self.set_status(200)
         self.write(body)

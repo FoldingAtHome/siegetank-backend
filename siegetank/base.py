@@ -81,10 +81,11 @@ class Stream(Base):
     def __init__(self, stream_id):
         """ Retrieve an existing stream object """
 
+        self._id = stream_id
         self._frames = None
         self._status = None
         self._error_count = None
-        self._id = stream_id
+        self._active = None
         ws_name = stream_id.split(':')[1]
         global workservers
         ws_uri = workservers[ws_name]['url']
@@ -155,34 +156,42 @@ class Stream(Base):
         self._frames = content['frames']
         self._status = content['status']
         self._error_count = content['error_count']
+        self._active = content['active']
 
     @property
     def files(self):
-        """ Get the stream_files """
+        """ Return the stream_files """
         return self._files
 
     @property
     def id(self):
-        """ Get the stream's id """
+        """ Return the stream's id """
         return self._id
 
     @property
+    def active(self):
+        """ Returns True if the stream is activated by a core """
+        if not self._active:
+            self.reload_info()
+        return self._active
+
+    @property
     def frames(self):
-        """ Get the number of frames completed so far """
-        if not self._id:
+        """ Return the number of frames completed so far """
+        if not self._frames:
             self.reload_info()
         return self._frames
 
     @property
     def status(self):
-        """ Get the status of the stream """
+        """ Return the status of the stream """
         if not self._status:
             self.reload_info()
         return self._status
 
     @property
     def error_count(self):
-        """ Get the number of errors this stream has encountered """
+        """ Return the number of errors this stream has encountered """
         if not self._error_count:
             self.reload_info()
         return self._error_count

@@ -117,6 +117,7 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(stream.frames, 0)
         self.assertEqual(stream.download('state.xml.gz.b64'),
                          encoded_state.encode())
+        self.assertEqual(stream.active, False)
 
         new_binary = base64.b64encode(b'hehehe').decode()
 

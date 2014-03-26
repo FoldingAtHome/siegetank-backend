@@ -497,6 +497,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(n_frames, content['frames'])
         self.assertEqual('OK', content['status'])
         self.assertEqual(0, content['error_count'])
+        self.assertEqual(True, content['active'])
 
         # download the frames
         response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
@@ -553,6 +554,17 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(n_frames*2, content['frames'])
         self.assertEqual('OK', content['status'])
         self.assertEqual(0, content['error_count'])
+
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+
+        response = self.fetch('/streams/info/'+stream_id)
+        content = json.loads(response.body.decode())
+        self.assertEqual(n_frames*2, content['frames'])
+        self.assertEqual('OK', content['status'])
+        self.assertEqual(0, content['error_count'])
+        self.assertEqual(False, content['active'])
 
     def test_put_frame_variadic(self):
         target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
