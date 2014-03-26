@@ -159,11 +159,6 @@ class Stream(Base):
         self._active = content['active']
 
     @property
-    def files(self):
-        """ Return the stream_files """
-        return self._files
-
-    @property
     def id(self):
         """ Return the stream's id """
         return self._id
@@ -290,13 +285,6 @@ class Target(Base):
     def id(self):
         """ Get the target id """
         return self._id
-
-    @property
-    def files(self):
-        """ Get the target's list of filenames """
-        if not self._files:
-            self.reload_info()
-        return self._files
 
     @property
     def streams(self):
