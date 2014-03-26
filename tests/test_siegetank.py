@@ -97,7 +97,6 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.engine, engine)
         self.assertEqual(set(target.engine_versions), set(engine_versions))
         self.assertEqual(target.description, target.description)
-        self.assertEqual(target.files, target.files)
         self.assertEqual(target.allowed_ws, [])
         self.assertAlmostEqual(target.creation_date, creation_time, places=0)
         target_ids = set()
