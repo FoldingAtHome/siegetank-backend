@@ -1,4 +1,4 @@
-CC REST API
+Command Center REST API
 ================================
 
 .. automodule:: server.cc
@@ -19,7 +19,7 @@ Core Methods
 
 Public Methods
 --------------
-.. autosimple:: ListStreamsHandler.get
+.. autosimple:: TargetStreamsHandler.get
 .. autosimple:: GetTargetHandler.get
 .. autosimple:: AuthDonorHandler.post
 .. autosimple:: TargetsHandler.get

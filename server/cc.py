@@ -375,9 +375,9 @@ class UpdateTargetHandler(BaseHandler):
     @authenticate_manager
     def put(self, target_id):
         """
-        .. http:put:: /target/update/:target_id
+        .. http:put:: /targets/update/:target_id
 
-            Update certain fields of the target
+            Update certain fields of ``target_id``
 
             :reqheader Authorization: Manager’s authorization token
 
@@ -386,18 +386,14 @@ class UpdateTargetHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "stage": "private", "beta", "public",  //optional
+                    "stage": "disabled", private", "beta", "public"  //optional
                     "allowed_ws": ["foo", "bar"],  //optional
                     "engine_versions":  ["6.0", "6.5"]  //optional
                     "description": "description"  //optional
                 }
 
-                .. note:: modifying the allowed workservers will only affect
-                    where future streams will be stored. Recall that an empty
-                    allowed_ws implies all workservers will be used.
-
-                .. note:: modifying engine_versions will only affect future
-                    assignments.
+                .. note:: modifying the ``allowed_ws`` and ``engine_versions``
+                    will only affect future streams.
 
             **Example reply**
 
@@ -469,12 +465,11 @@ class AssignHandler(BaseHandler):
                 }
 
             .. note:: If ``target_id`` is specified, then the WS will try and
-                activate one of its streams. In addition, the stage of the
-                target is not taken into consideration. Note that ``target_id``
-                must be the fully qualified 36 digit uuid.
+                activate one of its streams. The stage of the target may be
+                either "private", "beta", or "public".
 
                 Otherwise, we try and find a ``target_id`` whose engine version
-                is compatible with the core's engine_version and `stage` is
+                is compatible with the core's engine_version and ``stage`` is
                 either "beta" or "public".
 
             **Example reply**
@@ -494,21 +489,6 @@ class AssignHandler(BaseHandler):
             :status 400: Bad request
 
         """
-
-        # The assignment algorithm is then applied:
-
-        # Proposed algorithm:
-
-        # Let:
-        # 0 <= target.n_streams
-        # 0 <= vijay.weight < 10
-        # 1 <= a <= b
-
-        # Then:
-        # target.weight = target.n_streams^(2/3)*vijay.weight
-
-        # order and compute the cdf over all targets, then sample x ~ U(0,1]
-        # and see which target maps to x.
 
         self.set_status(400)
         #core_id = self.request.body['core_id']
@@ -913,7 +893,7 @@ class GetTargetHandler(BaseHandler):
         self.write(body)
 
 
-class ListStreamsHandler(BaseHandler):
+class TargetStreamsHandler(BaseHandler):
     @tornado.gen.coroutine
     def get(self, target_id):
         """
@@ -1245,7 +1225,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets', TargetsHandler),
             (r'/targets/delete/(.*)', DeleteTargetHandler),
             (r'/targets/info/(.*)', GetTargetHandler),
-            (r'/targets/streams/(.*)', ListStreamsHandler),
+            (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/targets/update/(.*)', UpdateTargetHandler),
             (r'/targets/download/(.*)/(.*)', DownloadHandler),
             (r'/ws/register', RegisterWSHandler),

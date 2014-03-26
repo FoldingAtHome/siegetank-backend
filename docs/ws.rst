@@ -1,4 +1,4 @@
-WS REST API
+Work Server REST API
 ================================
 
 .. automodule:: server.ws
@@ -10,9 +10,6 @@ These methods on the workserver can only be issued by IPs matching that of known
 
 .. autosimple:: TargetStreamsHandler.get
 .. autosimple:: PostStreamHandler.post
-.. autosimple:: StartStreamHandler.put
-.. autosimple:: StopStreamHandler.put
-.. autosimple:: DeleteStreamHandler.put
 .. autosimple:: ActivateStreamHandler.post
 .. autosimple:: DeleteTargetHandler.put
 
@@ -30,9 +27,14 @@ These methods must be authenticated using a core token
 Manager Methods
 ---------------
 
-.. autosimple:: DownloadHandler.get
+.. autosimple:: StreamInfoHandler.get
+.. autosimple:: StreamDownloadHandler.get
+.. autosimple:: StreamStartHandler.put
+.. autosimple:: StreamStopHandler.put
+.. autosimple:: StreamDeleteHandler.put
 
 Misc Methods
 ------------
 
 .. autosimple:: AliveHandler.get
+.. autosimple:: ActiveStreamsHandler.get

@@ -52,10 +52,6 @@ from server.apollo import Entity, zset, relate
 
 # ZSET  KEY     'heartbeats'                   | { stream_id : expire_time }
 
-# download_token: issued by CC, set to expire after 10 days
-# shared_token: issued by CC, deleted by heartbeat
-# heartbeats: each key deleted on restart, and by check_heartbeats
-
 # Expiration mechanism:
 # hearbeats is a sorted set. A POST to ws/update extends expire_time in
 # heartbeats. A checker callback is passed into ioloop.PeriodicCallback(),
@@ -72,10 +68,10 @@ from server.apollo import Entity, zset, relate
 # One of two failure scenarios can happen:
 
 #              FAILS
-#   Core --Send Request--> Client --Send Reply--> Core
+#   Core --Send Request--> Server --Send Reply--> Core
 
 #                                      FAILS
-#   Core --Send Request--> Client --Send Reply--> Core
+#   Core --Send Request--> Server --Send Reply--> Core
 
 # Note that the Core does NOT know which scenario happened. All it knows
 # is that it did not get a reply. In the second scenario, POSTing the same
@@ -99,7 +95,7 @@ class ActiveStream(Entity):
     prefix = 'active_stream'
     fields = {'total_frames': int,  # total frames completed.
               'buffer_frames': int,  # number of frames in buffer.xtc
-              'auth_token': str,  # used by core to send requests
+              'auth_token': str,  # core Authorization token
               'donor': str,  # the donor assigned ? support lookup?
               'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
@@ -122,7 +118,6 @@ class CommandCenter(Entity):
               'http_port': str  # http port
               }
 
-#Target.add_lookup('owner', injective=False)
 ActiveStream.add_lookup('auth_token')
 ActiveStream.add_lookup('donor', injective=False)
 relate(Target, 'streams', {Stream}, 'target')
@@ -166,14 +161,14 @@ class BaseHandler(tornado.web.RequestHandler):
         return query['owner']
 
     def error(self, message):
-        """ Write a message to the output buffer """
+        """ Write a message to the output buffer. """
         self.set_status(400)
         self.write({'error': message})
 
 
 def authenticate_cc(method):
-    """ Decorate handlers that require the incoming remote_ip be that of a
-    known command center """
+    """ Decorator for handlers that require the incoming request's remote_ip
+    to be a command center ip or localhost (for testing purposes). """
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         if not self.request.remote_ip in self.application.cc_ips and\
@@ -187,12 +182,8 @@ def authenticate_cc(method):
 
 
 def authenticate_core(method):
-    """ Decorate handlers whose authorization token maps to a specific stream
-    identifier.
-
-    If the authorization token is valid, then the stream_id is sent to the
-    method as an argument.
-
+    """ Decorator for core methods used for authentication. The authorization
+    token is mapped to a stream_id that is passed in as an argument.
     """
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
@@ -201,15 +192,12 @@ def authenticate_core(method):
         except:
             self.write({'error': 'missing Authorization header'})
             return self.set_status(401)
-
         stream_id = ActiveStream.lookup('auth_token', token, self.db)
-
         if stream_id:
             return method(self, stream_id)
         else:
             self.write({'error': 'bad Authorization header'})
             return self.set_status(401)
-
     return wrapper
 
 
@@ -218,7 +206,7 @@ class AliveHandler(BaseHandler):
         """
         .. http:get:: /
 
-            Used to check and see if the WS is up or not
+            Used to check and see if the server is up.
 
             :status 200: OK
 
@@ -270,9 +258,9 @@ class DeleteTargetHandler(BaseHandler):
 class StreamInfoHandler(BaseHandler):
     def get(self, stream_id):
         """
-        .. http:get:: /streams/info/:stream_id
+        .. http:get:: /streams/info/[:stream_id]
 
-            Get information about a particular stream
+            Get information about a particular stream.
 
             **Example reply**:
 
@@ -300,12 +288,12 @@ class StreamInfoHandler(BaseHandler):
 
 
 class TargetStreamsHandler(BaseHandler):
-    @authenticate_cc
     def get(self, target_id):
         """
         .. http:get:: /targets/streams/:target_id
 
-            Get a list of streams for the target and their status and frames
+            Get a list of streams for the target on this particular workserver
+            and their status and number of frames.
 
             **Example reply**:
 
@@ -347,6 +335,8 @@ class ActivateStreamHandler(BaseHandler):
             Activate and return the highest priority stream of a target by
             popping the head of the priority queue.
 
+            .. note:: This request can only be made by CCs.
+
             **Example request**
 
             .. sourcecode:: javascript
@@ -363,6 +353,7 @@ class ActivateStreamHandler(BaseHandler):
                 {
                     "token": "uuid token"
                 }
+
 
             :status 200: OK
             :status 400: Bad request
@@ -402,7 +393,10 @@ class PostStreamHandler(BaseHandler):
         """
         .. http:post:: /streams
 
-            Add a new stream to WS.
+            Add a new stream to WS. If ``target_id`` does exist on the WS,
+            then ``target_files`` must be supplied.
+
+            .. note:: This request can only be made by CCs.
 
             **Example request**
 
@@ -412,12 +406,11 @@ class PostStreamHandler(BaseHandler):
                     "target_id": "target_id",
                     "target_files": {"system.xml.gz.b64": "file1.b64",
                                      "integrator.xml.gz.b64": "file2.b64",
-                                     } // required if target_id does not exist
-
+                                     } // optional if target_id exists on WS
                     "stream_files": {"state.xml.gz.b64": "file3.b64"}
                 }
 
-            .. note:: Binaries must be base64 encoded.
+            .. note:: Binary files must be base64 encoded.
 
             **Example reply**
 
@@ -427,15 +420,11 @@ class PostStreamHandler(BaseHandler):
                     "stream_id" : "uuid hash"
                 }
 
+
             :status 200: OK
             :status 400: Bad request
 
         """
-        # TODO: stream creation needs to be pipelined and atomic
-        # Safety-guarantee: dd files before database entries.
-
-        #if not CommandCenter.lookup('ip', self.request.remote_ip, self.db):
-        #    return self.set_status(401)
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
@@ -488,7 +477,7 @@ class PostStreamHandler(BaseHandler):
         self.write(response)
 
 
-class StartStreamHandler(BaseHandler):
+class StreamStartHandler(BaseHandler):
     @authenticate_manager
     def put(self, stream_id):
         """
@@ -496,7 +485,7 @@ class StartStreamHandler(BaseHandler):
 
             Start a stream and set its status to **OK**.
 
-            :reqheader Authorization: manager authorization token
+            :reqheader Authorization: Manager's authorization token
 
             **Example request**:
 
@@ -508,6 +497,7 @@ class StartStreamHandler(BaseHandler):
 
             :status 200: OK
             :status 400: Bad request
+
         """
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
@@ -529,15 +519,15 @@ class StartStreamHandler(BaseHandler):
         return self.set_status(200)
 
 
-class StopStreamHandler(BaseHandler):
+class StreamStopHandler(BaseHandler):
     @authenticate_manager
     def put(self, stream_id):
         """
         .. http:put:: /streams/stop/:stream_id
 
-            Stop a stream and set its status to **STOPPED**
+            Stop a stream and set its status to **STOPPED**.
 
-            :reqheader Authorization: manager authorization token
+            :reqheader Authorization: Manager's authorization token
 
             **Example request**:
 
@@ -568,15 +558,15 @@ class StopStreamHandler(BaseHandler):
         return self.set_status(200)
 
 
-class DeleteStreamHandler(BaseHandler):
+class StreamDeleteHandler(BaseHandler):
     @authenticate_manager
     def put(self, stream_id):
         """
         .. http:put:: /streams/delete/:stream_id
 
-            Delete a stream
+            Delete a stream permanently.
 
-            :reqheader Authorization: manager authorization token
+            :reqheader Authorization: Manager's authorization token
 
             **Example request**:
 
@@ -627,9 +617,9 @@ class CoreStartHandler(BaseHandler):
         """
         .. http:get:: /core/start
 
-            Start a stream and retrieve files
+            Get files needed for the core to start an activated stream.
 
-            :reqheader Authorization: authorization token given by the cc
+            :reqheader Authorization: core Authorization token
 
             **Example reply**
 
@@ -651,17 +641,17 @@ class CoreStartHandler(BaseHandler):
         # We need to be extremely careful about checkpoints and frames, as
         # it is important we avoid writing duplicate frames on the first
         # step for the core. We use the follow scheme:
-
-        #               (0-10]                      (10-20]
+        #
+        #               (0,10]                      (10,20]
         #             frameset_10                 frameset_20
-        #       ------------------------------------------------------------
-        #       |c       core 1      |c|              core 2         |c|
-        #       ---                  --|--                           --|--
+        #      -------------------------------------------------------------
+        #      |c        core 1      |c|              core 2         |c|
+        #      ----                  --|--                           --|--
         # frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
         #         ---------------------| ------------------------------- ---
+        #
+        # In other words, the core does not write frames for the zeroth frame.
 
-        # When a core fetches a state.xml, it makes sure to NOT write the
-        # first frame (equivalent to the frame of fetched state.xml file).
         self.set_status(400)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
@@ -706,7 +696,7 @@ class CoreFrameHandler(BaseHandler):
             binary appendable. Files ending in .b64 or .gz are decoded
             automatically.
 
-            :reqheader Authorization: authorization token given by the cc
+            :reqheader Authorization: core Authorization token
 
             **Example request**
 
@@ -723,31 +713,32 @@ class CoreFrameHandler(BaseHandler):
             :status 200: OK
             :status 400: Bad request
 
-        If the filename ends in b64, it is b64 decoded. If the next suffix ends
-        in gz, it is gunzipped. Afterwards, the written to disk with the name
-        buffer_[filename], with the b64/gz suffixes stripped.
+            If the filename ends in b64, it is b64 decoded. If the remaining
+            suffix ends in gz, it is unzipped. Afterwards, the file is written
+            to disk with the name buffer_[filename], with the b64/gz suffixes
+            stripped.
 
         """
         # There are four intervals:
-
+        #
         # fwi = frame_write_interval (PG Controlled)
         # fsi = frame_send_interval (Core Controlled)
         # cwi = checkpoint_write_interval (Core Controlled)
         # csi = checkpoint_send_interval (Donor Controlled)
-
+        #
         # Where: fwi < fsi = cwi < csi
-
+        #
         # When a set of frames is sent, the core is guaranteed to write a
         # corresponding checkpoint, so that the next checkpoint received is
         # guaranteed to correspond to the head of the buffered files.
-
+        #
         # OpenMM:
-
+        #
         # fwi = fsi = cwi = 50000
         # sci = 2x per day
-
+        #
         # Terachem:
-
+        #
         # fwi = 2
         # fsi = cwf = 100
         # sci = 2x per day
@@ -796,12 +787,11 @@ class CoreCheckpointHandler(BaseHandler):
         """
         .. http:put:: /core/checkpoint
 
-            Add a checkpoint and renames buffered files into a valid filenames
-            prefixed with the corresponding frame count. It is assumed that the
-            checkpoint given corresponds to the last frame of the buffered
-            frames.
+            Add a checkpoint and flushes buffered files into a state deemed
+            safe. It is assumed that the checkpoint corresponds to the last
+            frame of the buffered frames.
 
-            :reqheader Authorization: authorization token given by the cc
+            :reqheader Authorization: core Authorization token
 
             **Example Request**
 
@@ -866,8 +856,8 @@ class CoreCheckpointHandler(BaseHandler):
         # 1) rename old checkpoint file
         for filename, bytes in content['files'].items():
             src = os.path.join(buffers_folder, filename)
-            dst = os.path.join(buffers_folder, 'chkpt_'+str(stream_frames)+'_'+
-                                               filename)
+            dst = os.path.join(buffers_folder,
+                               'chkpt_'+str(stream_frames)+'_'+filename)
             os.rename(src, dst)
 
         # 2) rename buffered files
@@ -901,9 +891,9 @@ class CoreStopHandler(BaseHandler):
         """
         ..  http:put:: /core/stop
 
-            Stop a stream
+            Stop the stream and deactivate.
 
-            :reqheader Authorization: authorization token given by the cc
+            :reqheader Authorization: core Authorization token
 
             **Example Request**
 
@@ -936,22 +926,32 @@ class CoreStopHandler(BaseHandler):
 
 class ActiveStreamsHandler(BaseHandler):
     def get(self):
-        """ Display statistics about active streams on the workserver. The list
-        of streams are not sorted, so the client must sort them.
+        """
+        .. http:get:: /active_streams
 
-        Reply:
+            Get information about active streams on the workserver.
 
-        {
-            target_id: {
-                    stream_id_1: {
-                        donor_id: None,
-                        start_time: time,
-                        total_frames: frames
+            **Example Reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "target_id": {
+                            "stream_id_1": {
+                                "donor_id": None,
+                                "start_time": 31875.3,
+                                "active_frames": 23
+                            }
                     }
-                    ...
-            }
-            ...
-        }
+                }
+
+            .. note:: ``start_time`` is in seconds since the Unix epoch time.
+
+            .. note:: ``active_frames`` is the number of frames completed by
+                core so far.
+
+            :status 200: OK
+            :status 400: Bad request
 
         """
         reply = dict()
@@ -966,16 +966,16 @@ class ActiveStreamsHandler(BaseHandler):
                 active_stream = ActiveStream(stream_id, self.db)
                 donor = active_stream.hget('donor')
                 start_time = active_stream.hget('start_time')
-                total_frames = active_stream.hget('total_frames')
+                active_frames = active_stream.hget('active_frames')
                 buffer_frames = active_stream.hget('buffer_frames')
                 reply[target][stream_id]['donor'] = donor
                 reply[target][stream_id]['start_time'] = start_time
-                reply[target][stream_id]['total_frames'] = total_frames
+                reply[target][stream_id]['active_frames'] = active_frames
                 reply[target][stream_id]['buffer_frames'] = buffer_frames
         self.write(reply)
 
 
-class ReplaceHandler(BaseHandler):
+class StreamReplaceHandler(BaseHandler):
     @authenticate_manager
     @tornado.gen.coroutine
     def put(self, stream_id):
@@ -1028,7 +1028,7 @@ class ReplaceHandler(BaseHandler):
         return
 
 
-class DownloadHandler(BaseHandler):
+class StreamDownloadHandler(BaseHandler):
     @authenticate_manager
     @tornado.gen.coroutine
     def get(self, stream_id, filename):
@@ -1036,7 +1036,7 @@ class DownloadHandler(BaseHandler):
         .. http:get:: /streams/download/:stream_id/:filename
 
             Download file ``filename`` from ``stream_id``. ``filename`` can be
-            either a file in *stream_files* or a frame file posted by the core.
+            either a file in ``stream_files`` or a frame file posted by the core.
             If it is a frame file, then the frames are concatenated on the fly
             before returning.
 
@@ -1126,7 +1126,7 @@ class CoreHeartbeatHandler(BaseHandler):
             Cores POST to this handler to notify the WS that it is still
             alive.
 
-            :reqheader Authorization: authorization token given by the cc
+            :reqheader Authorization: core Authorization token
 
             **Example request**
 
@@ -1215,11 +1215,11 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/streams/activate', ActivateStreamHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/info/(.*)', StreamInfoHandler),
-            (r'/streams/start/(.*)', StartStreamHandler),
-            (r'/streams/stop/(.*)', StopStreamHandler),
-            (r'/streams/delete/(.*)', DeleteStreamHandler),
-            (r'/streams/download/(.*)/(.*)', DownloadHandler),
-            (r'/streams/replace/(.*)', ReplaceHandler),
+            (r'/streams/start/(.*)', StreamStartHandler),
+            (r'/streams/stop/(.*)', StreamStopHandler),
+            (r'/streams/delete/(.*)', StreamDeleteHandler),
+            (r'/streams/download/(.*)/(.*)', StreamDownloadHandler),
+            (r'/streams/replace/(.*)', StreamReplaceHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/targets/delete/(.*)', DeleteTargetHandler),
             (r'/core/start', CoreStartHandler),
