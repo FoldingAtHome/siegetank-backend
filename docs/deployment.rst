@@ -1,7 +1,7 @@
 Backend Deployment
 ==================
 
-The backend server code tries to be as self contained as possible, and dependencies are generally limited to very well known python packages. Only python 3.3.3 is supported. You can check the version of python by
+The backend server code tries to be as self contained as possible, and dependencies are generally limited to very well known python packages. Only python 3.3.3 and higher is supported. You can check the version of python by
 
 .. sourcecode:: bash
 
@@ -48,12 +48,21 @@ This specifies the externally visible url and port that should be used by the CC
 SSL Certificates
 ----------------
 
-The new backend requires SSL, as HTTPS is fast becoming the standard. If you are deploying workservers on a \*.stanford.edu domain, use `this link <https://itservices.stanford.edu/service/ssl/>`_ to request free SSL certificates for your machine. Note that you must own the machine the subdomain points to.
+The new backend requires SSL for both HTTPS requests as well as MongoDB communication. If you are deploying workservers on a \*.stanford.edu domain, use `this link <https://itservices.stanford.edu/service/ssl/>`_ to request free SSL certificates for your machine. Note that you must own the machine the subdomain points to.
 
 You should have three files that correspond to the options:
 
 * *ssl_certfile* - a signed, public certificate issued by a CA
 * *ssl_key* - the private key used to generate the initial signing request
-* *ssl_ca_certs* - a CA chain that connecting the certs
+* *ssl_ca_certs* - a CA chain intermediate connecting the certs
 
 These files should be placed under the ``certs`` folder in the root directory.
+
+Database Configuration
+----------------------
+
+The new backend uses MongoDB to store data on donors, stream statistics, authentication, and managers. This information is shared across all Command Center and Work Servers. Generally you won't need to deploy your own MongoDB instances.
+
+As noted above, all communication to the database must be encrypted using SSL. In particular, you cannot use a vanilla build obtained from package managers such as apt-get. SSL support must be compiled in from source for ``mongod``, ``mongos``, and ``mongo``. However, pymongo python drivers work fine out of the box via pip.
+
+Additional instructions for building and starting MongoDB with SSL support are available `here <http://docs.mongodb.org/manual/tutorial/configure-ssl/>`_.

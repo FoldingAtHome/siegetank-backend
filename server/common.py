@@ -36,6 +36,8 @@ def is_domain(url):
     """ Returns True if url is a domain """
     # if a port is present in the url, then we extract the base part
     base = url.split(':')[0]
+    if base == 'localhost':
+        return False
     try:
         ipaddress.ip_address(base)
         return False
@@ -131,7 +133,17 @@ class BaseServerMixin():
 
         if mongo_options:
             host = mongo_options['host']
-            self.mdb = pymongo.MongoClient(host)
+            ssl_kwargs = {}
+            if is_domain(host):
+                options = tornado.options.options
+                try:
+                    ssl_kwargs['ssl_certfile'] = options.ssl_certfile
+                    ssl_kwargs['ssl_keyfile'] = options.ssl_keyfile
+                    ssl_kwargs['ssl_ca_certs'] = options.ssl_ca_certs
+                except AttributeError:
+                    print('WARNING: SSL not enabled for MongoDB - this is OK\
+                           if this message shows up during unit tests')
+            self.mdb = pymongo.MongoClient(host, **ssl_kwargs)
             self.mdb.community.donors.ensure_index("token")
 
         signal.signal(signal.SIGINT, self.shutdown)
