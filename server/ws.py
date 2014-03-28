@@ -392,7 +392,6 @@ class ActivateStreamHandler(BaseHandler):
                     "token": "uuid token"
                 }
 
-
             :status 200: OK
             :status 400: Bad request
 

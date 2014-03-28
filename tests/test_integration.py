@@ -443,8 +443,117 @@ class Test(tornado.testing.AsyncTestCase):
                 shutil.rmtree(folder)
 
 
-class TestMultiWS(tornado.testing.AsyncTestCase):
+class TestMultiCC(tornado.testing.AsyncTestCase):
+    @classmethod
+    def setupClass(cls):
+        super(TestMultiCC, cls).setUpClass()
+        cls.ccs = {}
+        cls.ccs['flash'] = {}
+        cls.ccs['jaedong'] = {}
+        cls.ccs['bisu'] = {}
 
+        rport_start = 2398
+        hport_start = 9001
+
+        mongo_options = {
+            'host': 'localhost',
+        }
+
+        for k, v in cls.ccs.items():
+            v['rport'] = rport_start
+            v['hport'] = hport_start
+            targets_folder = 'targets_folder_'+k
+            redis_options = {'port': rport_start, 'logfile': os.devnull}
+            v['cc'] = cc.CommandCenter(k, cc_pass=None,
+                                       redis_options=redis_options,
+                                       mongo_options=mongo_options,
+                                       targets_folder=targets_folder)
+            hport_start += 1
+            rport_start += 1
+
+        ws_rport = 5872
+        cls.ws_hport = 8342
+
+        ws_name = 'solace'
+        redis_options = {'port': ws_rport, 'logfile': os.devnull}
+        external_options = {'external_http_port': cls.ws_hport}
+
+        cls.ws = ws.WorkServer(ws_name, redis_options=redis_options,
+                               external_options=external_options,
+                               targets_folder='ws_targets_folder',
+                               streams_folder='ws_streams_folder')
+
+    def setUp(self):
+        super(TestMultiCC, self).setUp()
+        print('debug---', self.ccs)
+        for k, v in self.ccs.items():
+            v['cc'].mdb.users.managers.drop()
+            v['cc'].mdb.community.donors.drop()
+            v['cc'].add_ws(self.ws.name, '127.0.0.1', v['hport'])
+            v['httpserver'] = tornado.httpserver.HTTPServer(
+                v['cc'],
+                io_loop=self.io_loop,
+                ssl_options={'certfile': 'certs/public.crt',
+                             'keyfile': 'certs/private.pem'})
+            v['httpserver'].listen(v['hport'])
+
+        self.ws_httpserver = tornado.httpserver.HTTPServer(
+            self.ws,
+            io_loop=self.io_loop,
+            ssl_options={'certfile': 'certs/public.crt',
+                         'keyfile': 'certs/private.pem'})
+        self.ws_httpserver.listen(self.ws_hport)
+
+        # register a manager account
+        client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
+        url = '127.0.0.1'
+        email = 'proteneer@gmail.com'
+        password = 'test_pw_me'
+        body = {
+            'email': email,
+            'password': password,
+            'role': 'manager'
+        }
+
+        uri = 'https://'+url+':'+str(self.ccs['flash']['hport'])+'/managers'
+        client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                     validate_cert=common.is_domain(url))
+        rep = self.wait()
+        self.assertEqual(rep.code, 200)
+        auth = json.loads(rep.body.decode())['token']
+
+        self.auth, self.url, self.client = auth, url, client
+
+    def test_foo(self):
+        pass
+
+    def tearDown(self):
+        super(TestMultiCC, self).tearDown()
+        for k, v in self.ccs.items():
+            v['httpserver'].stop()
+            v['cc'].db.flushdb()
+            v['cc'].mdb.users.managers.drop()
+        self.ws_httpserver.stop()
+
+    @classmethod
+    def tearDownClass(cls):
+        super(TestMultiCC, cls).tearDownClass()
+        cls.ws.db.flushdb()
+        cls.ws.shutdown(kill=False)
+
+        folders = [cls.ws.targets_folder, cls.ws.streams_folder]
+
+        for k, v in cls.ccs.items():
+            v['cc'].db.flushdb()
+            v['cc'].shutdown(kill=False)
+            folders.append(v['cc'].targets_folder)
+
+        for folder in folders:
+            if os.path.exists(folder):
+                shutil.rmtree(folder)
+
+
+class TestMultiWS(tornado.testing.AsyncTestCase):
     @classmethod
     def setUpClass(cls):
         super(TestMultiWS, cls).setUpClass()
@@ -457,12 +566,9 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         hport_start = 9001
 
         for k, v in cls.workservers.items():
-            v['rport'] = rport_start
             v['hport'] = hport_start
             targets_folder = 'targets_folder_'+k
             streams_folder = 'streams_folder_'+k
-            v['targets_folder'] = targets_folder
-            v['streams_folder'] = streams_folder
 
             redis_options = {'port': rport_start, 'logfile': os.devnull}
             external_options = {'external_http_port': hport_start}
@@ -474,10 +580,10 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             rport_start += 1
             hport_start += 1
 
-        cls.cc_rport = 5872
+        cc_rport = 5872
         cls.cc_hport = 8342
 
-        redis_options = {'port': cls.cc_rport, 'logfile': os.devnull}
+        redis_options = {'port': cc_rport, 'logfile': os.devnull}
 
         mongo_options = {
             'host': 'localhost',
@@ -537,7 +643,6 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
             v['ws'].db.flushdb()
         self.cc_httpserver.stop()
         self.cc.mdb.users.managers.drop()
-        pass
 
     def test_workserver_status(self):
         client = self.client
@@ -735,8 +840,8 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         for k, v in cls.workservers.items():
             v['ws'].db.flushdb()
             v['ws'].shutdown(kill=False)
-            folders.append(v['targets_folder'])
-            folders.append(v['streams_folder'])
+            folders.append(v['ws'].targets_folder)
+            folders.append(v['ws'].streams_folder)
 
         for folder in folders:
             if os.path.exists(folder):
