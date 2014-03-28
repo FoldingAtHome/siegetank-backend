@@ -477,16 +477,16 @@ class TestMultiCC(tornado.testing.AsyncTestCase):
 
         cls.ws = ws.WorkServer(ws_name, redis_options=redis_options,
                                external_options=external_options,
+                               mongo_options=mongo_options,
                                targets_folder='ws_targets_folder',
                                streams_folder='ws_streams_folder')
 
     def setUp(self):
         super(TestMultiCC, self).setUp()
-        print('debug---', self.ccs)
         for k, v in self.ccs.items():
             v['cc'].mdb.users.managers.drop()
             v['cc'].mdb.community.donors.drop()
-            v['cc'].add_ws(self.ws.name, '127.0.0.1', v['hport'])
+            v['cc'].add_ws(self.ws.name, '127.0.0.1', self.ws_hport)
             v['httpserver'] = tornado.httpserver.HTTPServer(
                 v['cc'],
                 io_loop=self.io_loop,
@@ -521,8 +521,61 @@ class TestMultiCC(tornado.testing.AsyncTestCase):
 
         self.auth, self.url, self.client = auth, url, client
 
-    def test_foo(self):
-        pass
+    def test_post_streams(self):
+        headers = {'Authorization': self.auth}
+        client = self.client
+        url = self.url
+        total_targets = set()
+        total_streams = set()
+        for cc_name, cc_prop in self.ccs.items():
+            fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
+                                  for i in range(4))
+            description = "Diwakar and John's top secret project"
+            body = {
+                'description': description,
+                'files': {'system.xml.gz.b64': fb1,
+                          'integrator.xml.gz.b64': fb2},
+                'steps_per_frame': 50000,
+                'engine': 'openmm',
+                'engine_versions': ['6.0'],
+                # we should be able to get a target regardless of stage
+                }
+            port = cc_prop['hport']
+            uri = 'https://'+url+':'+str(port)+'/targets'
+            client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
+                         validate_cert=common.is_domain(url), headers=headers)
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            target_id = json.loads(reply.body.decode())['target_id']
+            total_targets.add(target_id)
+
+            for i in range(5):
+                uri = 'https://'+url+':'+str(port)+'/streams'
+                rand_bin = base64.b64encode(os.urandom(1024)).decode()
+                body = {'target_id': target_id,
+                        'files': {"state.xml.gz.b64": rand_bin}
+                        }
+
+                client.fetch(uri, self.stop, method='POST',
+                             body=json.dumps(body),
+                             validate_cert=common.is_domain(url),
+                             headers=headers)
+                reply = self.wait()
+                self.assertEqual(reply.code, 200)
+                total_streams.add(json.loads(reply.body.decode())['stream_id'])
+
+        workserver_streams = set()
+        for target in total_targets:
+            uri = 'https://'+url+':'+str(self.ws_hport)+\
+                '/targets/streams/'+target
+            client.fetch(uri, self.stop, validate_cert=common.is_domain(url))
+            reply = self.wait()
+            self.assertEqual(reply.code, 200)
+            streams_found = json.loads(reply.body.decode())
+            for stream_id, prop in streams_found.items():
+                workserver_streams.add(stream_id)
+
+        self.assertEqual(workserver_streams, total_streams)
 
     def tearDown(self):
         super(TestMultiCC, self).tearDown()

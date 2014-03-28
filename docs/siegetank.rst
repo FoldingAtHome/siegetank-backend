@@ -6,6 +6,8 @@ Siegetank Python API
 
 .. autoclass:: Stream
     :members:
+    :inherited-members:
 
 .. autoclass:: Target
     :members:
+    :inherited-members:

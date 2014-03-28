@@ -103,8 +103,8 @@ from server.apollo import Entity, zset, relate
 #     "_id": JesseV
 #     "email": jvictors@gmail.com
 #     "password": hashed password
-#     "token": uuid4
-#     "team": EVGA
+#     "token": uuid4 [indexed]
+#     "team": EVGA [indexed]
 # }
 
 ######################
@@ -302,12 +302,12 @@ class StreamInfoHandler(BaseHandler):
 
             .. sourcecode:: javascript
 
-            {
-                "status": "OK",
-                "frames": 235,
-                "error_count": 0,
-                "active": true
-            }
+                {
+                    "status": "OK",
+                    "frames": 235,
+                    "error_count": 0,
+                    "active": true
+                }
 
             :status 200: OK
             :status 400: Bad request
