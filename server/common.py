@@ -65,7 +65,7 @@ def authenticate_manager(method):
     return wrapper
 
 
-def init_redis(redis_options):
+def init_redis(redis_options, cwd=None):
     """ Spawn a redis subprocess port and returns a redis client.
 
         redis_options - a dictionary of redis options
@@ -78,11 +78,12 @@ def init_redis(redis_options):
     """
     redis_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                               '..', 'redis', 'src', 'redis-server')
+    redis_path = os.path.abspath(redis_path)
     args = [redis_path]
     for option_name, option_value in redis_options.items():
         args.append('--'+option_name)
         args.append(str(option_value))
-    redis_process = subprocess.Popen(args)
+    redis_process = subprocess.Popen(args, cwd=cwd)
 
     if redis_process.poll() is not None:
         print('Could not start redis server, aborting')
@@ -120,16 +121,16 @@ class BaseServerMixin():
         """ A BaseServer is a server that is connected to both a redis server
         and a mongo server """
         self.name = name
+        self.data_folder = name+'_data'
+        if not os.path.exists(self.data_folder):
+            os.makedirs(self.data_folder)
         self.redis_options = redis_options
         self.mongo_options = mongo_options
 
-        if 'logfile' in redis_options:
-            if redis_options['logfile'] != os.devnull:
-                redis_options['logfile'] += name
         if 'appendfilename' in redis_options:
             redis_options['appendonly'] = 'yes'
             redis_options['appendfilename'] += name
-        self.db = init_redis(redis_options)
+        self.db = init_redis(redis_options, cwd=self.data_folder)
 
         if mongo_options:
             host = mongo_options['host']

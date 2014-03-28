@@ -1211,8 +1211,8 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
         print('Starting up Work Server:', ws_name)
         self.base_init(ws_name, redis_options, mongo_options)
 
-        self.targets_folder = targets_folder
-        self.streams_folder = streams_folder
+        self.targets_folder = os.path.join(self.data_folder, targets_folder)
+        self.streams_folder = os.path.join(self.data_folder, streams_folder)
         self.command_centers = command_centers
         self.cc_ips = set()
 

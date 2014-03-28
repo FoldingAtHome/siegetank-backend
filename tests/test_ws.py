@@ -60,10 +60,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.ws.mdb.drop_database('users')
         self.ws.mdb.drop_database('community')
         self.ws.mdb.drop_database('data')
-        folders = [self.ws.targets_folder, self.ws.streams_folder]
-        for folder in folders:
-            if os.path.exists(folder):
-                shutil.rmtree(folder)
+        shutil.rmtree(self.ws.data_folder)
         super(TestStreamMethods, self).tearDownClass()
 
     def get_app(self):

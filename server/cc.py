@@ -1209,7 +1209,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         print('Starting up Command Center:', cc_name)
         self.base_init(cc_name, redis_options, mongo_options)
         self.cc_pass = cc_pass
-        self.targets_folder = targets_folder
+        self.targets_folder = os.path.join(self.data_folder, targets_folder)
         if not os.path.exists(targets_folder):
             os.makedirs(targets_folder)
         super(CommandCenter, self).__init__([

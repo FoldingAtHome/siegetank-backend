@@ -436,11 +436,8 @@ class Test(tornado.testing.AsyncTestCase):
         cls.ws.db.flushdb()
         cls.cc.shutdown(kill=False)
         cls.ws.shutdown(kill=False)
-        folders = [cls.ws.targets_folder, cls.ws.streams_folder,
-                   cls.cc.targets_folder]
-        for folder in folders:
-            if os.path.exists(folder):
-                shutil.rmtree(folder)
+        shutil.rmtree(cls.cc.data_folder)
+        shutil.rmtree(cls.ws.data_folder)
 
 
 class TestMultiCC(tornado.testing.AsyncTestCase):
@@ -540,17 +537,11 @@ class TestMultiCC(tornado.testing.AsyncTestCase):
         super(TestMultiCC, cls).tearDownClass()
         cls.ws.db.flushdb()
         cls.ws.shutdown(kill=False)
-
-        folders = [cls.ws.targets_folder, cls.ws.streams_folder]
-
+        shutil.rmtree(cls.ws.data_folder)
         for k, v in cls.ccs.items():
             v['cc'].db.flushdb()
             v['cc'].shutdown(kill=False)
-            folders.append(v['cc'].targets_folder)
-
-        for folder in folders:
-            if os.path.exists(folder):
-                shutil.rmtree(folder)
+            shutil.rmtree(v['cc'].data_folder)
 
 
 class TestMultiWS(tornado.testing.AsyncTestCase):
@@ -835,17 +826,11 @@ class TestMultiWS(tornado.testing.AsyncTestCase):
         cls.cc.db.flushdb()
         cls.cc.shutdown(kill=False)
 
-        folders = [cls.cc.targets_folder]
-
+        shutil.rmtree(cls.cc.data_folder)
         for k, v in cls.workservers.items():
             v['ws'].db.flushdb()
             v['ws'].shutdown(kill=False)
-            folders.append(v['ws'].targets_folder)
-            folders.append(v['ws'].streams_folder)
-
-        for folder in folders:
-            if os.path.exists(folder):
-                shutil.rmtree(folder)
+            shutil.rmtree(v['ws'].data_folder)
 
 
 if __name__ == '__main__':

@@ -29,10 +29,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def tearDownClass(self):
         self.cc.shutdown_redis()
-        folders = [self.cc.targets_folder]
-        for folder in folders:
-            if os.path.exists(folder):
-                shutil.rmtree(folder)
+        shutil.rmtree(self.cc.data_folder)
         super(TestCommandCenter, self).tearDownClass()
 
     def tearDown(self):

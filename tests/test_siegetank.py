@@ -53,14 +53,8 @@ class TestSiegeTank(unittest.TestCase):
             print(e)
             pass
 
-        for filename in glob.glob('aof_*'):
-            os.remove(filename)
-        for filename in glob.glob('db_log_*'):
-            os.remove(filename)
-        if os.path.exists('targets'):
-            shutil.rmtree('targets')
-        if os.path.exists('streams'):
-            shutil.rmtree('streams')
+        for data_folder in glob.glob('*_data'):
+            shutil.rmtree(data_folder)
 
     def test_add_target(self):
         state_url = 'http://www.stanford.edu/~yutongz/state.xml.gz'
