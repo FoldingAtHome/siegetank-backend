@@ -2,6 +2,7 @@
 
 import os
 import signal
+import time
 
 pids = open('pids.log').read().split(' ')
 
@@ -11,4 +12,8 @@ for pid in pids:
     except Exception:
         pass
 
-os.system('rm -rf pids.log target_ids.log aof_* streams targets')
+# avoid weird error where a file is being written while an rm rf is being
+# issued
+time.sleep(1)
+
+os.system('rm -rf *.log *_data')
