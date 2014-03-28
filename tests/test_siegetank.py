@@ -53,6 +53,8 @@ class TestSiegeTank(unittest.TestCase):
             print(e)
             pass
 
+        time.sleep(1)
+
         for data_folder in glob.glob('*_data'):
             shutil.rmtree(data_folder)
 

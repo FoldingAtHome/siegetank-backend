@@ -1216,10 +1216,6 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
         self.command_centers = command_centers
         self.cc_ips = set()
 
-        if not os.path.exists(targets_folder):
-            os.makedirs(targets_folder)
-        if not os.path.exists(streams_folder):
-            os.makedirs(streams_folder)
         # Notify the command centers that this workserver is online
         if command_centers:
             for cc_name, properties in command_centers.items():
