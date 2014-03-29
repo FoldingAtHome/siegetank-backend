@@ -78,6 +78,7 @@ class Base:
 
 
 class Stream(Base):
+    """ A Stream is a single trajectory residing on a remote server. """
     def __init__(self, stream_id):
         """ Retrieve an existing stream object """
 
@@ -193,6 +194,7 @@ class Stream(Base):
 
 
 class Target(Base):
+    """ A Target is a collection of Streams residing on a remote server. """
     def __init__(self, target_id, cc_uri=None):
         """ Retrieve an existing target object """
         global login_cc
