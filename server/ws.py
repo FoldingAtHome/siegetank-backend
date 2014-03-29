@@ -117,7 +117,8 @@ from server.apollo import Entity, zset, relate
 #   "password" hashed password
 #   "token": uuid4
 # }
-
+#
+# collection: targets
 
 class Stream(Entity):
     prefix = 'stream'
@@ -1320,7 +1321,7 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             stream = Stream(stream_id, self.db)
             frames_completed = stream.hget('frames')
             target = Target(stream.hget('target'), self.db)
-            # TODO: to a check to make sure the stream's status is OK. Check
+            # TODO: do a check to make sure the stream's status is OK. Check
             # the error count, if it's too high, then the stream is stopped
             target.zadd('queue', stream_id, frames_completed)
 

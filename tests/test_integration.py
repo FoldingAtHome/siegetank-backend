@@ -538,7 +538,6 @@ class TestMultiCC(tornado.testing.AsyncTestCase):
                 'steps_per_frame': 50000,
                 'engine': 'openmm',
                 'engine_versions': ['6.0'],
-                # we should be able to get a target regardless of stage
                 }
             port = cc_prop['hport']
             uri = 'https://'+url+':'+str(port)+'/targets'

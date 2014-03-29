@@ -40,6 +40,10 @@ class TestApollo(unittest.TestCase):
         cls.db = common.init_redis(redis_options=redis_options)
         cls.db.flushdb()
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.db.shutdown()
+
     def tearDown(self):
         if self.db.keys('*') != []:
             self.db.flushdb()

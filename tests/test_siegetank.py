@@ -54,7 +54,7 @@ class TestSiegeTank(unittest.TestCase):
             pass
 
         time.sleep(1)
-
+        print('tearing down')
         for data_folder in glob.glob('*_data'):
             shutil.rmtree(data_folder)
 

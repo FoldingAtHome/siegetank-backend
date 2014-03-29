@@ -26,6 +26,7 @@ import signal
 import tornado.options
 import functools
 import json
+import logging
 
 
 def sum_time(time):
@@ -127,9 +128,14 @@ class BaseServerMixin():
         self.redis_options = redis_options
         self.mongo_options = mongo_options
 
+        log_filename = os.path.join(self.data_folder, 'server.log')
+        channel = logging.handlers.RotatingFileHandler(
+            filename=log_filename)
+        logger = logging.getLogger('tornado.access')
+        logger.addHandler(channel)
+
         if 'appendfilename' in redis_options:
             redis_options['appendonly'] = 'yes'
-            redis_options['appendfilename'] += name
         self.db = init_redis(redis_options, cwd=self.data_folder)
 
         if mongo_options:

@@ -391,8 +391,12 @@ class UpdateTargetHandler(BaseHandler):
                     "description": "description"  //optional
                 }
 
-                .. note:: modifying the ``allowed_ws`` and ``engine_versions``
+                .. note:: modifying ``allowed_ws`` and ``engine_versions``
                     will only affect future streams.
+
+                .. note:: modifying ``stage`` only affects future assignments.
+                    If you wish to stop the streams, you must explicitly stop
+                    them.
 
             **Example reply**
 
@@ -640,11 +644,10 @@ class WSStatusHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "ws_name": {
+                    "raynor": {
                         "url": "raynor.stanford.edu",
                         "online": true,
                     }
-                    ..
                 }
 
         """
