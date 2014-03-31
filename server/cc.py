@@ -35,35 +35,6 @@ from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import authenticate_manager
 from server.apollo import Entity, relate
 
-# The Command Center manages several work servers in addition to managing the
-# stats system for each work server.
-
-# CC uses Antirez's redis extensively as NoSQL store mainly because of its
-# blazing fast speed, atomicity across different processes, and database
-# recovery features. Note: binary blobs such as states, systems, and frames are
-# written directly to disk instead
-
-# For more information on redis memory usage, visit:
-# http://nosql.mypopescu.com/post/1010844204/redis-memory-usage
-
-###################
-# Fault tolerance #
-###################
-
-# There are three failure modes that could happen:
-
-# 1. CC Up - WS Down: When the WS restarts, it notifies all the WS that it is
-#                     alive via RegisterWSHandler (which resets the fail_count)
-
-# 2. CC Down - WS Up: When the CC restarts, it pings all of the WS in its redis
-#                     databases to see if they are alive.
-
-# 3. CC Up - WS Up - Network Down: The CC will see that the WS is down, but the
-#                                  WS won't explicitly restart since it may be
-#                                  slaves to multiple CCs. So the only way is
-#                                  for the CC to periodically ping the downed
-#                                  WSs via a periodic callback.
-
 
 class WorkServer(Entity):
     prefix = 'ws'
@@ -75,8 +46,6 @@ class WorkServer(Entity):
 WorkServer.add_lookup('ip', injective=True)
 
 
-# note, some of these options are created lazily, ie. they don't take up space
-# until created. (yay for noSQL)
 class Target(Entity):
     prefix = 'target'
     fields = {'description': str,  # description of the target
@@ -89,7 +58,7 @@ class Target(Entity):
               'engine_versions': {str},  # allowed core_versions
               }
 
-# allow queries to find which targets have a matching engine version
+
 Target.add_lookup('engine_versions', injective=False)
 relate(Target, 'striated_ws', {WorkServer})
 

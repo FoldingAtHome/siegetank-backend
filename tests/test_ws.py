@@ -626,6 +626,14 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                               method='PUT', body='')
         self.assertEqual(response.code, 200)
         self.assertFalse(ws.ActiveStream.exists(stream_id, self.ws.db))
+
+        # activating the stream should fail
+        body = json.dumps({
+            'target_id': target_id
+        })
+        response = self.fetch('/streams/activate', method='POST', body=body)
+        self.assertEqual(response.code, 400)
+
         stream = ws.Stream(stream_id, self.ws.db)
         target = ws.Target(target_id, self.ws.db)
 
@@ -639,6 +647,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stream.hget('status'), 'OK')
         self.assertEqual(target.zrange('queue', 0, -1), [stream_id])
 
+        # activating stream should succeed
         stream_id_activated, token_id = self._activate_stream(target_id)
         self.assertEqual(stream_id, stream_id_activated)
 

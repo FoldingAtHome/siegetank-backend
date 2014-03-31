@@ -422,7 +422,7 @@ class ActivateStreamHandler(BaseHandler):
             self.set_status(200)
             return self.write(reply)
         else:
-            return self.write(dict())
+            return self.error('no streams available')
 
 
 class PostStreamHandler(BaseHandler):
