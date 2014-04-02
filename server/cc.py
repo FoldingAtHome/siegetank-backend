@@ -58,8 +58,10 @@ class Target(Entity):
               'engine_versions': {str},  # allowed core_versions
               }
 
-
+# this becomes an index lookup in mongo
 Target.add_lookup('engine_versions', injective=False)
+
+# this is also another indexing lookup in mongo
 relate(Target, 'striated_ws', {WorkServer})
 
 

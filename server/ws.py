@@ -88,7 +88,6 @@ from server.apollo import Entity, zset, relate
 # database: community #
 #######################
 # collection: fragments
-# document layout:
 # {
 #     "_id": default_id
 #     "stream_id": stream_id, [indexed]
@@ -97,8 +96,8 @@ from server.apollo import Entity, zset, relate
 #     "frames": 23,
 #     "donor": JesseV [indexed]
 # }
+#
 # collection: donors
-# document layout:
 # {
 #     "_id": JesseV
 #     "email": jvictors@gmail.com
@@ -111,14 +110,39 @@ from server.apollo import Entity, zset, relate
 # database: internal #
 ######################
 # collection: managers
-# document layout:
 # {
 #   "_id": dshukla@stanford.edu
 #   "password" hashed password
 #   "token": uuid4
+#   "role": admin
 # }
 #
 # collection: targets
+# {
+#    "_id": target_id
+#    "owner": manager_id [indexed]
+#    "description": "1234",
+#    "files": {
+#           "system.xml.gz.b64": "some_file_b64",
+#           "integrator.xml.gz.b64": "some_integrator_b64"
+#       },
+#    "creation_date":,
+#    "stage":,
+#    "shards":,
+#    "engine":,
+#    "engine_versions":,
+# }
+
+#####################
+# database: servers #
+#####################
+# collection: workservers
+# {
+#    ""
+# }
+#
+#
+#
 
 class Stream(Entity):
     prefix = 'stream'
