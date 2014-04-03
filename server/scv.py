@@ -160,41 +160,6 @@ class AliveHandler(BaseHandler):
         self.set_status(200)
 
 
-class DeleteTargetHandler(BaseHandler):
-    def put(self, target_id):
-        """
-        .. http:put:: /targets/delete/:target_id
-
-            Delete ``target_id`` and all of its streams from this server.
-
-            :status 200: OK
-            :status 400: Bad request
-
-        """
-        self.set_status(400)
-        try:
-            target = Target(target_id, self.db)
-        except:
-            return self.set_status(200)
-        stream_ids = target.smembers('streams')
-        pipe = self.db.pipeline()
-        for stream_id in stream_ids:
-            try:
-                self.deactivate_stream(stream_id)
-            except KeyError:
-                pass
-            stream_dir = os.path.join(self.application.streams_folder,
-                                      stream_id)
-            if os.path.exists(stream_dir):
-                shutil.rmtree(stream_dir)
-            # verify=False for performance reasons
-            stream = Stream(stream_id, self.db, verify=False)
-            stream.delete(pipeline=pipe)
-        target.delete(pipeline=pipe)
-        pipe.execute()
-        self.set_status(200)
-
-
 class StreamInfoHandler(BaseHandler):
     def get(self, stream_id):
         """
@@ -268,7 +233,7 @@ class TargetStreamsHandler(BaseHandler):
         self.write(body)
 
 
-class ActivateStreamHandler(BaseHandler):
+class StreamActivateHandler(BaseHandler):
     def post(self):
         """
         .. http:post:: /streams/activate
@@ -327,7 +292,7 @@ class ActivateStreamHandler(BaseHandler):
             return self.error('no streams available')
 
 
-class PostStreamHandler(BaseHandler):
+class StreamsHandler(BaseHandler):
     @authenticate_manager
     def post(self):
         """
@@ -501,6 +466,9 @@ class StreamDeleteHandler(BaseHandler):
                     // empty
                 }
 
+            .. note:: When all streams belonging to a target is removed, the
+                target and shard information is cleaned up automatically.
+
             :status 200: OK
             :status 400: Bad request
 
@@ -515,12 +483,7 @@ class StreamDeleteHandler(BaseHandler):
         target = Target(target_id, self.db)
 
         pipeline = self.db.pipeline()
-        try:
-            active_stream = ActiveStream(stream_id, self.db)
-            if active_stream:
-                active_stream.delete(pipeline=pipeline)
-        except KeyError:
-            pass
+        self.deactivate_stream(stream_id)
         target.zrem('queue', stream_id, pipeline=pipeline)
         stream.delete(pipeline=pipeline)
         pipeline.execute()
@@ -532,6 +495,8 @@ class StreamDeleteHandler(BaseHandler):
                 self.set_status(400)
                 return self.write(result['err'])
             target.delete()
+        stream_path = os.path.join(self.application.streams_folder, stream_id)
+        shutil.rmtree(stream_path)
         self.set_status(200)
 
 
@@ -1067,16 +1032,14 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
-        print('Starting up', name, '...')
         self.base_init(name, redis_options, mongo_options)
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
-        print('Registering...')
         self._register(external_host)
         super(SCV, self).__init__([
             (r'/', AliveHandler),
             (r'/active_streams', ActiveStreamsHandler),
-            (r'/streams/activate', ActivateStreamHandler),
-            (r'/streams', PostStreamHandler),
+            (r'/streams', StreamsHandler),
+            (r'/streams/activate', StreamActivateHandler),
             (r'/streams/info/(.*)', StreamInfoHandler),
             (r'/streams/start/(.*)', StreamStartHandler),
             (r'/streams/stop/(.*)', StreamStopHandler),
@@ -1084,7 +1047,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
             (r'/streams/download/(.*)/(.*)', StreamDownloadHandler),
             (r'/streams/replace/(.*)', StreamReplaceHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
-            (r'/targets/delete/(.*)', DeleteTargetHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),
             (r'/core/checkpoint', CoreCheckpointHandler),

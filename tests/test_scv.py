@@ -89,6 +89,14 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         result['files'] = files
         return result
 
+    def _delete_stream(self, stream_id):
+        headers = {'Authorization': self.auth_token}
+        response = self.fetch('/streams/delete/'+stream_id,
+                              method='PUT',
+                              body='',
+                              headers=headers)
+        self.assertEqual(response.code, 200)
+
     def _activate_stream(self, target_id):
         body = {'target_id': target_id}
         reply = self.fetch('/streams/activate', method='POST',
@@ -171,21 +179,42 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             }
         }
         self.assertEqual(self._get_streams(target_id), expected)
+        cursor = self.scv.mdb.data.targets
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        self.assertEqual(result['shards'], [self.scv.name])
 
     def test_delete_stream(self):
         result = self._post_stream()
         stream_id = result['stream_id']
         target_id = result['target_id']
         target = scv.Target(target_id, self.scv.db)
-        headers = {'Authorization': self.auth_token}
-        response = self.fetch('/streams/delete/'+stream_id,
-                              method='PUT',
-                              body='',
-                              headers=headers)
-        self.assertEqual(response.code, 200)
+        cursor = self.scv.mdb.data.targets
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        self.assertEqual(result['shards'], [self.scv.name])
+        self._delete_stream(stream_id)
         self.assertEqual(self._get_streams(target_id), dict())
         self.assertEqual(target.zscore('queue', stream_id), None)
         self.assertEqual(self.scv.db.keys('*'), [])
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        self.assertEqual(result['shards'], [])
+        stream_path = os.path.join(self.scv.streams_folder, stream_id)
+        self.assertFalse(os.path.exists(stream_path))
+
+    def test_sharding(self):
+        result = self._post_stream()
+        stream1 = result['stream_id']
+        target_id = result['target_id']
+        result = self._post_stream(target_id)
+        stream2 = result['stream_id']
+        cursor = self.scv.mdb.data.targets
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        self.assertEqual(result['shards'], [self.scv.name])
+        self._delete_stream(stream1)
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        self.assertEqual(result['shards'], [self.scv.name])
+        self._delete_stream(stream2)
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        self.assertEqual(result['shards'], [])
 
     def test_activate_stream(self):
         result = self._post_stream()
@@ -219,14 +248,12 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(new_stream1, new_stream2)
         reply = self.fetch('/active_streams', method='GET')
         content = json.loads(reply.body.decode())
-
         targets = set()
         streams = set()
         for tid in content:
             targets.add(tid)
             for sid in content[tid]:
                 streams.add(sid)
-
         self.assertEqual(targets, {target_id})
         self.assertEqual(streams, {stream1, new_stream1})
 
@@ -234,6 +261,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         total_streams = set()
         result = self._post_stream()
         target_id = result['target_id']
+        headers = {'Authorization': self.auth_token}
         total_streams.add(result['stream_id'])
         for i in range(49):
             total_streams.add(self._post_stream(target_id)['stream_id'])
@@ -247,8 +275,10 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         for stream_id in total_streams:
             stream_dir = os.path.join(self.scv.streams_folder, stream_id)
             self.assertTrue(os.path.exists(stream_dir))
-        reply = self.fetch('/targets/delete/'+target_id, method='PUT', body='')
-        self.assertEqual(reply.code, 200)
+        for stream_id in total_streams:
+            reply = self.fetch('/streams/delete/'+stream_id,
+                              method='PUT', body='', headers=headers)
+            self.assertEqual(reply.code, 200)
         self.assertEqual(scv.Target.members(self.scv.db), set())
         self.assertEqual(scv.Stream.members(self.scv.db), set())
         self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
@@ -256,6 +286,9 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
             stream_dir = os.path.join(self.scv.streams_folder, stream_id)
             self.assertFalse(os.path.exists(stream_dir))
         self.assertEqual(self.scv.db.keys('*'), [])
+        cursor = self.scv.mdb.data.targets
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        self.assertEqual(result['shards'], [])
 
     def test_stream_replace(self):
         result = self._post_and_activate_stream()

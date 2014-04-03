@@ -41,25 +41,6 @@ class WorkServer(Entity):
               'fail_count': int,  # number of times a request has failed
               }
 
-WorkServer.add_lookup('ip', injective=True)
-
-
-class Target(Entity):
-    prefix = 'target'
-    fields = {'description': str,  # description of the target
-              'owner': str,  # owner of the target,
-              'files': {str},  # files shared by all streams
-              'creation_date': float,  # in linux time.time()
-              'stage': str,  # disabled, private, beta, public
-              'allowed_ws': {str},  # ws to allow striation on
-              'engine': str,  # openmm or terachem
-              'engine_versions': {str},  # allowed core_versions
-              }
-
-
-Target.add_lookup('engine_versions', injective=False)
-relate(Target, 'striated_ws', {WorkServer})
-
 
 class BaseHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
@@ -1053,10 +1034,12 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         ccs = self.mdb.servers.ccs
         ccs.update({'_id': self.name}, {'host': external_host}, upsert=True)
 
+    def _load_scvs(self):
+        """ Load a list of available SCVs from MDB """
+
+
     def __init__(self, name, external_host, redis_options, mongo_options):
-        print('Starting up', name, '...')
         self.base_init(name, redis_options, mongo_options)
-        print('Registering...')
         self._register(external_host)
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
