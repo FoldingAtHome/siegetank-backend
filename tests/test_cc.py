@@ -13,8 +13,7 @@ import server.cc as cc
 
 
 class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
-    @classmethod
-    def setUpClass(self):
+    def setUp(self):
         self.increment = 3
         redis_options = {'port': 3828, 'logfile': os.devnull}
         mongo_options = {'host': 'localhost', 'port': 27017}
@@ -22,18 +21,14 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
                                    external_host='localhost',
                                    redis_options=redis_options,
                                    mongo_options=mongo_options)
-        super(TestCommandCenter, self).setUpClass()
-
-    @classmethod
-    def tearDownClass(self):
-        self.cc.shutdown_redis()
-        shutil.rmtree(self.cc.data_folder)
-        super(TestCommandCenter, self).tearDownClass()
+        super(TestCommandCenter, self).setUp()
 
     def tearDown(self):
         self.cc.db.flushdb()
+        self.cc.shutdown_redis()
         for db_name in self.cc.mdb.database_names():
             self.cc.mdb.drop_database(db_name)
+        shutil.rmtree(self.cc.data_folder)
         super(TestCommandCenter, self).tearDown()
 
     def _add_manager(self, email='test@gm.com', role='manager', auth=None):

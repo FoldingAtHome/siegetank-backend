@@ -20,8 +20,10 @@ import shutil
 import hashlib
 import socket
 import base64
+import datetime
 import gzip
 import functools
+import logging
 
 import tornado.escape
 import tornado.ioloop
@@ -1037,18 +1039,43 @@ class SCV(BaseServerMixin, tornado.web.Application):
         for cc in cursor.find(fields={'_id': 1, 'host': 1}):
             self.ccs[cc['_id']] = cc['host']
 
-    def _notify_ccs(self):
-        """ Notify each CC that the SCV is up and running """
-        for cc, host in self.ccs.items():
-            print(cc, host)
+    def notify_startup(self):
+        """ Notify each CC that the SCV is starting up """
+        if tornado.process.task_id() == 0:
+            client = tornado.httpclient.HTTPClient()
+            for cc, host in self.ccs.items():
+                uri = 'https://'+host+'/scv/connect'
+                body = {'name': self.name}
+                print('notifying '+cc+': ', end='')
+                try:
+                    client.fetch(uri, method='PUT', body=json.dumps(body),
+                                 validate_cert=is_domain(host))
+                    print('ok')
+                except tornado.httpclient.HTTPError:
+                    print('failed')
+
+    def notify_shutdown(self):
+        """ Notify each CC that the SCV is shutting down """
+        if tornado.process.task_id() == 0:
+            client = tornado.httpclient.HTTPClient()
+            for cc, host in self.ccs.items():
+                uri = 'https://'+host+'/scv/disconnect'
+                body = {'name': self.name}
+                try:
+                    client.fetch(uri, method='PUT', body=json.dumps(body),
+                                 validate_cert=is_domain(host))
+                except tornado.httpclient.HTTPError:
+                    message = '['+str(datetime.datetime.now())+']'
+                    message += 'failed to notify '+cc+' of disconnect'
+                    logging.getLogger('tornado.general').log(40, message)
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
         self.base_init(name, redis_options, mongo_options)
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
+        self.ccs = None
         self._register(external_host)
         self._load_ccs()
-        self._notify_ccs()
         super(SCV, self).__init__([
             (r'/', AliveHandler),
             (r'/active_streams', ActiveStreamsHandler),
@@ -1068,36 +1095,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
             (r'/core/heartbeat', CoreHeartbeatHandler)
         ])
 
-    # def notify_cc_shutdown(self):
-    #     print('notifying CCs of shutdown...')
-    #     if tornado.process.task_id() == 0:
-    #         client = tornado.httpclient.HTTPClient()
-    #         for cc_name, properties in self.command_centers.items():
-    #             url = properties['url']
-    #             uri = 'https://'+url+'/ws/disconnect'
-    #             body = {
-    #                 'name': self.name
-    #             }
-    #             headers = {
-    #                 'Authorization': properties['pass']
-    #             }
-    #             try:
-    #                 client.fetch(uri, method='PUT', connect_timeout=2,
-    #                              body=json.dumps(body), headers=headers,
-    #                              validate_cert=is_domain(url))
-    #             except tornado.httpclient.HTTPError:
-    #                 print('Failed to notify '+cc_name+' that WS is down')
-
     def shutdown(self, *args, **kwargs):
+        self.notify_shutdown()
         BaseServerMixin.shutdown(self, *args, **kwargs)
-
-    def initialize_pulse(self):
-        # check for heartbeats only on the 0th process.
-        if tornado.process.task_id() == 0:
-            frequency = tornado.options.options['pulse_frequency_in_ms']
-            self.pulse = tornado.ioloop.PeriodicCallback(self.check_heartbeats,
-                                                         frequency)
-            self.pulse.start()
 
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
@@ -1136,6 +1136,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
 tornado.options.define('heartbeat_increment', default=900, type=int)
 tornado.options.define('pulse_frequency_in_ms', default=3000, type=int)
 
+
 def start():
     config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                '..', 'scv.conf')
@@ -1156,8 +1157,13 @@ def start():
 
     server = tornado.httpserver.HTTPServer(instance, ssl_options={
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
-
     server.bind(options.internal_http_port)
     server.start(0)
-    instance.initialize_pulse()
+
+    if tornado.process.task_id() == 0:
+        tornado.ioloop.IOLoop.instance().add_callback(instance.notify_startup)
+        frequency = tornado.options.options['pulse_frequency_in_ms']
+        pulse = tornado.ioloop.PeriodicCallback(instance.check_heartbeats,
+                                                frequency)
+        pulse.start()
     tornado.ioloop.IOLoop.instance().start()

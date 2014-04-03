@@ -130,11 +130,11 @@ class BaseServerMixin():
         self.redis_options = redis_options
         self.mongo_options = mongo_options
 
-        log_filename = os.path.join(self.data_folder, 'server.log')
         channel = logging.handlers.RotatingFileHandler(
-            filename=log_filename)
-        logger = logging.getLogger('tornado.access')
-        logger.addHandler(channel)
+            filename=os.path.join(self.data_folder, 'server.log'))
+        logging.getLogger('tornado.access').addHandler(channel)
+        logging.getLogger('tornado.application').addHandler(channel)
+        logging.getLogger('tornado.general').addHandler(channel)
 
         if 'appendfilename' in redis_options:
             redis_options['appendonly'] = 'yes'
@@ -159,15 +159,12 @@ class BaseServerMixin():
         signal.signal(signal.SIGTERM, self.shutdown)
 
     def shutdown_redis(self):
-        print('shutting down redis...')
         self.db.shutdown()
         self.db.connection_pool.disconnect()
 
     def shutdown(self, signal_number=None, stack_frame=None, kill=True):
-        print('shutting down server...')
         self.shutdown_redis()
         if kill:
-            print('stopping tornado ioloop...')
             tornado.ioloop.IOLoop.instance().stop()
             sys.exit(0)
 
