@@ -1,5 +1,3 @@
-# Tornado-powered workserver backend.
-#
 # Authors: Yutong Zhao <proteneer@gmail.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -39,86 +37,6 @@ from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import authenticate_manager
 from server.apollo import Entity, zset, relate
 
-# Capacity
-
-# Suppose each stream returns a frame once every 5 minutes. A single stream
-# returns 288 frames per day. The WS is designed to handle about 50 frame
-# PUTs per second. In a single day, a WS can handle about 4,320,000 frames.
-# This is equal to about 86,400 active streams. Note that 4.3 million frames
-# @ 80kb/frame = 328GB worth of data per day. We will fill up 117 TB
-# worth of a data a year - so we will run out of disk space way before that.
-
-# [MISC Redis DB]
-
-# ZSET  KEY     'heartbeats'                   | { stream_id : expire_time }
-
-# Expiration mechanism:
-# hearbeats is a sorted set. A POST to ws/update extends expire_time in
-# heartbeats. A checker callback is passed into ioloop.PeriodicCallback(),
-# which checks for expired streams against the current time. Streams that
-# expire can be obtained by: redis.zrangebyscore('heartbeat',0,current_time)
-
-# TODO:
-# [ ] Stats
-
-# In general, we should try and use GETs/PUTs whenever possible. Idempotency
-# is an incredibly useful way of dealing with failures. Suppose a core
-# either POSTs (non idempotent), or PUTs (idempotent) a frame to a stream.
-
-# One of two failure scenarios can happen:
-
-#              FAILS
-#   Core --Send Request--> Server --Send Reply--> Core
-
-#                                      FAILS
-#   Core --Send Request--> Server --Send Reply--> Core
-
-# Note that the Core does NOT know which scenario happened. All it knows
-# is that it did not get a reply. In the second scenario, POSTing the same
-# frame twice would be bad, since the stream would end up with a duplicate
-# stream. However, PUTing the same frame twice (by means of checking the
-# md5sum of last frame) would be the same as PUTing it once.
-
-# When the WS dies, we can recreate the entire redis database using data from
-# the disk! This implies we don't actually need to save an rdb.
-
-# stats layout
-
-#######################
-# database: community #
-#######################
-# collection: fragments
-# document layout:
-# {
-#     "_id": default_id
-#     "stream_id": stream_id, [indexed]
-#     "start": start_time,
-#     "end": end_time,
-#     "frames": 23,
-#     "donor": JesseV [indexed]
-# }
-# collection: donors
-# document layout:
-# {
-#     "_id": JesseV
-#     "email": jvictors@gmail.com
-#     "password": hashed password
-#     "token": uuid4 [indexed]
-#     "team": EVGA [indexed]
-# }
-
-######################
-# database: internal #
-######################
-# collection: managers
-# document layout:
-# {
-#   "_id": dshukla@stanford.edu
-#   "password" hashed password
-#   "token": uuid4
-# }
-#
-# collection: targets
 
 class Stream(Entity):
     prefix = 'stream'
@@ -143,10 +61,7 @@ class ActiveStream(Entity):
 
 class Target(Entity):
     prefix = 'target'
-    fields = {'queue': zset(str),  # queue of inactive streams
-              'stream_files': {str},  # set of filenames for the stream
-              'target_files': {str},  # set of filenames for the target
-              }
+    fields = {'queue': zset(str)}  # queue of inactive streams
 
 
 class CommandCenter(Entity):
@@ -252,14 +167,11 @@ class AliveHandler(BaseHandler):
 
 
 class DeleteTargetHandler(BaseHandler):
-    @authenticate_cc
     def put(self, target_id):
         """
         .. http:put:: /targets/delete/:target_id
 
-            Delete ``target_id`` from the workserver. Note, even if the target
-            does not exist on this WS the method returns 200 to allow for
-            idempotency.
+            Delete ``target_id`` and all of its streams from this server.
 
             :status 200: OK
             :status 400: Bad request
@@ -284,9 +196,6 @@ class DeleteTargetHandler(BaseHandler):
             # verify=False for performance reasons
             stream = Stream(stream_id, self.db, verify=False)
             stream.delete(pipeline=pipe)
-        target_dir = os.path.join(self.application.targets_folder, target_id)
-        if os.path.exists(target_dir):
-            shutil.rmtree(target_dir)
         target.delete(pipeline=pipe)
         pipe.execute()
         self.set_status(200)
@@ -331,7 +240,7 @@ class TargetStreamsHandler(BaseHandler):
         """
         .. http:get:: /targets/streams/:target_id
 
-            Get a list of streams for the target on this particular workserver
+            Get a list of streams for the target on this particular scv
             and their status and number of frames.
 
             **Example reply**:
@@ -366,7 +275,6 @@ class TargetStreamsHandler(BaseHandler):
 
 
 class ActivateStreamHandler(BaseHandler):
-    @authenticate_cc
     def post(self):
         """
         .. http:post:: /streams/activate
@@ -426,15 +334,12 @@ class ActivateStreamHandler(BaseHandler):
 
 
 class PostStreamHandler(BaseHandler):
-    @authenticate_cc
+    @authenticate_manager
     def post(self):
         """
         .. http:post:: /streams
 
-            Add a new stream to WS. If ``target_id`` does exist on the WS,
-            then ``target_files`` must be supplied.
-
-            .. note:: This request can only be made by CCs.
+            Add a new stream to this SCV.
 
             **Example request**
 
@@ -442,10 +347,10 @@ class PostStreamHandler(BaseHandler):
 
                 {
                     "target_id": "target_id",
-                    "target_files": {"system.xml.gz.b64": "file1.b64",
-                                     "integrator.xml.gz.b64": "file2.b64",
-                                     } // optional if target_id exists on WS
-                    "stream_files": {"state.xml.gz.b64": "file3.b64"}
+                    "files": {"system.xml.gz.b64": "file1.b64",
+                              "integrator.xml.gz.b64": "file2.b64",
+                              "state.xml.gz.b64": "file3.b64"
+                              }
                 }
 
             .. note:: Binary files must be base64 encoded.
@@ -455,9 +360,8 @@ class PostStreamHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "stream_id" : "uuid hash"
+                    "stream_id" : "715c592f-8487-46ac-a4b6-838e3b5c2543:hello"
                 }
-
 
             :status 200: OK
             :status 400: Bad request
@@ -466,39 +370,22 @@ class PostStreamHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
-        stream_files = content['stream_files']
-        targets_folder = self.application.targets_folder
+        stream_files = content['files']
 
         if not Target.exists(target_id, self.db):
-            target_files = content['target_files']
-            target_dir = os.path.join(targets_folder, target_id)
-            if not os.path.exists(target_dir):
-                os.makedirs(target_dir)
-            target_fields = {
-                'stream_files': set(stream_files.keys()),
-                'target_files': set(target_files.keys())
-            }
-            target = Target.create(target_id, self.db, target_fields)
-            for filename, binary in target_files.items():
-                target_file = os.path.join(target_dir, filename)
-                with open(target_file, 'w') as handle:
-                    handle.write(binary)
+            target = Target.create(target_id, self.db)
         else:
             target = Target(target_id, self.db)
-            if target.smembers('stream_files') != stream_files.keys():
-                self.write({'error': 'inconsistent stream files'})
-                return
 
         stream_id = str(uuid.uuid4())+':'+self.application.name
         stream_dir = os.path.join(self.application.streams_folder, stream_id)
-        if not os.path.exists(stream_dir):
-            os.makedirs(stream_dir)
-
+        files_dir = os.path.join(stream_dir, 'files')
+        if not os.path.exists(files_dir):
+            os.makedirs(files_dir)
         for filename, binary in stream_files.items():
-            with open(os.path.join(stream_dir, filename), 'w') as handle:
+            with open(os.path.join(files_dir, filename), 'w') as handle:
                 handle.write(binary)
 
-        # create using a transaction
         pipeline = self.db.pipeline()
         target.zadd('queue', stream_id, 0, pipeline=pipeline)
         stream_fields = {
@@ -510,9 +397,8 @@ class PostStreamHandler(BaseHandler):
         Stream.create(stream_id, pipeline, stream_fields)
         pipeline.execute()
 
-        response = {'stream_id': stream_id}
         self.set_status(200)
-        self.write(response)
+        self.write({'stream_id': stream_id})
 
 
 class StreamStartHandler(BaseHandler):
@@ -637,15 +523,8 @@ class StreamDeleteHandler(BaseHandler):
         target.zrem('queue', stream_id, pipeline=pipeline)
         stream.delete(pipeline=pipeline)
         pipeline.execute()
-
-        shutil.rmtree(os.path.join(self.application.streams_folder, stream_id))
-        # manual cleanup
-
         if target.scard('streams') == 0:
             target.delete()
-            shutil.rmtree(os.path.join(self.application.targets_folder,
-                                       target_id))
-
         self.set_status(200)
 
 
@@ -666,10 +545,10 @@ class CoreStartHandler(BaseHandler):
                 {
                     "stream_id": "uuid4",
                     "target_id": "uuid4",
-                    "stream_files": {"state.xml.gz.b64": "content.b64"},
-                    "target_files": {"integrator.xml.gz.b64": "content.b64",
-                                     "system.xml.gz.b64": "content.b64"
-                                     }
+                    "files": {"state.xml.gz.b64": "content.b64",
+                              "integrator.xml.gz.b64": "content.b64",
+                              "system.xml.gz.b64": "content.b64"
+                              }
                 }
 
             :status 200: OK
@@ -693,29 +572,17 @@ class CoreStartHandler(BaseHandler):
         self.set_status(400)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
-        target = Target(target_id, self.db)
-        # a core should NEVER be able to get a non OK stream
         assert stream.hget('status') == 'OK'
-
         reply = dict()
-
-        reply['stream_files'] = dict()
-        for filename in target.smembers('stream_files'):
-            file_path = os.path.join(self.application.streams_folder,
-                                     stream_id, filename)
+        reply['files'] = dict()
+        files_dir = os.path.join(self.application.streams_folder,
+                                 stream_id, 'files')
+        for filename in os.listdir(files_dir):
+            file_path = os.path.join(files_dir, filename)
             with open(file_path, 'r') as handle:
-                reply['stream_files'][filename] = handle.read()
-
-        reply['target_files'] = dict()
-        for filename in target.smembers('target_files'):
-            file_path = os.path.join(self.application.targets_folder,
-                                     target_id, filename)
-            with open(file_path, 'r') as handle:
-                reply['target_files'][filename] = handle.read()
-
+                reply['files'][filename] = handle.read()
         reply['stream_id'] = stream_id
         reply['target_id'] = target_id
-
         self.set_status(200)
         return self.write(reply)
 
@@ -890,11 +757,12 @@ class CoreCheckpointHandler(BaseHandler):
             return self.set_status(200)
         streams_folder = self.application.streams_folder
         buffers_folder = os.path.join(streams_folder, stream_id)
+        files_folder = os.path.join(streams_folder, stream_id, 'files')
 
         # 1) rename old checkpoint file
         for filename, bytes in content['files'].items():
-            src = os.path.join(buffers_folder, filename)
-            dst = os.path.join(buffers_folder,
+            src = os.path.join(files_folder, filename)
+            dst = os.path.join(files_folder,
                                'chkpt_'+str(stream_frames)+'_'+filename)
             os.rename(src, dst)
 
@@ -907,13 +775,13 @@ class CoreCheckpointHandler(BaseHandler):
         # 3) write checkpoint
         for filename, bytes in content['files'].items():
             checkpoint_bytes = content['files'][filename].encode()
-            checkpoint_path = os.path.join(buffers_folder, filename)
+            checkpoint_path = os.path.join(files_folder, filename)
             with open(checkpoint_path, 'wb') as handle:
                 handle.write(checkpoint_bytes)
 
         # 4) delete old checkpoint safely
         for filename, bytes in content['files'].items():
-            dst = os.path.join(buffers_folder,
+            dst = os.path.join(files_folder,
                                'chkpt_'+str(stream_frames)+'_'+filename)
             os.remove(dst)
 
@@ -967,7 +835,7 @@ class ActiveStreamsHandler(BaseHandler):
         """
         .. http:get:: /active_streams
 
-            Get information about active streams on the workserver.
+            Get information about active streams on the scv.
 
             **Example Reply**
 
@@ -1020,7 +888,7 @@ class StreamReplaceHandler(BaseHandler):
         """
         .. http:put:: /streams/replace/:stream_id
 
-            Replace files in ``stream_files`` with other files.
+            Replace files in ``files`` with other files.
 
             :reqheader Authorization: manager authorization token
 
@@ -1029,7 +897,7 @@ class StreamReplaceHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "stream_files": {"state.xml.gz.b64": "newfile_3.b64"}
+                    "files": {"state.xml.gz.b64": "newstate_3.b64"}
                 }
 
             **Example reply**:
@@ -1044,26 +912,23 @@ class StreamReplaceHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        self.set_status(400)
         stream = Stream(stream_id, self.db)
         if self.get_stream_owner(stream_id) != self.get_current_user():
             self.set_status(401)
         if stream.hget('status') != 'STOPPED':
             return self.error('stream must be stopped first')
-
-        target_id = stream.hget('target')
-        target = Target(target_id, self.db)
-
         content = json.loads(self.request.body.decode())
-        stream_files = content['stream_files']
-        stream_dir = os.path.join(self.application.streams_folder, stream_id)
-        for filename, binary in stream_files.items():
-            if not filename in target.smembers('stream_files'):
-                self.error(filename+' is not in stream_files')
-        for filename, binary in stream_files.items():
+        files = content['files']
+        stream_dir = os.path.join(self.application.streams_folder, stream_id,
+                                  'files')
+        for filename, binary in files.items():
+            if not filename in os.listdir(stream_dir):
+                return self.error(filename+' is not in files directory')
+        for filename, binary in files.items():
             with open(os.path.join(stream_dir, filename), 'w') as handle:
                 handle.write(binary)
-
-        return
+        self.set_status(200)
 
 
 class StreamDownloadHandler(BaseHandler):
@@ -1104,20 +969,36 @@ class StreamDownloadHandler(BaseHandler):
                                                    stream_dir, filename)))
         if(file_dir != os.path.abspath(stream_dir)):
             return
+        stream = Stream(stream_id, self.db)
+        if self.get_stream_owner(stream_id) != self.get_current_user():
+            self.set_status(401)
 
-        try:
-            stream = Stream(stream_id, self.db)
-            if self.get_stream_owner(stream_id) != self.get_current_user():
-                self.set_status(401)
-
-            target_id = stream.hget('target')
-            target = Target(target_id, self.db)
-
-            buf_size = 4096
-            # check if filename is a stream file
-            if filename in target.smembers('stream_files'):
-                filepath = os.path.join(stream_dir, filename)
-                self.set_status(200)
+        buf_size = 4096
+        # check if filename is a stream file
+        stream_files_path = os.path.join(stream_dir, 'files')
+        if filename in os.listdir(stream_files_path):
+            filepath = os.path.join(stream_dir, 'files', filename)
+            self.set_status(200)
+            with open(filepath, 'rb') as f:
+                while True:
+                    data = f.read(buf_size)
+                    if not data:
+                        break
+                    self.write(data)
+                    yield tornado.gen.Task(self.flush)
+            self.finish()
+            return
+        # assume file is a frame file that needs concatenation
+        elif stream.hget('frames') > 0:
+            files = [f for f in os.listdir(stream_dir)
+                     if (filename in f and 'buffer_' not in f)]
+            files = sorted(files, key=lambda k: int(k.split('_')[0]))
+            self.set_header('Content-Type', 'application/octet-stream')
+            self.set_header('Content-Disposition',
+                            'attachment; filename='+filename)
+            self.set_status(200)
+            for sorted_file in files:
+                filepath = os.path.join(stream_dir, sorted_file)
                 with open(filepath, 'rb') as f:
                     while True:
                         data = f.read(buf_size)
@@ -1125,34 +1006,11 @@ class StreamDownloadHandler(BaseHandler):
                             break
                         self.write(data)
                         yield tornado.gen.Task(self.flush)
-                self.finish()
-                return
-            # assume file is a frame file that needs concatenation
-            elif stream.hget('frames') > 0:
-                files = [f for f in os.listdir(stream_dir)
-                         if (filename in f and 'buffer_' not in f)]
-                files = sorted(files, key=lambda k: int(k.split('_')[0]))
-                self.set_header('Content-Type', 'application/octet-stream')
-                self.set_header('Content-Disposition',
-                                'attachment; filename='+filename)
-                self.set_status(200)
-                for sorted_file in files:
-                    filepath = os.path.join(stream_dir, sorted_file)
-                    with open(filepath, 'rb') as f:
-                        while True:
-                            data = f.read(buf_size)
-                            if not data:
-                                break
-                            self.write(data)
-                            yield tornado.gen.Task(self.flush)
-                self.finish()
-                return
-            else:
-                self.write('')
-                return self.set_status(200)
-        except Exception as e:
-            print('DownloadHandler Exception', str(e))
-            return self.write({'error': str(e)})
+            self.finish()
+            return
+        else:
+            self.write('')
+            return self.set_status(200)
 
 
 class CoreHeartbeatHandler(BaseHandler):
@@ -1191,59 +1049,23 @@ class CoreHeartbeatHandler(BaseHandler):
         self.set_status(200)
 
 
-class WorkServer(BaseServerMixin, tornado.web.Application):
-    def _cleanup(self):
-        # clear active streams (and clear buffer)
-        active_streams = ActiveStream.members(self.db)
-        if active_streams:
-            for stream in active_streams:
-                self.deactivate_stream(stream)
-        ccs = CommandCenter.members(self.db)
-        if ccs:
-            for cc_id in ccs:
-                CommandCenter.delete(cc_id, self.db)
-        self.db.delete('heartbeats')
+class SCV(BaseServerMixin, tornado.web.Application):
+    def _get_command_centers(self):
+        """ Return a dict of Command Center names and hosts """
 
-        # inform the CC gracefully that the WS is dying (ie.expire everything)
+    def _register(self, external_host):
+        """ Register the SCV in MDB. """
+        scvs = self.mdb.servers.scvs
+        scvs.update({'_id': self.name}, {'host': external_host}, upsert=True)
 
-    def __init__(self, ws_name, external_options, redis_options,
-                 mongo_options=None, command_centers=None,
-                 targets_folder='targets', streams_folder='streams'):
-        print('Starting up Work Server:', ws_name)
-        self.base_init(ws_name, redis_options, mongo_options)
-
-        self.targets_folder = os.path.join(self.data_folder, targets_folder)
+    def __init__(self, name, external_host, redis_options,
+                 mongo_options=None, streams_folder='streams'):
+        print('Starting up', name, '...')
+        self.base_init(name, redis_options, mongo_options)
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
-        self.command_centers = command_centers
-        self.cc_ips = set()
-
-        # Notify the command centers that this workserver is online
-        if command_centers:
-            for cc_name, properties in command_centers.items():
-                headers = {
-                    'Authorization': properties['pass']
-                }
-                body = {
-                    'name': ws_name,
-                    'url': external_options['external_url'],
-                    'http_port': external_options['external_http_port'],
-                }
-                client = tornado.httpclient.HTTPClient()
-                url = properties['url']
-                hostname = url.split(':')[0]
-                self.cc_ips.add(socket.gethostbyname(hostname))
-                uri = 'https://'+url+'/ws/register'
-                try:
-                    rep = client.fetch(uri, method='PUT', connect_timeout=2,
-                                       body=json.dumps(body), headers=headers,
-                                       validate_cert=is_domain(url))
-                    if rep.code != 200:
-                        print('Warning: not connect to CC '+cc_name)
-                except Exception as e:
-                    print(e.code)
-                    print('Warning: not connect to CC '+cc_name)
-
-        super(WorkServer, self).__init__([
+        print('Registering...')
+        self._register(external_host)
+        super(SCV, self).__init__([
             (r'/', AliveHandler),
             (r'/active_streams', ActiveStreamsHandler),
             (r'/streams/activate', ActivateStreamHandler),
@@ -1263,28 +1085,27 @@ class WorkServer(BaseServerMixin, tornado.web.Application):
             (r'/core/heartbeat', CoreHeartbeatHandler)
         ])
 
-    def notify_cc_shutdown(self):
-        print('notifying CCs of shutdown...')
-        if tornado.process.task_id() == 0:
-            client = tornado.httpclient.HTTPClient()
-            for cc_name, properties in self.command_centers.items():
-                url = properties['url']
-                uri = 'https://'+url+'/ws/disconnect'
-                body = {
-                    'name': self.name
-                }
-                headers = {
-                    'Authorization': properties['pass']
-                }
-                try:
-                    client.fetch(uri, method='PUT', connect_timeout=2,
-                                 body=json.dumps(body), headers=headers,
-                                 validate_cert=is_domain(url))
-                except tornado.httpclient.HTTPError:
-                    print('Failed to notify '+cc_name+' that WS is down')
+    # def notify_cc_shutdown(self):
+    #     print('notifying CCs of shutdown...')
+    #     if tornado.process.task_id() == 0:
+    #         client = tornado.httpclient.HTTPClient()
+    #         for cc_name, properties in self.command_centers.items():
+    #             url = properties['url']
+    #             uri = 'https://'+url+'/ws/disconnect'
+    #             body = {
+    #                 'name': self.name
+    #             }
+    #             headers = {
+    #                 'Authorization': properties['pass']
+    #             }
+    #             try:
+    #                 client.fetch(uri, method='PUT', connect_timeout=2,
+    #                              body=json.dumps(body), headers=headers,
+    #                              validate_cert=is_domain(url))
+    #             except tornado.httpclient.HTTPError:
+    #                 print('Failed to notify '+cc_name+' that WS is down')
 
     def shutdown(self, *args, **kwargs):
-        self.notify_cc_shutdown()
         BaseServerMixin.shutdown(self, *args, **kwargs)
 
     def initialize_pulse(self):
@@ -1334,20 +1155,15 @@ tornado.options.define('pulse_frequency_in_ms', default=3000, type=int)
 
 
 def start():
-    extra_options = {
-        'command_centers': dict,
-        'external_options': dict
-    }
-    conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                             '..', 'ws.conf')
-    configure_options(extra_options, conf_path)
+    config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                               '..', 'ws.conf')
+    configure_options(config_file)
     options = tornado.options.options
 
-    ws_instance = WorkServer(ws_name=options.name,
-                             external_options=options.external_options,
-                             command_centers=options.command_centers,
-                             redis_options=options.redis_options,
-                             mongo_options=options.mongo_options)
+    instance = SCV(name=options.name,
+                   external_host=options.external_host,
+                   redis_options=options.redis_options,
+                   mongo_options=options.mongo_options)
 
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', options.ssl_certfile)
@@ -1356,10 +1172,10 @@ def start():
     ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', options.ssl_ca_certs)
 
-    ws_server = tornado.httpserver.HTTPServer(ws_instance, ssl_options={
+    server = tornado.httpserver.HTTPServer(instance, ssl_options={
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
 
-    ws_server.bind(options.internal_http_port)
-    ws_server.start(0)
-    ws_instance.initialize_pulse()
+    server.bind(options.internal_http_port)
+    server.start(0)
+    instance.initialize_pulse()
     tornado.ioloop.IOLoop.instance().start()

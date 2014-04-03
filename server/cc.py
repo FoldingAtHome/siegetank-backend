@@ -1,5 +1,3 @@
-# Tornado-powered command center backend.
-#
 # Authors: Yutong Zhao <proteneer@gmail.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -339,7 +337,7 @@ class AddManagerHandler(BaseHandler):
         self.write({'token': token})
 
 
-class UpdateTargetHandler(BaseHandler):
+class TargetUpdateHandler(BaseHandler):
     @authenticate_manager
     def put(self, target_id):
         """
@@ -355,13 +353,11 @@ class UpdateTargetHandler(BaseHandler):
 
                 {
                     "stage": "disabled", private", "beta", "public"  //optional
-                    "allowed_ws": ["foo", "bar"],  //optional
                     "engine_versions":  ["6.0", "6.5"]  //optional
                     "description": "description"  //optional
                 }
 
-                .. note:: modifying ``allowed_ws`` and ``engine_versions``
-                    will only affect future streams.
+                .. note:: ``engine_versions`` will only affect future streams.
 
                 .. note:: modifying ``stage`` only affects future assignments.
                     If you wish to stop the streams, you must explicitly stop
@@ -376,36 +372,22 @@ class UpdateTargetHandler(BaseHandler):
         """
         self.set_status(400)
         content = json.loads(self.request.body.decode())
-
-        target = Target(target_id, self.db)
-
-        # validate request
-        if 'allowed_ws' in content:
-            allowed_ws = set(content['allowed_ws'])
-            known_ws = WorkServer.members(self.db)
-            if not allowed_ws.issubset(known_ws):
-                return self.error("allowed_ws not contained within known_ws")
+        payload = {}
         if 'engine_versions' in content:
-            engine_versions = content['engine_versions']
+            payload['engine_versions'] = content['engine_versions']
         if 'stage' in content:
-            if content['stage'] in ['private', 'beta', 'public']:
-                stage = content['stage']
+            if content['stage'] in ['disabled', 'private', 'beta', 'public']:
+                payload['stage'] = content['stage']
             else:
                 return self.error('invalid stage')
         if 'description' in content:
-            description = content['description']
-
-        # execute database transaction
-        pipe = self.db.pipeline()
-        target.sremall('allowed_ws', pipeline=pipe)
-        target.sadd('allowed_ws', *allowed_ws, pipeline=pipe)
-        target.sremall('engine_versions', pipeline=pipe)
-        target.sadd('engine_versions', *engine_versions, pipeline=pipe)
-        target.hset('stage', stage, pipeline=pipe)
-        target.hset('description', description, pipeline=pipe)
-        pipe.execute()
-
-        self.set_status(200)
+            payload['description'] = content['description']
+        cursor = self.mdb.data.targets
+        result = cursor.update({'_id': target_id}, {'$set': payload})
+        if result['updatedExisting']:
+            self.set_status(200)
+        else:
+            self.error('invalid '+target_id)
 
 
 def yates_generator(x):
@@ -559,14 +541,12 @@ class AssignHandler(BaseHandler):
         self.error('no free WS available')
 
 
-class DisconnectWSHandler(BaseHandler):
+class DisconnectSCVHandler(BaseHandler):
     def put(self):
         """
-        .. http:put:: /ws/disconnect
+        .. http:put:: /scv/disconnect
 
-            Disconnect a WorkServer, setting its status to offline.
-
-            :reqheader Authorization: Secret password of the CC
+            Disconnect an SCV, setting its status to offline.
 
             **Example request**
 
@@ -601,12 +581,12 @@ class DisconnectWSHandler(BaseHandler):
         return self.write(dict())
 
 
-class WSStatusHandler(BaseHandler):
+class SCVStatusHandler(BaseHandler):
     def get(self):
         """
-        .. http:put:: /ws/status
+        .. http:put:: /scv/status
 
-            Return the status of all workservers managed by the command center.
+            Return the status of all scvs managed by the command center.
 
             **Example response**
 
@@ -636,10 +616,10 @@ class WSStatusHandler(BaseHandler):
         return self.write(body)
 
 
-class RegisterWSHandler(BaseHandler):
+class RegisterSCVHandler(BaseHandler):
     def put(self):
         """
-        .. http:put:: /ws/register
+        .. http:put:: /scv/register
 
             Register a WorkServer to be managed by this command center by
             presenting the secret password.
@@ -812,7 +792,7 @@ class PostStreamHandler(BaseHandler):
         return self.write(rep.body)
 
 
-class GetTargetHandler(BaseHandler):
+class TargetInfoHandler(BaseHandler):
     def get(self, target_id):
         """
         .. http:get:: /targets/info/:target_id
@@ -845,23 +825,10 @@ class GetTargetHandler(BaseHandler):
 
         """
         self.set_status(400)
-        target = Target(target_id, self.db)
-        options = self.load_target_options(target_id)
-        # get a list of streams
-        body = {
-            'description': target.hget('description'),
-            'owner': target.hget('owner'),
-            'creation_date': target.hget('creation_date'),
-            'stage': target.hget('stage'),
-            'allowed_ws': list(target.smembers('allowed_ws')),
-            'striated_ws': list(target.smembers('striated_ws')),
-            'engine': target.hget('engine'),
-            'engine_versions': list(target.smembers('engine_versions')),
-            'files': list(target.smembers('files')),
-            'options': options
-            }
+        cursor = self.mdb.data.targets
+        info = cursor.find_one({'_id': target_id})
         self.set_status(200)
-        self.write(body)
+        self.write(info)
 
 
 class TargetStreamsHandler(BaseHandler):
@@ -907,7 +874,7 @@ class TargetStreamsHandler(BaseHandler):
         self.write(body)
 
 
-class DeleteTargetHandler(BaseHandler):
+class TargetDeleteHandler(BaseHandler):
     @authenticate_manager
     @tornado.gen.coroutine
     def put(self, target_id):
@@ -986,7 +953,7 @@ class TargetsHandler(BaseHandler):
         """
         .. http:post:: /targets
 
-            Add a new target to be managed by this command center.
+            Add a new target.
 
             :reqheader Authorization: Manager's authorization token
 
@@ -998,29 +965,19 @@ class TargetsHandler(BaseHandler):
                     "description": "some JSON compatible description",
                     "engine": "openmm",
                     "engine_versions": ["6.0", "5.5", "5.2"],
-
-                    "files": {"file1_name": file1_bin_b64,
-                              "file2_name": file2_bin_b64,
-                              } // optional
-
-                    "allowed_ws": ["mengsk", "arcturus"], // optional
-                    "stage": "private", "beta", or "public" // optional
-
-                    "options": { // optional depending on core
-                        "steps_per_frame": 50000, // optional (supported)
-                        "xtc_precision": 3, // optional (not supported)
-                        "discard_water": True  // optional (not supported)
+                    "stage": "disabled", private", "beta", or "public"
+                    "options": {
+                        "steps_per_frame": 50000,
+                        "xtc_precision": 3,
+                        "discard_water": True
                     }
                 }
 
-            .. note:: If ``allowed_ws`` is specified, then we striate streams
-                for the target only over the specified workserver. Otherwise
-                all workservers available to this cc will be striated over.
             .. note:: If ``stage`` is not given, then the stage defaults to
                 "private".
             .. note:: ``description`` must be a JSON compatible string. That
                 means it must not contain double quotation marks and slashes.
-            .. note:: ``options`` should pertain to the target as a whole.
+            .. note:: ``options`` pertains to the target as a whole.
                 Stream specific options are not available yet.
 
             **Example reply**
@@ -1039,149 +996,68 @@ class TargetsHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
 
-        if 'files' in content:
-            files = content['files']
-        else:
-            files = dict()
-
         #----------------#
         # verify request #
         #----------------#
         engine = content['engine']
-        if content['engine'] != 'openmm':
-            return self.error('unsupported engine')
-        else:
-            for filename in files.keys():
-                if filename not in ('state.xml.gz.b64',
-                                    'integrator.xml.gz.b64',
-                                    'system.xml.gz.b64'):
-                    return self.error('unsupported filename')
-
-        engine_versions = set(content['engine_versions'])
+        engine_versions = content['engine_versions']
         for k in engine_versions:
             if type(k) is not str:
                 return self.error('engine version must be a list of strings')
-        if 'allowed_ws' in content:
-            for ws_name in content['allowed_ws']:
-                if not WorkServer.exists(ws_name, self.db):
-                    err_msg = ws_name+' is not connected to this cc'
-                    return self.error(err_msg)
         description = content['description']
+        if 'stage' in content:
+            if content['stage'] in ['disabled', 'private', 'beta', 'public']:
+                stage = content['stage']
+            else:
+                return self.error('unsupported stage')
+        else:
+            stage = 'private'
+        if 'options' in content:
+            options = content['options']
+        else:
+            options = dict()
 
         #------------#
         # write data #
         #------------#
         target_id = str(uuid.uuid4())
-
-        fields = {
+        targets = self.mdb.data.targets
+        payload = {
+            '_id': target_id,
             'description': description,
             'creation_date': time.time(),
             'engine': engine,
             'engine_versions': engine_versions,
             'owner': self.get_current_user(),
+            'stage': stage,
+            'options': options,
+            'shards': [],
         }
-        if 'stage' in content:
-            if content['stage'] in ['private', 'beta', 'public']:
-                fields['stage'] = content['stage']
-        else:
-            fields['stage'] = 'private'
 
-        if 'allowed_ws' in content:
-            allowed_ws = set(content['allowed_ws'])
-            known_ws = WorkServer.members(self.db)
-            if not allowed_ws.issubset(known_ws):
-                err = "allowed_ws is not contained within known_ws"
-                return self.error(err)
-            fields['allowed_ws'] = allowed_ws
-
-        fields['files'] = set(files.keys())
-        Target.create(target_id, self.db, fields)
-
-        target_dir = os.path.join(self.application.targets_folder, target_id)
-        if not os.path.exists(target_dir):
-            os.makedirs(target_dir)
-        for filename, filebin in files.items():
-            file_path = os.path.join(target_dir, filename)
-            with open(file_path, 'wb') as handle:
-                handle.write(filebin.encode())
         if 'options' in content:
-            options = content['options']
-            file_path = os.path.join(target_dir, 'options')
-            with open(file_path, 'w') as handle:
-                handle.write(json.dumps(options))
+            payload['options'] = content['options']
 
-        targets = self.mdb.data.targets
-        cc_id = self.application.name
-
-        body = {
-            '_id': target_id,
-            'owner': self.get_current_user(),
-            'cc': cc_id,
-        }
-
-        targets.insert(body)
+        targets.insert(payload)
         self.set_status(200)
         response = {'target_id': target_id}
 
         return self.write(response)
 
 
-class DownloadHandler(BaseHandler):
-    @authenticate_manager
-    @tornado.gen.coroutine
-    def get(self, target_id, filename):
-        """
-        .. http:get:: /targets/download/:target_id/:filename
-
-            Download a file ``filename`` in ``target_files``.
-
-            :resheader Content-Type: application/octet-stream
-            :resheader Content-Disposition: attachment; filename=frames.xtc
-
-            :status 200: OK
-            :status 400: Bad request
-
-        """
-        self.set_status(400)
-        # prevent files from leaking outside of the dir
-        targets_folder = self.application.targets_folder
-        target_dir = os.path.join(targets_folder, target_id)
-        file_dir = os.path.dirname(os.path.abspath(os.path.join(
-                                                   target_dir, filename)))
-        if(file_dir != os.path.abspath(target_dir)):
-            return
-
-        try:
-            Target(target_id, self.db)
-            filepath = os.path.join(target_dir, filename)
-            buf_size = 4096
-            self.set_header('Content-Type', 'application/octet-stream')
-            self.set_header('Content-Disposition',
-                            'attachment; filename='+filename)
-            self.set_status(200)
-            with open(filepath, 'rb') as f:
-                while True:
-                    data = f.read(buf_size)
-                    if not data:
-                        break
-                    self.write(data)
-                    yield tornado.gen.Task(self.flush)
-            self.finish()
-            return
-        except Exception as e:
-            return self.error(str(e))
-
-
 class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     _max_ws_fails = 10
 
-    def __init__(self, cc_name, cc_pass, redis_options, core_keys=set(),
-                 mongo_options=None, targets_folder='targets'):
-        print('Starting up Command Center:', cc_name)
-        self.base_init(cc_name, redis_options, mongo_options)
-        self.cc_pass = cc_pass
-        self.targets_folder = os.path.join(self.data_folder, targets_folder)
+    def _register(self, external_host):
+        """ Register the CC in MDB. """
+        ccs = self.mdb.servers.ccs
+        ccs.update({'_id': self.name}, {'host': external_host}, upsert=True)
+
+    def __init__(self, name, external_host, redis_options, mongo_options):
+        print('Starting up', name, '...')
+        self.base_init(name, redis_options, mongo_options)
+        print('Registering...')
+        self._register(external_host)
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
             (r'/managers/verify', VerifyManagerHandler),
@@ -1190,14 +1066,13 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/donors/auth', AuthDonorHandler),
             (r'/donors', AddDonorHandler),
             (r'/targets', TargetsHandler),
-            (r'/targets/delete/(.*)', DeleteTargetHandler),
-            (r'/targets/info/(.*)', GetTargetHandler),
+            (r'/targets/delete/(.*)', TargetDeleteHandler),
+            (r'/targets/info/(.*)', TargetInfoHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
-            (r'/targets/update/(.*)', UpdateTargetHandler),
-            (r'/targets/download/(.*)/(.*)', DownloadHandler),
-            (r'/ws/register', RegisterWSHandler),
-            (r'/ws/disconnect', DisconnectWSHandler),
-            (r'/ws/status', WSStatusHandler),
+            (r'/targets/update/(.*)', TargetUpdateHandler),
+            (r'/scv/register', RegisterSCVHandler),
+            (r'/scv/disconnect', DisconnectSCVHandler),
+            (r'/scv/status', SCVStatusHandler),
             (r'/streams', PostStreamHandler),
             (r'/streams/delete/(.*)', RoutedStreamHandler),
             (r'/streams/start/(.*)', RoutedStreamHandler),
@@ -1289,30 +1164,24 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
 def start():
     extra_options = {
-        'external_http_port': int,
-        'cc_pass': str,
         'allowed_core_keys': set
     }
-    conf_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                             '..', 'cc.conf')
-    configure_options(extra_options, conf_path)
+    config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                               '..', 'cc.conf')
+    configure_options(config_file, extra_options)
     options = tornado.options.options
-
-    instance = CommandCenter(cc_name=options.name,
-                             cc_pass=options.cc_pass,
+    instance = CommandCenter(name=options.name,
+                             external_host=options.external_host,
                              redis_options=options.redis_options,
                              mongo_options=options.mongo_options)
-
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', options.ssl_certfile)
     key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                             '..', options.ssl_key)
     ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', options.ssl_ca_certs)
-
     cc_server = tornado.httpserver.HTTPServer(instance, ssl_options={
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
-
     cc_server.bind(options.internal_http_port)
     cc_server.start(0)
     instance.initialize_check_ws()

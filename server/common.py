@@ -48,7 +48,9 @@ def is_domain(url):
 
 def authenticate_manager(method):
     """ Decorator for handlers that require manager authentication. Based off
-    of tornado's authenticated method.
+    of tornado's authenticated method. This method only checks to see if the
+    given token corresponds to a manager. It does not check if said manager
+    should have access to some resource.
 
     """
     @functools.wraps(method)
@@ -170,9 +172,10 @@ class BaseServerMixin():
             sys.exit(0)
 
 
-def configure_options(extra_options, conf_path):
-    for option_name, option_type in extra_options.items():
-        tornado.options.define(option_name, type=option_type)
+def configure_options(config_file, extra_options=None):
+    if extra_options:
+        for option_name, option_type in extra_options.items():
+            tornado.options.define(option_name, type=option_type)
     tornado.options.define('name', type=str)
     tornado.options.define('redis_options', type=dict)
     tornado.options.define('mongo_options', type=dict)
@@ -180,6 +183,5 @@ def configure_options(extra_options, conf_path):
     tornado.options.define('ssl_certfile', type=str)
     tornado.options.define('ssl_key', type=str)
     tornado.options.define('ssl_ca_certs', type=str)
-    tornado.options.define('config_file', default=conf_path, type=str)
-    tornado.options.parse_command_line()
-    tornado.options.parse_config_file(tornado.options.options.config_file)
+    tornado.options.define('external_host', type=str)
+    tornado.options.parse_config_file(config_file)

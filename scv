@@ -1,0 +1,5 @@
+#! /usr/bin/env python
+
+import server.scv as scv
+
+scv.start()
