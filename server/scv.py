@@ -377,6 +377,14 @@ class PostStreamHandler(BaseHandler):
         else:
             target = Target(target_id, self.db)
 
+        # Bad if server dies here
+        cursor = self.mdb.data.targets
+        result = cursor.update({'_id': target_id},
+            {'$addToSet': {'shards': self.application.name}})
+        if result['err'] is False:
+            self.set_status(400)
+            return self.error('MDB failure')
+
         stream_id = str(uuid.uuid4())+':'+self.application.name
         stream_dir = os.path.join(self.application.streams_folder, stream_id)
         files_dir = os.path.join(stream_dir, 'files')
@@ -396,7 +404,6 @@ class PostStreamHandler(BaseHandler):
         }
         Stream.create(stream_id, pipeline, stream_fields)
         pipeline.execute()
-
         self.set_status(200)
         self.write({'stream_id': stream_id})
 

@@ -422,6 +422,31 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
 
+    def test_core_stop(self):
+        result = self._post_and_activate_stream()
+        target_id = result['target_id']
+        stream_id = result['stream_id']
+        token = result['token']
+        headers = {'Authorization': token}
+        frame_buffer = bytes()
+        n_frames = 25
+        stream = scv.Stream(stream_id, self.scv.db)
+        target = scv.Target(target_id, self.scv.db)
+
+        for count in range(n_frames):
+            frame_buffer += self._add_frames(token)
+        self.assertTrue(scv.ActiveStream.exists(stream_id, self.scv.db))
+        self.assertTrue(target.zscore('queue', stream_id) is None)
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(stream.hget('error_count'), 0)
+        self.assertFalse(scv.ActiveStream.exists(stream_id, self.scv.db))
+        self.assertFalse(target.zscore('queue', stream_id) is None)
+        buffer_path = os.path.join(self.scv.streams_folder,
+                                   stream_id, 'buffer_frames.xtc')
+        self.assertFalse(os.path.exists(buffer_path))
+
     def test_download_stream(self):
         result = self._post_and_activate_stream()
         stream_id = result['stream_id']
@@ -657,79 +682,33 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         new_stream_id, token = self._activate_stream(target_id)
         self.assertEqual(stream_id, new_stream_id)
 
-    # def test_stop_stream(self):
-    #     target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
-    #         self._post_and_activate_stream()
-    #     headers = {'Authorization': token}
-    #     response = self.fetch('/core/start', headers=headers, method='GET')
-    #     self.assertEqual(response.code, 200)
-    #     frame_buffer = bytes()
-    #     n_frames = 25
-
-    #     stream = ws.Stream(stream_id, self.scv.db)
-    #     target = ws.Target(target_id, self.scv.db)
-
-    #     for count in range(n_frames):
-    #         frame_bin = os.urandom(1024)
-    #         frame_buffer += frame_bin
-    #         body = {
-    #             'files': {'frames.xtc.b64':
-    #                       base64.b64encode(frame_bin).decode()}
-    #         }
-    #         response = self.fetch('/core/frame', headers=headers,
-    #                               body=json.dumps(body), method='PUT')
-    #         self.assertEqual(response.code, 200)
-
-    #     self.assertTrue(ws.ActiveStream.exists(stream_id, self.scv.db))
-    #     self.assertTrue(target.zscore('queue', stream_id) is None)
-
-    #     response = self.fetch('/core/stop', headers=headers, method='PUT',
-    #                           body='{}')
-    #     self.assertEqual(response.code, 200)
-    #     self.assertEqual(stream.hget('error_count'), 0)
-    #     self.assertFalse(ws.ActiveStream.exists(stream_id, self.scv.db))
-    #     self.assertFalse(target.zscore('queue', stream_id) is None)
-    #     buffer_path = os.path.join(self.scv.streams_folder,
-    #                                stream_id, 'buffer_frames.xtc')
-    #     self.assertFalse(os.path.exists(buffer_path))
-
-    # def test_heartbeat(self):
-    #     tornado.options.options.heartbeat_increment = 5
-    #     target_id = str(uuid.uuid4())
-    #     fn1 = 'system.xml.gz.b64'
-    #     fn2 = 'integrator.xml.gz.b64'
-    #     fn3 = 'state.xml.gz.b64'
-    #     fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
-    #     body = {'target_id': target_id,
-    #             'target_files': {fn1: fb1, fn2: fb2},
-    #             'stream_files': {fn3: fb3}
-    #             }
-    #     response = self.fetch('/streams', method='POST', body=json.dumps(body))
-    #     self.assertEqual(response.code, 200)
-    #     self.assertEqual(ws.ActiveStream.members(self.scv.db), set())
-    #     stream_id, token = self._activate_stream(target_id)
-    #     test_set = set([stream_id])
-    #     self.assertEqual(ws.ActiveStream.members(self.scv.db), test_set)
-    #     increment_time = tornado.options.options['heartbeat_increment']
-    #     time.sleep(increment_time+0.5)
-    #     self.scv.check_heartbeats()
-    #     self.assertEqual(ws.ActiveStream.members(self.scv.db), set())
-    #     stream_id, token = self._activate_stream(target_id)
-    #     self.assertEqual(ws.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(3)
-    #     body = '{}'
-    #     headers = {'Authorization': token}
-    #     response = self.fetch('/core/heartbeat', method='POST',
-    #                           headers=headers, body=json.dumps(body))
-    #     self.assertEqual(response.code, 200)
-    #     self.scv.check_heartbeats()
-    #     self.assertEqual(ws.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(3)
-    #     self.scv.check_heartbeats()
-    #     self.assertEqual(ws.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(5)
-    #     self.scv.check_heartbeats()
-    #     self.assertEqual(ws.ActiveStream.members(self.scv.db), set())
+    def test_heartbeat(self):
+        tornado.options.options.heartbeat_increment = 5
+        result = self._post_and_activate_stream()
+        target_id = result['target_id']
+        stream_id = result['stream_id']
+        token = result['token']
+        test_set = set([stream_id])
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        increment_time = tornado.options.options['heartbeat_increment']
+        time.sleep(increment_time+0.5)
+        self.scv.check_heartbeats()
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
+        stream_id, token = self._activate_stream(target_id)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(3)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/heartbeat', method='POST',
+                              headers=headers, body='')
+        self.assertEqual(response.code, 200)
+        self.scv.check_heartbeats()
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(3)
+        self.scv.check_heartbeats()
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(5)
+        self.scv.check_heartbeats()
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
 
 
 if __name__ == '__main__':
