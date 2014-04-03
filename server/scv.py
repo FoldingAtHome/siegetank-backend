@@ -64,12 +64,6 @@ class Target(Entity):
     fields = {'queue': zset(str)}  # queue of inactive streams
 
 
-class CommandCenter(Entity):
-    prefix = 'cc'
-    fields = {'ip': str,        # ip of the command center
-              'http_port': str  # http port
-              }
-
 ActiveStream.add_lookup('auth_token')
 ActiveStream.add_lookup('donor', injective=False)
 relate(Target, 'streams', {Stream}, 'target')
@@ -381,9 +375,9 @@ class PostStreamHandler(BaseHandler):
         cursor = self.mdb.data.targets
         result = cursor.update({'_id': target_id},
             {'$addToSet': {'shards': self.application.name}})
-        if result['err'] is False:
+        if result['err'] is not None:
             self.set_status(400)
-            return self.error('MDB failure')
+            return self.write(result['err'])
 
         stream_id = str(uuid.uuid4())+':'+self.application.name
         stream_dir = os.path.join(self.application.streams_folder, stream_id)
@@ -531,6 +525,12 @@ class StreamDeleteHandler(BaseHandler):
         stream.delete(pipeline=pipeline)
         pipeline.execute()
         if target.scard('streams') == 0:
+            cursor = self.mdb.data.targets
+            result = cursor.update({'_id': target_id},
+                {'$pull': {'shards': self.application.name}})
+            if result['err'] is not None:
+                self.set_status(400)
+                return self.write(result['err'])
             target.delete()
         self.set_status(200)
 
@@ -946,7 +946,7 @@ class StreamDownloadHandler(BaseHandler):
         .. http:get:: /streams/download/:stream_id/:filename
 
             Download file ``filename`` from ``stream_id``. ``filename`` can be
-            either a file in ``stream_files`` or a frame file posted by the core.
+            either a file in ``files`` or a frame file posted by the core.
             If it is a frame file, then the frames are concatenated on the fly
             before returning.
 

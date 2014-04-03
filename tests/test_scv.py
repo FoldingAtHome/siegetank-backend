@@ -447,6 +447,40 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
                                    stream_id, 'buffer_frames.xtc')
         self.assertFalse(os.path.exists(buffer_path))
 
+    def test_core_stop_error(self):
+        result = self._post_and_activate_stream()
+        target_id = result['target_id']
+        stream_id = result['stream_id']
+        token = result['token']
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        frame_buffer = bytes()
+        n_frames = 25
+
+        stream = scv.Stream(stream_id, self.scv.db)
+        target = scv.Target(target_id, self.scv.db)
+
+        for count in range(n_frames):
+            frame_buffer += self._add_frames(token)
+
+        self.assertTrue(scv.ActiveStream.exists(stream_id, self.scv.db))
+        self.assertTrue(target.zscore('queue', stream_id) is None)
+
+        body = {'error': base64.b64encode(b'NaN').decode()}
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body=json.dumps(body))
+        self.assertEqual(response.code, 200)
+        self.assertEqual(stream.hget('error_count'), 1)
+        error_path = os.path.join(self.scv.streams_folder,
+                                  stream_id, 'error_log.txt')
+        self.assertTrue(b'NaN' in open(error_path, 'rb').read())
+        self.assertFalse(scv.ActiveStream.exists(stream_id, self.scv.db))
+        self.assertFalse(target.zscore('queue', stream_id) is None)
+        buffer_path = os.path.join(self.scv.streams_folder,
+                                   stream_id, 'buffer_frames.xtc')
+        self.assertFalse(os.path.exists(buffer_path))
+
     def test_download_stream(self):
         result = self._post_and_activate_stream()
         stream_id = result['stream_id']
@@ -585,46 +619,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         # activating stream should succeed
         stream_id_activated, token_id = self._activate_stream(target_id)
         self.assertEqual(stream_id, stream_id_activated)
-
-    # def test_stop_error_stream(self):
-    #     target_id, fn1, fn2, fn3, fb1, fb2, fb3, stream_id, token = \
-    #         self._post_and_activate_stream()
-    #     headers = {'Authorization': token}
-    #     response = self.fetch('/core/start', headers=headers, method='GET')
-    #     self.assertEqual(response.code, 200)
-    #     frame_buffer = bytes()
-    #     n_frames = 25
-
-    #     stream = ws.Stream(stream_id, self.scv.db)
-    #     target = ws.Target(target_id, self.scv.db)
-
-    #     for count in range(n_frames):
-    #         frame_bin = os.urandom(1024)
-    #         frame_buffer += frame_bin
-    #         body = {
-    #             'files': {'frames.xtc.b64':
-    #                       base64.b64encode(frame_bin).decode()}
-    #             }
-    #         response = self.fetch('/core/frame', headers=headers,
-    #                               body=json.dumps(body), method='PUT')
-    #         self.assertEqual(response.code, 200)
-
-    #     self.assertTrue(ws.ActiveStream.exists(stream_id, self.scv.db))
-    #     self.assertTrue(target.zscore('queue', stream_id) is None)
-
-    #     body = {'error': base64.b64encode(b'NaN').decode()}
-    #     response = self.fetch('/core/stop', headers=headers, method='PUT',
-    #                           body=json.dumps(body))
-    #     self.assertEqual(response.code, 200)
-    #     self.assertEqual(stream.hget('error_count'), 1)
-    #     error_path = os.path.join(self.scv.streams_folder,
-    #                               stream_id, 'error_log.txt')
-    #     self.assertTrue(b'NaN' in open(error_path, 'rb').read())
-    #     self.assertFalse(ws.ActiveStream.exists(stream_id, self.scv.db))
-    #     self.assertFalse(target.zscore('queue', stream_id) is None)
-    #     buffer_path = os.path.join(self.scv.streams_folder,
-    #                                stream_id, 'buffer_frames.xtc')
-    #     self.assertFalse(os.path.exists(buffer_path))
 
     def test_priority_queue(self):
         # test to make sure we get the stream with the most number of frames
