@@ -31,13 +31,12 @@ import io
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import authenticate_manager
-from server.apollo import Entity, relate
+from server.apollo import Entity
 
 
-class WorkServer(Entity):
-    prefix = 'ws'
-    fields = {'url': str,  # http request url (verify based on if IP or not)
-              'http_port': int,  # ws http port
+class SCV(Entity):
+    prefix = 'scv'
+    fields = {'host': str,  # http request url (verify based on if IP or not)
               'fail_count': int,  # number of times a request has failed
               }
 
@@ -257,9 +256,8 @@ class AddManagerHandler(BaseHandler):
         """
         .. http:post:: /managers
 
-            Add a manager. The request must have originated from localhost or
-            a user whose role is admin. Admins can add new managers, delete
-            managers, in addition to modifying any target
+            Add a manager. This request can only be made by managers whose
+            role is *admin*.
 
             :reqheader Authorization: access token of an administrator
 
@@ -575,7 +573,7 @@ class SCVStatusHandler(BaseHandler):
 
                 {
                     "raynor": {
-                        "url": "raynor.stanford.edu",
+                        "host": "raynor.stanford.edu",
                         "online": true,
                     }
                 }
@@ -583,16 +581,14 @@ class SCVStatusHandler(BaseHandler):
         """
         self.set_status(400)
         body = {}
-        for ws_name in WorkServer.members(self.db):
-            workserver = WorkServer(ws_name, self.db)
-            body[ws_name] = {}
-            host = workserver.hget('url')
-            port = workserver.hget('http_port')
-            body[ws_name]['url'] = host+':'+str(port)
-            if workserver.hget('fail_count') < self.application._max_ws_fails:
-                body[ws_name]['online'] = True
+        for scv_name in SCV.members(self.db):
+            cursor = SCV(scv_name, self.db)
+            body[scv_name] = {}
+            body[scv_name]['host'] = cursor.hget('host')
+            if cursor.hget('fail_count') < self.application._max_ws_fails:
+                body[scv_name]['online'] = True
             else:
-                body[ws_name]['online'] = False
+                body[scv_name]['online'] = False
         self.set_status(200)
         return self.write(body)
 
@@ -613,8 +609,7 @@ class RegisterSCVHandler(BaseHandler):
 
                 {
                     "name": "some_workserver",
-                    "url": "workserver.stanford.edu",
-                    "http_port": 443
+                    "host": "workserver.stanford.edu",
                 }
 
             .. note:: ``url`` corresponds to the workserver's url. This should
@@ -641,10 +636,17 @@ class RegisterSCVHandler(BaseHandler):
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
         name = content['name']
-        url = content['url']
-        http_port = content['http_port']
-        self.application.add_ws(name, url, http_port)
-        print('WS '+content['name']+' is now connected')
+        host = content['host']
+        if not SCV.exists(name, self.db):
+            fields = {'host': host, 'fail_count': 0}
+            SCV.create(name, self.db, fields)
+        else:
+            cursor = SCV(name, self.db)
+            pipe = self.db.pipeline()
+            cursor.hset('host', host, pipeline=pipe)
+            cursor.hset('fail_count', 0, pipeline=pipe)
+            pipe.execute()
+        print('SCV', name, ' is now connected')
         self.set_status(200)
         return self.write(dict())
 
@@ -717,6 +719,7 @@ class PostStreamHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        # TODO: Change to a routed request to an arbitrary SCV
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
@@ -897,7 +900,7 @@ class TargetsHandler(BaseHandler):
         """
         .. http:get:: /targets
 
-            Return a list of all the targets on the CC. If a manager is
+            Return a list of all the targets. If a manager is
             authenticated, then only his set of targets will be returned.
 
             **Example reply**
@@ -912,22 +915,24 @@ class TargetsHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        target_ids = Target.members(self.db)
+        cursor = self.mdb.data.targets
 
         manager = self.get_current_user()
-
         # if number of targets increases dramatically:
         # 1) try pipelining
         # 2) add a reverse lookup of managers to targets
         if manager:
-            matched_targets = []
-            for target_id in target_ids:
-                target = Target(target_id, self.db)
-                if target.hget('owner') == manager:
-                    matched_targets.append(target_id)
-            return self.write({'targets': list(matched_targets)})
+            result = cursor.find({'owner': manager}, {'_id': 1})
+            targets = []
+            for k in result:
+                targets.append(k['_id'])
+            return self.write({'targets': targets})
         else:
-            return self.write({'targets': list(target_ids)})
+            result = cursor.find(field={'_id': 1})
+            targets = []
+            for k in result:
+                targets.append(k['_id'])
+            return self.write({'targets': targets})
 
     @authenticate_manager
     def post(self):
@@ -1036,11 +1041,15 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     def _load_scvs(self):
         """ Load a list of available SCVs from MDB """
-
+        cursor = self.mdb.servers.scvs
+        self.scvs = dict()
+        for scv in cursor.find(fields={'_id': 1, 'host': 1}):
+            self.scvs[scv['_id']] = scv['host']
 
     def __init__(self, name, external_host, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
         self._register(external_host)
+        self._load_scvs()
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
             (r'/managers/verify', VerifyManagerHandler),
@@ -1070,23 +1079,14 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         taken offline automatically.
 
         """
-        workserver = WorkServer(ws_id, self.db)
-        if 'ws_url' in kwargs:
-            ws_url = kwargs['ws_url']
-            kwargs.pop("ws_url", None)
-        else:
-            ws_url = workserver.hget('url')
-        if 'ws_port' in kwargs:
-            ws_port = kwargs['ws_port']
-            kwargs.pop("ws_port", None)
-        else:
-            ws_port = workserver.hget('http_port')
-        ws_uri = 'https://'+ws_url+':'+str(ws_port)+path
+        cursor = SCV(ws_id, self.db)
+        host = cursor.hget('host')
+        uri = 'https://'+host+path
         client = tornado.httpclient.AsyncHTTPClient()
         try:
-            reply = yield client.fetch(ws_uri, validate_cert=is_domain(ws_url),
+            reply = yield client.fetch(uri, validate_cert=is_domain(host),
                                        **kwargs)
-            workserver.hset('fail_count', 0)
+            cursor.hset('fail_count', 0)
             return reply
         except (tornado.httpclient.HTTPError, IOError) as e:
             if isinstance(e, tornado.httpclient.HTTPError):
@@ -1094,31 +1094,25 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 body = io.BytesIO(e.response.body)
             else:
                 code = 503
-                body = io.BytesIO(json.dumps({'error': 'ws down'}).encode())
-            workserver.hincrby('fail_count', 1)
-            dummy = tornado.httpclient.HTTPRequest(ws_url)
+                body = io.BytesIO(json.dumps({'error': 'scv down'}).encode())
+            cursor.hincrby('fail_count', 1)
+            dummy = tornado.httpclient.HTTPRequest(uri)
             reply = tornado.httpclient.HTTPResponse(dummy, code, buffer=body)
             return reply
 
     @tornado.gen.coroutine
-    def check_ws(self):
-        """ Check all workservers to see if they are alive or not. This is
-        called once at the beginning, and periodically as a callback.
-
-        """
-        for ws_name in WorkServer.members(self.db):
-            reply = yield self.fetch(ws_name, '/')
-            ws = WorkServer(ws_name)
+    def _check_scvs(self):
+        """ Check all SCVs to see if they are alive or not """
+        print('checking SCVs')
+        self._load_scvs()
+        print(self.scvs)
+        for scv_name in self.scvs.items():
+            reply = yield self.fetch(scv_name, '/')
+            cursor = SCV(scv_name)
             if reply.code == 200:
-                ws.hset('fail_count', 0)
+                cursor.hset('fail_count', 0)
             else:
-                ws.hset('fail_count', self.application._max_ws_fails)
-
-    def initialize_check_ws(self):
-        if tornado.process.task_id() == 0:
-            tornado.ioloop.IOLoop.instance().add_callback(self.check_ws)
-            self.pulse = tornado.ioloop.PeriodicCallback(self.check_ws, 5000)
-            self.pulse.start()
+                cursor.hset('fail_count', self.application._max_ws_fails)
 
     def ws_online(self, ws_id):
         """ Returns True if the workserver is online, False otherwise """
@@ -1127,22 +1121,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             return True
         else:
             return False
-
-    # this is mainly here for unit testing purposes
-    def add_ws(self, name, url, http_port):
-        if not WorkServer.exists(name, self.db):
-            fields = {'url': url,
-                      'http_port': http_port,
-                      'fail_count': 0
-                      }
-            ws = WorkServer.create(name, self.db, fields)
-        else:
-            ws = WorkServer(name, self.db)
-            pipe = self.db.pipeline()
-            ws.hset('url', url, pipeline=pipe)
-            ws.hset('http_port', http_port, pipeline=pipe)
-            ws.hset('fail_count', 0, pipeline=pipe)
-            pipe.execute()
 
 
 def start():
@@ -1167,5 +1145,8 @@ def start():
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
     cc_server.bind(options.internal_http_port)
     cc_server.start(0)
-    instance.initialize_check_ws()
+    if tornado.process.task_id() == 0:
+        tornado.ioloop.IOLoop.instance().add_callback(instance._check_scvs)
+        pulse = tornado.ioloop.PeriodicCallback(instance._check_scvs, 5000)
+        pulse.start()
     tornado.ioloop.IOLoop.instance().start()

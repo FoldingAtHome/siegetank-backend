@@ -5,7 +5,7 @@
 
 ST - Siege Tank  
 CC - Command Center  
-WS - Work Server  
+SCV - Work Server
 
 <h1> Key goals </h1>
 

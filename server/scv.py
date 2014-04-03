@@ -1030,11 +1030,25 @@ class SCV(BaseServerMixin, tornado.web.Application):
         scvs = self.mdb.servers.scvs
         scvs.update({'_id': self.name}, {'host': external_host}, upsert=True)
 
+    def _load_ccs(self):
+        """ Load a list of available CCs from MDB """
+        cursor = self.mdb.servers.ccs
+        self.ccs = dict()
+        for cc in cursor.find(fields={'_id': 1, 'host': 1}):
+            self.ccs[cc['_id']] = cc['host']
+
+    def _notify_ccs(self):
+        """ Notify each CC that the SCV is up and running """
+        for cc, host in self.ccs.items():
+            print(cc, host)
+
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
         self.base_init(name, redis_options, mongo_options)
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
         self._register(external_host)
+        self._load_ccs()
+        self._notify_ccs()
         super(SCV, self).__init__([
             (r'/', AliveHandler),
             (r'/active_streams', ActiveStreamsHandler),
@@ -1122,10 +1136,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
 tornado.options.define('heartbeat_increment', default=900, type=int)
 tornado.options.define('pulse_frequency_in_ms', default=3000, type=int)
 
-
 def start():
     config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               '..', 'ws.conf')
+                               '..', 'scv.conf')
     configure_options(config_file)
     options = tornado.options.options
 
