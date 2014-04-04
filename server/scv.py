@@ -1030,7 +1030,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
     def _register(self, external_host):
         """ Register the SCV in MDB. """
         scvs = self.mdb.servers.scvs
-        scvs.update({'_id': self.name}, {'host': external_host}, upsert=True)
+        scvs.update({'_id': self.name},
+                    {'_id': self.name,
+                     'host': external_host}, upsert=True)
 
     def _load_ccs(self):
         """ Load a list of available CCs from MDB """

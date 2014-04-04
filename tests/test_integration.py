@@ -21,9 +21,9 @@ import json
 import time
 
 
-class SimpleTest(tornado.testing.AsyncTestCase):
+class TestSimple(tornado.testing.AsyncTestCase):
     def setUp(self):
-        super(SimpleTest, self).setUp()
+        super(TestSimple, self).setUp()
         self.scv_host = '127.0.0.1:3764'
         self.cc_host = '127.0.0.1:7654'
         redis_options = {'port': 2739, 'logfile': os.devnull}
@@ -37,20 +37,21 @@ class SimpleTest(tornado.testing.AsyncTestCase):
                                    external_host=self.cc_host,
                                    redis_options=redis_options,
                                    mongo_options=mongo_options)
+        self.cc._cache_scv(self.scv.name, self.scv_host)
         for db_name in self.cc.mdb.database_names():
             self.cc.mdb.drop_database(db_name)
-        self.cc_server = tornado.httpserver.HTTPServer(
-            self.cc,
-            io_loop=self.io_loop,
-            ssl_options={'certfile': 'certs/public.crt',
-                         'keyfile': 'certs/private.pem'})
         self.scv_server = tornado.httpserver.HTTPServer(
             self.scv,
             io_loop=self.io_loop,
             ssl_options={'certfile': 'certs/public.crt',
                          'keyfile': 'certs/private.pem'})
-        self.cc_server.listen(3764)
-        self.scv_server.listen(7654)
+        self.cc_server = tornado.httpserver.HTTPServer(
+            self.cc,
+            io_loop=self.io_loop,
+            ssl_options={'certfile': 'certs/public.crt',
+                         'keyfile': 'certs/private.pem'})
+        self.scv_server.listen(3764)
+        self.cc_server.listen(7654)
         token = str(uuid.uuid4())
         test_manager = "test_ws@gmail.com"
         db_body = {'_id': test_manager, 'token': token, 'role': 'manager'}
@@ -60,14 +61,14 @@ class SimpleTest(tornado.testing.AsyncTestCase):
         self.manager = test_manager
         self.client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
 
-    @tornado.gen.coroutine
     def fetch(self, host, path, **kwargs):
         uri = 'https://'+host+path
-        kwargs['validate_cert']=common.is_domain(host)
-        reply = yield self.client.fetch(uri, path, **kwargs)
-        return reply
+        kwargs['validate_cert'] = common.is_domain(host)
+        self.client.fetch(uri, self.stop, **kwargs)
+        return self.wait()
 
     def tearDown(self):
+        super(TestSimple, self).tearDown()
         self.scv.db.flushdb()
         self.cc.db.flushdb()
         for db_name in self.scv.mdb.database_names():
@@ -79,8 +80,18 @@ class SimpleTest(tornado.testing.AsyncTestCase):
         shutil.rmtree(self.cc.data_folder)
         shutil.rmtree(self.scv.data_folder)
 
-    @tornado.gen.coroutine
-    def test_donor_token_assign(self):
+    def _post_stream(self, host, target_id):
+        headers = {'Authorization': self.auth_token}
+        rand_bin = base64.b64encode(os.urandom(1024)).decode()
+        body = json.dumps({
+            'target_id': target_id,
+            'files': {"state.xml.gz.b64": rand_bin}
+        })
+        reply = self.fetch(host, '/streams', method='POST', body=body,
+                           headers=headers)
+        return reply
+
+    def test_post_stream(self):
         headers = {'Authorization': self.auth_token}
 
         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
@@ -93,11 +104,13 @@ class SimpleTest(tornado.testing.AsyncTestCase):
             'engine_versions': ['6.0'],
             'stage': 'public'
             }
-        reply = yield self.fetch(self.cc_host, '/targets',
-                                 body=json.dumps(body), headers=headers)
+        reply = self.fetch(self.cc_host, '/targets', method='POST',
+                           body=json.dumps(body), headers=headers)
+        self.assertEqual(reply.code, 200)
+        target_id = json.loads(reply.body.decode())['target_id']
+        reply = self._post_stream(self.cc_host, target_id)
         self.assertEqual(reply.code, 200)
 
-        # target_id = json.loads(reply.body.decode())['target_id']
         # uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
         # client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
         #              headers=headers)

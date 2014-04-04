@@ -591,22 +591,13 @@ class SCVConnectHandler(BaseHandler):
 
         """
         self.set_status(400)
-        self.application._load_scvs()
-        scvs = self.application.scvs
         content = json.loads(self.request.body.decode())
         name = content['name']
+        scvs = self.application._load_scvs()
         host = scvs[name]
         if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
             self.error('remote_ip does not match given host')
-        if not SCV.exists(name, self.db):
-            fields = {'host': host, 'fail_count': 0}
-            SCV.create(name, self.db, fields)
-        else:
-            cursor = SCV(name, self.db)
-            pipe = self.db.pipeline()
-            cursor.hset('host', host, pipeline=pipe)
-            cursor.hset('fail_count', 0, pipeline=pipe)
-            pipe.execute()
+        self.application._cache_scv(name, host)
         self.set_status(200)
         return self.write(dict())
 
@@ -640,7 +631,7 @@ class SCVDisconnectHandler(BaseHandler):
 
         """
         self.set_status(400)
-        scvs = self.application.scvs
+        scvs = self.application._load_scvs()
         content = json.loads(self.request.body.decode())
         name = content['name']
         host = scvs[name]
@@ -687,7 +678,6 @@ class RoutedStreamHandler(BaseHandler):
 
 
 class PostStreamHandler(BaseHandler):
-    @authenticate_manager
     @tornado.gen.coroutine
     def post(self):
         """
@@ -720,61 +710,14 @@ class PostStreamHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        # TODO: Change to a routed request to an arbitrary SCV
         self.set_status(400)
-        content = json.loads(self.request.body.decode())
-        target_id = content['target_id']
-        target = Target(target_id, self.db)
-        if target.hget('owner') != self.get_current_user():
-            self.set_status(401)
-            return self.error('target not owned by you')
-        files = content['files']
-        for filename in files:
-            if target.hget('engine') == 'openmm':
-                if filename not in ('state.xml.gz.b64',
-                                    'integrator.xml.gz.b64',
-                                    'system.xml.gz.b64'):
-                    return self.error('bad filename')
-
-        # TODO: ensure the WS we're POSTing to is up
-        allowed_workservers = target.smembers('allowed_ws')
-        if not allowed_workservers:
-            allowed_workservers = WorkServer.members(self.db)
-        if not allowed_workservers:
-            self.set_status(400)
-            return self.error('no available workserver')
-
-        # randomly pick from available workservers
-        ws_id = random.sample(allowed_workservers, 1)[0]
-
-        body = {
-            'target_id': target_id,
-        }
-
-        body['stream_files'] = {}
-
-        for filename, filebin in files.items():
-            body['stream_files'][filename] = filebin
-
-        # if this target is not yet striating over the ws,
-        # include include the target_files
-        if not ws_id in target.smembers('striated_ws'):
-            target_files = target.smembers('files')
-            body['target_files'] = {}
-            for filename in target_files:
-                file_path = os.path.join(self.application.targets_folder,
-                                         target_id, filename)
-                with open(file_path, 'rb') as handle:
-                    body['target_files'][filename] = handle.read().decode()
-
-        rep = yield self.fetch(ws_id, '/streams', method='POST',
-                               body=json.dumps(body))
-
-        if rep.code == 200:
-            target.sadd('striated_ws', ws_id)
-
-        self.set_status(rep.code)
-        return self.write(rep.body)
+         # randomly pick from available scvs
+        picked_scv = random.sample(SCV.members(self.db), 1)[0]
+        reply = yield self.fetch(picked_scv, '/streams', method='POST',
+                                 body=self.request.body,
+                                 headers=self.request.headers)
+        self.set_status(reply.code)
+        self.write(reply.body)
 
 
 class TargetInfoHandler(BaseHandler):
@@ -1034,19 +977,33 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def _register(self, external_host):
         """ Register the CC in MDB. """
         ccs = self.mdb.servers.ccs
-        ccs.update({'_id': self.name}, {'host': external_host}, upsert=True)
+        result = ccs.update({'_id': self.name},
+                            {'_id': self.name, 'host': external_host},
+                            upsert=True)
 
     def _load_scvs(self):
-        """ Load a list of available SCVs from MDB """
+        """ Load a list of available SCVs from MDB. """
         cursor = self.mdb.servers.scvs
-        self.scvs = dict()
+        scvs_info = dict()
         for scv in cursor.find(fields={'_id': 1, 'host': 1}):
-            self.scvs[scv['_id']] = scv['host']
+            scvs_info[scv['_id']] = scv['host']
+        return scvs_info
+
+    def _cache_scv(self, scv_name, host):
+        """ Cache a single SCV into redis. """
+        if not SCV.exists(scv_name, self.db):
+            fields = {'host': host, 'fail_count': 0}
+            SCV.create(scv_name, self.db, fields)
+        else:
+            cursor = SCV(scv_name, self.db)
+            pipe = self.db.pipeline()
+            cursor.hset('host', host, pipeline=pipe)
+            cursor.hset('fail_count', 0, pipeline=pipe)
+            pipe.execute()
 
     def __init__(self, name, external_host, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
         self._register(external_host)
-        self._load_scvs()
         super(CommandCenter, self).__init__([
             (r'/core/assign', AssignHandler),
             (r'/managers/verify', VerifyManagerHandler),
