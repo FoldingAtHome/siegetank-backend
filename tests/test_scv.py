@@ -19,16 +19,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
         super(TestStreamMethods, self).setUpClass()
-
-        redis_options = {
-            'port': 3828,
-            'logfile': os.devnull
-        }
-        mongo_options = {
-            'host': 'localhost',
-            'port': 27017
-        }
-
+        redis_options = {'port': 3828, 'logfile': os.devnull}
+        mongo_options = {'host': 'localhost', 'port': 27017}
         self.scv = scv.SCV(name='test_scv',
                            external_host='127.0.0.1',
                            mongo_options=mongo_options,
@@ -36,12 +28,9 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
     @classmethod
     def tearDownClass(self):
-        self.scv.shutdown_redis()
-        self.scv.mdb.drop_database('users')
-        self.scv.mdb.drop_database('community')
-        self.scv.mdb.drop_database('data')
-        shutil.rmtree(self.scv.data_folder)
         super(TestStreamMethods, self).tearDownClass()
+        self.scv.shutdown_redis()
+        shutil.rmtree(self.scv.data_folder)
 
     def get_app(self):
         return self.scv
