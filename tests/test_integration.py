@@ -10,6 +10,7 @@ import os
 import shutil
 import uuid
 import urllib
+import itertools
 
 import server.scv as scv
 import server.cc as cc
@@ -85,7 +86,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         shutil.rmtree(self.scv.data_folder)
 
     def _post_target(self, host, engine='openmm', stage='public',
-                     engine_versions=None):
+                     engine_versions=None, weight=1):
         if engine_versions is None:
             engine_versions = ['6.0']
         headers = {'Authorization': self.auth_token}
@@ -96,6 +97,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
             'engine_versions': engine_versions,
             'stage': stage,
             'options': options,
+            'weight': weight
         }
         reply = self.fetch(self.cc_host, '/targets', method='POST',
                            body=json.dumps(body), headers=headers)
@@ -131,18 +133,23 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         return reply
 
-    def _get_target_info(self, host, target_id):
-        reply = self.fetch(host, '/targets/info/'+target_id)
-        self.assertEqual(reply.code, 200)
-        return json.loads(reply.body.decode())
-
-    def _activate(self, full_path, token):
+    def _core_start(self, full_path, token):
         host = urllib.parse.urlparse(full_path).netloc
         path = urllib.parse.urlparse(full_path).path
         reply = self.fetch(host, path,
                            headers={'Authorization': token})
         self.assertEqual(reply.code, 200)
         return reply
+
+    def _core_stop(self, host, token):
+        reply = self.fetch(host, '/core/stop', method='PUT', body='{}',
+                           headers={'Authorization': token})
+        self.assertEqual(reply.code, 200)
+
+    def _get_target_info(self, host, target_id):
+        reply = self.fetch(host, '/targets/info/'+target_id)
+        self.assertEqual(reply.code, 200)
+        return json.loads(reply.body.decode())
 
     def test_post_stream(self):
         target_id = self._post_target(self.cc_host)['target_id']
@@ -156,7 +163,36 @@ class TestSimple(tornado.testing.AsyncTestCase):
             self._post_stream(self.cc_host, target_id)
         result = self._assign(self.cc_host)
         content = json.loads(result.body.decode())
-        self._activate(content['url'], content['token'])
+        token = content['token']
+        self._core_start(content['url'], token)
+        host = urllib.parse.urlparse(content['url']).netloc
+        self._core_stop(host, token)
+
+    def test_assignment_weight(self):
+        weights = {}
+        counters = {}
+        control = [1, 6, 12]
+        for w in control:
+            target_id = self._post_target(self.cc_host, weight=w)['target_id']
+            self._post_stream(self.cc_host, target_id)
+            weights[target_id] = w
+            counters[target_id] = 0
+
+        for i in range(150):
+            reply = self._assign(self.cc_host)
+            content = json.loads(reply.body.decode())
+            token = content['token']
+            reply = self._core_start(content['url'], token)
+            target_id = json.loads(reply.body.decode())['target_id']
+            host = urllib.parse.urlparse(content['url']).netloc
+            self._core_stop(host, token)
+            counters[target_id] += 1
+
+        for comb in itertools.combinations(counters, 2):
+            if weights[comb[0]] > weights[comb[1]]:
+                self.assertTrue(counters[comb[0]] > counters[comb[1]])
+            else:
+                self.assertTrue(counters[comb[0]] < counters[comb[1]])
 
         # uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
         # client.fetch(uri, self.stop, validate_cert=common.is_domain(url),

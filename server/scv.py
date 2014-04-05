@@ -799,7 +799,6 @@ class CoreStopHandler(BaseHandler):
                                     stream_id, 'error_log.txt')
             with open(log_path, 'a') as handle:
                 handle.write(time.strftime("%c")+'\n'+message)
-
         self.set_status(200)
         self.deactivate_stream(stream_id)
 

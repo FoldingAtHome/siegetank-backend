@@ -10,15 +10,14 @@ import json
 import time
 import base64
 import random
-import pymongo
 import hashlib
 from os.path import isfile
 
 
-class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
+class TestSCV(tornado.testing.AsyncHTTPTestCase):
     @classmethod
     def setUpClass(self):
-        super(TestStreamMethods, self).setUpClass()
+        super(TestSCV, self).setUpClass()
         redis_options = {'port': 3828, 'logfile': os.devnull}
         mongo_options = {'host': 'localhost', 'port': 27017}
         self.scv = scv.SCV(name='test_scv',
@@ -28,7 +27,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
 
     @classmethod
     def tearDownClass(self):
-        super(TestStreamMethods, self).tearDownClass()
+        super(TestSCV, self).tearDownClass()
         self.scv.shutdown_redis()
         shutil.rmtree(self.scv.data_folder)
 
@@ -36,7 +35,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         return self.scv
 
     def setUp(self):
-        super(TestStreamMethods, self).setUp()
+        super(TestSCV, self).setUp()
         token = str(uuid.uuid4())
         test_manager = "test_ws@gmail.com"
         db_body = {'_id': test_manager,
@@ -50,7 +49,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         self.test_manager = test_manager
 
     def tearDown(self):
-        super(TestStreamMethods, self).tearDown()
+        super(TestSCV, self).tearDown()
         self.scv.db.flushdb()
         for db_name in self.scv.mdb.database_names():
             self.scv.mdb.drop_database(db_name)
@@ -455,7 +454,6 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         n_frames = 25
         stream = scv.Stream(stream_id, self.scv.db)
         target = scv.Target(target_id, self.scv.db)
-
         for count in range(n_frames):
             frame_buffer += self._add_frames(token)
         self.assertTrue(scv.ActiveStream.exists(stream_id, self.scv.db))
@@ -469,6 +467,7 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         buffer_path = os.path.join(self.scv.streams_folder,
                                    stream_id, 'buffer_frames.xtc')
         self.assertFalse(os.path.exists(buffer_path))
+        stream_id, token = self._activate_stream(target_id)
 
     def test_core_stop_error(self):
         result = self._post_and_activate_stream()
