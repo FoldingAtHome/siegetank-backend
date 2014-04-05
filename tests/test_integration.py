@@ -54,7 +54,11 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.cc_server.listen(7654)
         token = str(uuid.uuid4())
         test_manager = "test_ws@gmail.com"
-        db_body = {'_id': test_manager, 'token': token, 'role': 'manager'}
+        db_body = {'_id': test_manager,
+                   'token': token,
+                   'role': 'manager',
+                   'weight': 1
+                   }
         managers = self.scv.mdb.users.managers
         managers.insert(db_body)
         self.auth_token = token
@@ -80,6 +84,27 @@ class TestSimple(tornado.testing.AsyncTestCase):
         shutil.rmtree(self.cc.data_folder)
         shutil.rmtree(self.scv.data_folder)
 
+    def _post_target(self, host, engine='openmm', stage='public',
+                     engine_versions=None):
+        if engine_versions is None:
+            engine_versions = ['6.0']
+        headers = {'Authorization': self.auth_token}
+        options = {'steps_per_frame': 50000}
+        body = {
+            'description': 'test project',
+            'engine': engine,
+            'engine_versions': engine_versions,
+            'stage': stage,
+            'options': options,
+        }
+        reply = self.fetch(self.cc_host, '/targets', method='POST',
+                           body=json.dumps(body), headers=headers)
+
+        self.assertEqual(reply.code, 200)
+        target_id = json.loads(reply.body.decode())['target_id']
+        body['target_id'] = target_id
+        return body
+
     def _post_stream(self, host, target_id):
         headers = {'Authorization': self.auth_token}
         rand_bin = base64.b64encode(os.urandom(1024)).decode()
@@ -89,35 +114,40 @@ class TestSimple(tornado.testing.AsyncTestCase):
         })
         reply = self.fetch(host, '/streams', method='POST', body=body,
                            headers=headers)
+        self.assertEqual(reply.code, 200)
         return reply
 
+    def _assign(self, host, target_id=None, engine='openmm',
+                engine_version='6.0', donor_token=None):
+        print('assigning...')
+        body = json.dumps({
+            'engine': engine,
+            'engine_version': engine_version,
+            })
+        if donor_token:
+            body['donor_token'] = donor_token
+        if target_id:
+            body['target_id'] = target_id
+        reply = self.fetch(host, '/core/assign', method='POST', body=body)
+        self.assertEqual(reply.code, 200)
+        return reply
+
+    def _get_target_info(self, host, target_id):
+        reply = self.fetch(host, '/targets/info/'+target_id)
+        self.assertEqual(reply.code, 200)
+        return json.loads(reply.body.decode())
+
     def test_post_stream(self):
-        headers = {'Authorization': self.auth_token}
+        target_id = self._post_target(self.cc_host)['target_id']
+        self._post_stream(self.cc_host, target_id)
+        info = self._get_target_info(self.cc_host, target_id)
+        self.assertEqual(info['shards'], ['mengsk'])
 
-        fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
-                              for i in range(4))
-        description = "Diwakar and John's top secret project"
-        body = {
-            'description': description,
-            'steps_per_frame': 50000,
-            'engine': 'openmm',
-            'engine_versions': ['6.0'],
-            'stage': 'public'
-            }
-        reply = self.fetch(self.cc_host, '/targets', method='POST',
-                           body=json.dumps(body), headers=headers)
-        self.assertEqual(reply.code, 200)
-        target_id = json.loads(reply.body.decode())['target_id']
-        reply = self._post_stream(self.cc_host, target_id)
-        self.assertEqual(reply.code, 200)
-
-        # uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
-        # client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-        #              headers=headers)
-        # reply = self.wait()
-        # self.assertEqual(reply.code, 200)
-        # target_ids = set(json.loads(reply.body.decode())['targets'])
-        # self.assertEqual(target_ids, {target_id})
+    def test_assignment(self):
+        target_id = self._post_target(self.cc_host)['target_id']
+        for i in range(10):
+            self._post_stream(self.cc_host, target_id)
+        result = self._assign(self.cc_host)
 
         # uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
         # client.fetch(uri, self.stop, validate_cert=common.is_domain(url),

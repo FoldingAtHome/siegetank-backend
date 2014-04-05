@@ -269,7 +269,8 @@ class AddManagerHandler(BaseHandler):
                 {
                     "email": "proteneer@gmail.com",
                     "password": "password",
-                    "role": "admin" or "manager"
+                    "role": "admin" or "manager",
+                    "weight": 1
                 }
 
             **Example reply**
@@ -297,6 +298,7 @@ class AddManagerHandler(BaseHandler):
         token = str(uuid.uuid4())
         email = content['email']
         password = content['password']
+        weight = content['weight']
         role = content['role']
         if not role in ['admin', 'manager']:
             return self.error('bad user role')
@@ -335,6 +337,7 @@ class TargetUpdateHandler(BaseHandler):
                     "stage": "disabled", private", "beta", "public"  //optional
                     "engine_versions":  ["6.0", "6.5"]  //optional
                     "description": "description"  //optional
+                    "weight": 2 // optional
                 }
 
                 .. note:: ``engine_versions`` will only affect future streams.
@@ -362,6 +365,8 @@ class TargetUpdateHandler(BaseHandler):
                 return self.error('invalid stage')
         if 'description' in content:
             payload['description'] = content['description']
+        if 'weight' in content:
+            payload['weight'] = max(content['weight'], 0)
         cursor = self.mdb.data.targets
         result = cursor.update({'_id': target_id}, {'$set': payload})
         if result['updatedExisting']:
@@ -377,13 +382,24 @@ def yates_generator(x):
         yield x[i]
 
 
-class AssignHandler(BaseHandler):
+def draw_prefix_sum(array):
+    """ Draws a """
+
+class CoreAssignHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
         """
         .. http:post:: /core/assign
 
-            Initialize a stream assignment from the CC.
+            Assign a stream from an SCV to a core. The assignment algorithm is:
+
+            1. Each user is assigned a weight by an administrator.
+            2. The set of users who have targets that
+                a. match the core's "engine"
+                c. allow the core's "engine_version"
+            3. A user is chosen based on his weight relative to other users
+            4. One of the user's targets is chosen based on the target's
+                weights
 
             **Example request**
 
@@ -392,19 +408,12 @@ class AssignHandler(BaseHandler):
                 {
                     "engine": "openmm",
                     "engine_version": "6.0",
-                    "donor_token": "token",
-
-                    "stage": "beta" // optional, allow access to beta targets
+                    "donor_token": "token", // optional
                     "target_id": "target_id" // optional
                 }
 
-            .. note:: If ``target_id`` is specified, then the WS will try and
-                activate one of its streams. The stage of the target may be
-                either "private", "beta", or "public".
-
-                Otherwise, we try and find a ``target_id`` whose engine version
-                is compatible with the core's engine_version and ``stage`` is
-                either "beta" or "public".
+            .. note:: If ``target_id`` is specified, then the CC will disregard
+                the assignment algorithm.
 
             **Example reply**
 
@@ -423,9 +432,7 @@ class AssignHandler(BaseHandler):
             :status 400: Bad request
 
         """
-
         self.set_status(400)
-        #core_id = self.request.body['core_id']
         content = json.loads(self.request.body.decode())
         if 'donor_token' in content:
             donor_token = content['donor_token']
@@ -439,86 +446,125 @@ class AssignHandler(BaseHandler):
             donor_id = None
 
         engine = content['engine']
-        if engine != 'openmm':
-            return self.error('engine must be openmm')
         engine_version = content['engine_version']
-
-        available_targets = list(Target.lookup('engine_versions',
-                                               engine_version, self.db))
-
-        allowed_stages = ['public']
-
-        if 'stage' in content:
-            if content['stage'] == 'beta':
-                allowed_stages.append('beta')
-            else:
-                return self.error('stage must be beta')
-
+        cursor = self.mdb.data.targets
         if 'target_id' in content:
-            # make sure the given target_id can be sent to this core
             target_id = content['target_id']
-            if not Target.exists(target_id, self.db):
-                err = 'given target is not managed by this cc'
-                return self.error(err)
-            if not target_id in available_targets:
-                err = 'requested target_id not in available targets'
-                return self.error(err)
-            target = Target(target_id, self.db)
+            result = cursor.find_one({'_id': target_id},
+                                     {'engine': engine,
+                                      'engine_versions': engine_version,
+                                      })
+            if result['engine'] != engine:
+                return self.error('target engine does not match core engine')
+            if engine_version not in result['engine_versions']:
+                return self.error('core engine_version not allowed')
         else:
-            # if no target is specified, then a random target is chosen from a
-            # list of available targets for the core's engine version
-            if not available_targets:
-                err_msg = 'no available targets matching engine version'
-                return self.error(err_msg)
+            result = cursor.find({'engine': engine,
+                                  'engine_versions': {'$in': [engine_version]},
+                                  'stage': 'public'
+                                  }, {'owner': 1, '_id': 1, 'weight': 1})
+            owner_weights = dict()
+            target_weights = dict()
+            target_owners = dict()
+            for match in result:
+                owner_weights[match['owner']] = None
+                target_weights[match['_id']] = match['weight']
+                target_owners[match['_id']] = match['owner']
+            if not target_weights:
+                return self.error('no targets could be found')
+            cursor = self.mdb.users.managers
+            result = cursor.find({'_id': {'$in': ['test_ws@gmail.com']}},
+                                 {'_id': 1, 'weight': 1})
+            for match in result:
+                owner_weights[match['_id']] = match['weight']
 
-            found = False
+            def weighted_sample(d):
+                keys = list(d.keys())
+                values = list(d.values())
+                # exclusive prefix sum
+                for index, value in enumerate(values):
+                    if index > 0:
+                        values[index] += values[index-1]
+                x = random.uniform(0, values[-1])
+                for index, value in enumerate(values):
+                    if value > x:
+                        break
+                return keys[index]
+            picked_owner = weighted_sample(owner_weights)
+            owner_targets = dict((k, v) for k, v in target_weights.items()
+                                 if target_owners[k] == picked_owner)
+            target_id = weighted_sample(owner_targets)
 
-            # target_id must be either beta or public
-            for target_id in yates_generator(available_targets):
-                target = Target(target_id, self.db)
-                if target.hget('stage') in allowed_stages:
-                    found = True
-                    break
+        # find an available workserver
+        print(target_id)
 
-            # if we reached here then we didn't find a good target
-            if not found:
-                err = 'no public or beta targets available'
-                return self.error(err)
+        self.set_status(200)
 
-        options = self.load_target_options(target_id)
+        # if 'target_id' in content:
+        #     # make sure the given target_id can be sent to this core
+        #     target_id = content['target_id']
+        #     if not Target.exists(target_id, self.db):
+        #         err = 'given target is not managed by this cc'
+        #         return self.error(err)
+        #     if not target_id in available_targets:
+        #         err = 'requested target_id not in available targets'
+        #         return self.error(err)
+        #     target = Target(target_id, self.db)
+        # else:
+        #     # if no target is specified, then a random target is chosen from a
+        #     # list of available targets for the core's engine version
+        #     if not available_targets:
+        #         err_msg = 'no available targets matching engine version'
+        #         return self.error(err_msg)
 
-        # shuffle and find an online workserver
-        striated_servers = list(filter(lambda x: self.application.ws_online(x),
-                                       target.smembers('striated_ws')))
-        random.shuffle(striated_servers)
+        #     found = False
 
-        for ws_id in striated_servers:
-            workserver = WorkServer(ws_id, self.db)
-            ws_url = workserver.hget('url')
-            ws_port = workserver.hget('http_port')
-            ws_body = {}
-            ws_body['target_id'] = target_id
-            if donor_id:
-                ws_body['donor_id'] = donor_id
-            try:
-                reply = yield self.fetch(ws_id, '/streams/activate',
-                                         ws_url=ws_url, method='POST',
-                                         body=json.dumps(ws_body))
-                if(reply.code == 200):
-                    rep_content = json.loads(reply.body.decode())
-                    token = rep_content["token"]
-                    body = {
-                        'token': token,
-                        'options': options,
-                        'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
-                    }
-                    self.write(body)
-                    return self.set_status(200)
-            except tornado.httpclient.HTTPError as e:
-                print('HTTP_ERROR::', e)
-                pass
+        #     # target_id must be either beta or public
+        #     for target_id in yates_generator(available_targets):
+        #         target = Target(target_id, self.db)
+        #         if target.hget('stage') in allowed_stages:
+        #             found = True
+        #             break
 
-        self.error('no free WS available')
+        #     # if we reached here then we didn't find a good target
+        #     if not found:
+        #         err = 'no public or beta targets available'
+        #         return self.error(err)
+
+        # options = self.load_target_options(target_id)
+
+        # # shuffle and find an online workserver
+        # striated_servers = list(filter(lambda x: self.application.ws_online(x),
+        #                                target.smembers('striated_ws')))
+        # random.shuffle(striated_servers)
+
+        # for ws_id in striated_servers:
+        #     workserver = WorkServer(ws_id, self.db)
+        #     ws_url = workserver.hget('url')
+        #     ws_port = workserver.hget('http_port')
+        #     ws_body = {}
+        #     ws_body['target_id'] = target_id
+        #     if donor_id:
+        #         ws_body['donor_id'] = donor_id
+        #     try:
+        #         reply = yield self.fetch(ws_id, '/streams/activate',
+        #                                  ws_url=ws_url, method='POST',
+        #                                  body=json.dumps(ws_body))
+        #         if(reply.code == 200):
+        #             rep_content = json.loads(reply.body.decode())
+        #             token = rep_content["token"]
+        #             body = {
+        #                 'token': token,
+        #                 'options': options,
+        #                 'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
+        #             }
+        #             self.write(body)
+        #             return self.set_status(200)
+        #     except tornado.httpclient.HTTPError as e:
+        #         print('HTTP_ERROR::', e)
+        #         pass
+
+        # self.error('no free WS available')
 
 
 class SCVStatusHandler(BaseHandler):
@@ -897,6 +943,7 @@ class TargetsHandler(BaseHandler):
                         "xtc_precision": 3,
                         "discard_water": True
                     }
+                    "weight": 1 // weight of the target relative to others
                 }
 
             .. note:: If ``stage`` is not given, then the stage defaults to
@@ -942,6 +989,10 @@ class TargetsHandler(BaseHandler):
             options = content['options']
         else:
             options = dict()
+        if 'weight' not in content:
+            weight = 1
+        else:
+            weight = max(content['weight'], 0)
 
         #------------#
         # write data #
@@ -958,6 +1009,7 @@ class TargetsHandler(BaseHandler):
             'stage': stage,
             'options': options,
             'shards': [],
+            'weight': weight,
         }
 
         if 'options' in content:
@@ -1005,7 +1057,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         self.base_init(name, redis_options, mongo_options)
         self._register(external_host)
         super(CommandCenter, self).__init__([
-            (r'/core/assign', AssignHandler),
+            (r'/core/assign', CoreAssignHandler),
             (r'/managers/verify', VerifyManagerHandler),
             (r'/managers/auth', AuthManagerHandler),
             (r'/managers', AddManagerHandler),

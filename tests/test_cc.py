@@ -36,7 +36,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         body = {
             'email': email,
             'password': password,
-            'role': role
+            'role': role,
+            'weight': 1
         }
         if auth is not None:
             headers = {'Authorization': auth}
@@ -46,13 +47,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
                            headers=headers)
         self.assertEqual(reply.code, 200)
         token = json.loads(reply.body.decode())['token']
-        result = {
-            'email': email,
-            'password': password,
-            'role': role,
-            'token': token
-        }
-        return result
+        body['token'] = token
+        return body
 
     def _post_target(self, auth):
         headers = {'Authorization': auth}
@@ -162,7 +158,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         body = {
             'email': 'admin@gmail.com',
             'password': 'some_pass',
-            'role': 'admin'
+            'role': 'admin',
+            'weight': 1,
         }
 
         reply = self.fetch('/managers', method='POST', body=json.dumps(body))
@@ -172,7 +169,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         body = {
             'email': 'test_user@gmail.com',
             'password': 'some_pass',
-            'role': 'manager'
+            'role': 'manager',
+            'weight': 1
         }
         reply = self.fetch('/managers', method='POST', body=json.dumps(body),
                            headers=headers)
@@ -184,7 +182,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         body = {
             'email': 'test_user2@gmail.com',
             'password': 'some_pass2',
-            'role': 'manager'
+            'role': 'manager',
+            'weight': 1
         }
         reply = self.fetch('/managers', method='POST', body=json.dumps(body),
                            headers=headers)

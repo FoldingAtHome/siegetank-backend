@@ -41,7 +41,8 @@ class TestStreamMethods(tornado.testing.AsyncHTTPTestCase):
         test_manager = "test_ws@gmail.com"
         db_body = {'_id': test_manager,
                    'token': token,
-                   'role': 'manager'
+                   'role': 'manager',
+                   'weight': 1,
                    }
         managers = self.scv.mdb.users.managers
         managers.insert(db_body)
