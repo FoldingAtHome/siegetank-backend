@@ -448,11 +448,15 @@ class CoreAssignHandler(BaseHandler):
             result = cursor.find_one({'_id': target_id},
                                      {'engine': engine,
                                       'engine_versions': engine_version,
+                                      'shards': 1,
                                       })
             if result['engine'] != engine:
                 return self.error('target engine does not match core engine')
             if engine_version not in result['engine_versions']:
                 return self.error('core engine_version not allowed')
+            if not result['shards']:
+                return self.error('target specified has no shards')
+            shards = result['shards']
         else:
             result = cursor.find({'engine': engine,
                                   'engine_versions': {'$in': [engine_version]},
@@ -497,7 +501,7 @@ class CoreAssignHandler(BaseHandler):
             owner_targets = dict((k, v) for k, v in target_weights.items()
                                  if target_owners[k] == picked_owner)
             target_id = weighted_sample(owner_targets)
-        shards = target_shards[target_id]
+            shards = target_shards[target_id]
 
         def scv_online(scv_name):
             cursor = SCV(scv_name, self.db)
@@ -523,6 +527,7 @@ class CoreAssignHandler(BaseHandler):
                 self.write(body)
                 return self.set_status(200)
             except tornado.httpclient.HTTPError:
+                print('--caught--httperror--')
                 pass
         return self.error('no scvs available for the target')
 

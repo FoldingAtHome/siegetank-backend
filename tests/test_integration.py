@@ -121,17 +121,18 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def _assign(self, host, target_id=None, engine='openmm',
                 engine_version='6.0', donor_token=None):
-        body = json.dumps({
+        body = {
             'engine': engine,
             'engine_version': engine_version,
-            })
+            }
         if donor_token:
             body['donor_token'] = donor_token
         if target_id:
             body['target_id'] = target_id
-        reply = self.fetch(host, '/core/assign', method='POST', body=body)
+        reply = self.fetch(host, '/core/assign', method='POST',
+                           body=json.dumps(body))
         self.assertEqual(reply.code, 200)
-        return reply
+        return json.loads(reply.body.decode())
 
     def _core_start(self, full_path, token):
         host = urllib.parse.urlparse(full_path).netloc
@@ -139,7 +140,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         reply = self.fetch(host, path,
                            headers={'Authorization': token})
         self.assertEqual(reply.code, 200)
-        return reply
+        return json.loads(reply.body.decode())
 
     def _core_stop(self, host, token):
         reply = self.fetch(host, '/core/stop', method='PUT', body='{}',
@@ -157,15 +158,21 @@ class TestSimple(tornado.testing.AsyncTestCase):
         info = self._get_target_info(self.cc_host, target_id)
         self.assertEqual(info['shards'], ['mengsk'])
 
+    def test_assignment_target(self):
+        target_id = self._post_target(self.cc_host)['target_id']
+        self._post_stream(self.cc_host, target_id)
+        content = self._assign(self.cc_host, target_id)
+        content = self._core_start(content['url'], content['token'])
+        self.assertEqual(content['target_id'], target_id)
+
     def test_assignment(self):
         target_id = self._post_target(self.cc_host)['target_id']
         for i in range(10):
             self._post_stream(self.cc_host, target_id)
-        result = self._assign(self.cc_host)
-        content = json.loads(result.body.decode())
-        token = content['token']
-        self._core_start(content['url'], token)
-        host = urllib.parse.urlparse(content['url']).netloc
+        content = self._assign(self.cc_host)
+        token, url = content['token'], content['url']
+        self._core_start(url, token)
+        host = urllib.parse.urlparse(url).netloc
         self._core_stop(host, token)
 
     def test_assignment_weight(self):
@@ -178,13 +185,12 @@ class TestSimple(tornado.testing.AsyncTestCase):
             weights[target_id] = w
             counters[target_id] = 0
 
-        for i in range(150):
-            reply = self._assign(self.cc_host)
-            content = json.loads(reply.body.decode())
-            token = content['token']
-            reply = self._core_start(content['url'], token)
-            target_id = json.loads(reply.body.decode())['target_id']
-            host = urllib.parse.urlparse(content['url']).netloc
+        for i in range(100):
+            content = self._assign(self.cc_host)
+            token, url = content['token'], content['url']
+            content = self._core_start(url, token)
+            target_id = content['target_id']
+            host = urllib.parse.urlparse(url).netloc
             self._core_stop(host, token)
             counters[target_id] += 1
 
