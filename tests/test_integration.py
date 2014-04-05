@@ -9,7 +9,7 @@ import unittest
 import os
 import shutil
 import uuid
-import functools
+import urllib
 
 import server.scv as scv
 import server.cc as cc
@@ -119,7 +119,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def _assign(self, host, target_id=None, engine='openmm',
                 engine_version='6.0', donor_token=None):
-        print('assigning...')
         body = json.dumps({
             'engine': engine,
             'engine_version': engine_version,
@@ -137,6 +136,14 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         return json.loads(reply.body.decode())
 
+    def _activate(self, full_path, token):
+        host = urllib.parse.urlparse(full_path).netloc
+        path = urllib.parse.urlparse(full_path).path
+        reply = self.fetch(host, path,
+                           headers={'Authorization': token})
+        self.assertEqual(reply.code, 200)
+        return reply
+
     def test_post_stream(self):
         target_id = self._post_target(self.cc_host)['target_id']
         self._post_stream(self.cc_host, target_id)
@@ -148,6 +155,8 @@ class TestSimple(tornado.testing.AsyncTestCase):
         for i in range(10):
             self._post_stream(self.cc_host, target_id)
         result = self._assign(self.cc_host)
+        content = json.loads(result.body.decode())
+        self._activate(content['url'], content['token'])
 
         # uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/info/'+target_id
         # client.fetch(uri, self.stop, validate_cert=common.is_domain(url),

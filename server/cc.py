@@ -422,10 +422,6 @@ class CoreAssignHandler(BaseHandler):
                 {
                     "token": "6lk2j5-tpoi2p6-poipoi23",
                     "url": "https://raynor.stanford.edu:1234/core/start",
-                    "options": {
-                        "steps_per_frame": 50000,
-                        "xtc_precision": 4
-                    }
                 }
 
             :status 200: OK
@@ -444,7 +440,6 @@ class CoreAssignHandler(BaseHandler):
             donor_id = query['_id']
         else:
             donor_id = None
-
         engine = content['engine']
         engine_version = content['engine_version']
         cursor = self.mdb.data.targets
@@ -461,17 +456,24 @@ class CoreAssignHandler(BaseHandler):
         else:
             result = cursor.find({'engine': engine,
                                   'engine_versions': {'$in': [engine_version]},
-                                  'stage': 'public'
-                                  }, {'owner': 1, '_id': 1, 'weight': 1})
+                                  'stage': 'public',
+                                  },
+                                 {'owner': 1,
+                                  '_id': 1,
+                                  'weight': 1,
+                                  'shards': 1})
             owner_weights = dict()
             target_weights = dict()
             target_owners = dict()
+            target_shards = dict()
             for match in result:
-                owner_weights[match['owner']] = None
-                target_weights[match['_id']] = match['weight']
-                target_owners[match['_id']] = match['owner']
+                if match['shards']:
+                    owner_weights[match['owner']] = None
+                    target_weights[match['_id']] = match['weight']
+                    target_owners[match['_id']] = match['owner']
+                    target_shards[match['_id']] = match['shards']
             if not target_weights:
-                return self.error('no targets could be found')
+                return self.error('no valid targets could be found')
             cursor = self.mdb.users.managers
             result = cursor.find({'_id': {'$in': ['test_ws@gmail.com']}},
                                  {'_id': 1, 'weight': 1})
@@ -490,81 +492,39 @@ class CoreAssignHandler(BaseHandler):
                     if value > x:
                         break
                 return keys[index]
+
             picked_owner = weighted_sample(owner_weights)
             owner_targets = dict((k, v) for k, v in target_weights.items()
                                  if target_owners[k] == picked_owner)
             target_id = weighted_sample(owner_targets)
+        shards = target_shards[target_id]
 
-        # find an available workserver
-        print(target_id)
+        def scv_online(scv_name):
+            cursor = SCV(scv_name, self.db)
+            if cursor.hget('fail_count') < self.application._max_ws_fails:
+                return True
+            else:
+                return False
 
-        self.set_status(200)
-
-        # if 'target_id' in content:
-        #     # make sure the given target_id can be sent to this core
-        #     target_id = content['target_id']
-        #     if not Target.exists(target_id, self.db):
-        #         err = 'given target is not managed by this cc'
-        #         return self.error(err)
-        #     if not target_id in available_targets:
-        #         err = 'requested target_id not in available targets'
-        #         return self.error(err)
-        #     target = Target(target_id, self.db)
-        # else:
-        #     # if no target is specified, then a random target is chosen from a
-        #     # list of available targets for the core's engine version
-        #     if not available_targets:
-        #         err_msg = 'no available targets matching engine version'
-        #         return self.error(err_msg)
-
-        #     found = False
-
-        #     # target_id must be either beta or public
-        #     for target_id in yates_generator(available_targets):
-        #         target = Target(target_id, self.db)
-        #         if target.hget('stage') in allowed_stages:
-        #             found = True
-        #             break
-
-        #     # if we reached here then we didn't find a good target
-        #     if not found:
-        #         err = 'no public or beta targets available'
-        #         return self.error(err)
-
-        # options = self.load_target_options(target_id)
-
-        # # shuffle and find an online workserver
-        # striated_servers = list(filter(lambda x: self.application.ws_online(x),
-        #                                target.smembers('striated_ws')))
-        # random.shuffle(striated_servers)
-
-        # for ws_id in striated_servers:
-        #     workserver = WorkServer(ws_id, self.db)
-        #     ws_url = workserver.hget('url')
-        #     ws_port = workserver.hget('http_port')
-        #     ws_body = {}
-        #     ws_body['target_id'] = target_id
-        #     if donor_id:
-        #         ws_body['donor_id'] = donor_id
-        #     try:
-        #         reply = yield self.fetch(ws_id, '/streams/activate',
-        #                                  ws_url=ws_url, method='POST',
-        #                                  body=json.dumps(ws_body))
-        #         if(reply.code == 200):
-        #             rep_content = json.loads(reply.body.decode())
-        #             token = rep_content["token"]
-        #             body = {
-        #                 'token': token,
-        #                 'options': options,
-        #                 'uri': 'https://'+ws_url+':'+str(ws_port)+'/core/start'
-        #             }
-        #             self.write(body)
-        #             return self.set_status(200)
-        #     except tornado.httpclient.HTTPError as e:
-        #         print('HTTP_ERROR::', e)
-        #         pass
-
-        # self.error('no free WS available')
+        available_scvs = list(filter(lambda x: scv_online(x), shards))
+        random.shuffle(available_scvs)
+        for scv in available_scvs:
+            msg = {'target_id': target_id}
+            if donor_id:
+                msg['donor_id'] = donor_id
+            try:
+                reply = yield self.fetch(scv, '/streams/activate',
+                                         method='POST', body=json.dumps(msg))
+                token = json.loads(reply.body.decode())["token"]
+                host = SCV(scv, self.db).hget('host')
+                body = {'token': token,
+                        'url': 'https://'+host+'/core/start'
+                        }
+                self.write(body)
+                return self.set_status(200)
+            except tornado.httpclient.HTTPError:
+                pass
+        return self.error('no scvs available for the target')
 
 
 class SCVStatusHandler(BaseHandler):
