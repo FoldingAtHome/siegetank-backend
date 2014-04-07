@@ -771,27 +771,21 @@ class TargetInfoHandler(BaseHandler):
 
 
 class TargetStreamsHandler(BaseHandler):
+    @authenticate_manager
     @tornado.gen.coroutine
     def get(self, target_id):
         """
         .. http:get:: /targets/streams/:target_id
 
-            Return a list of streams on each striated workserver for
-            ``target_id``.
+            Return a list of streams across all scvs for this target
 
             **Example reply**
 
             .. sourcecode:: javascript
 
                 {
-                    "ws_firebat": {
-                        "stream1_id": {
-                            "status": "OK",
-                            "frames": 253
-                        }
-                        ...
-                    }
-                    ...
+                    "streams": [stream_id1, stream_id2, stream_id3, ...],
+                    "unreachable_scvs": [], //
                 }
 
             :status 200: OK
@@ -799,17 +793,19 @@ class TargetStreamsHandler(BaseHandler):
 
         """
         self.set_status(400)
-        target = Target(target_id, self.db)
-        striated_ws = target.smembers('striated_ws')
-
-        body = {}
-
-        for ws_name in striated_ws:
-            reply = yield self.fetch(ws_name, '/targets/streams/'+target_id)
+        cursor = self.mdb.data.targets
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        shards = result['shards']
+        streams = []
+        failed = []
+        for scv in shards:
+            reply = yield self.fetch(scv, '/targets/streams/'+target_id)
             if reply.code == 200:
-                body.update(json.loads(reply.body.decode()))
-
+                streams += json.loads(reply.body.decode())['streams']
+            else:
+                failed.append(scv)
         self.set_status(200)
+        body = {'streams': streams, 'unreachable_scvs': failed}
         self.write(body)
 
 
@@ -1043,14 +1039,14 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             ])
 
     @tornado.gen.coroutine
-    def fetch(self, ws_id, path, **kwargs):
+    def fetch(self, scv_id, path, **kwargs):
         """ This is a fairly special method. First, it takes care of boiler
         plate code. Second, it keeps track of how many times a workserver has
         failed. If it has failed one too many times, then the workserver is
         taken offline automatically.
 
         """
-        cursor = SCV(ws_id, self.db)
+        cursor = SCV(scv_id, self.db)
         host = cursor.hget('host')
         uri = 'https://'+host+path
         client = tornado.httpclient.AsyncHTTPClient()

@@ -42,7 +42,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
                          'keyfile': 'certs/private.pem'})
         self.cc_server.listen(7654)
         self.scvs = []
-        for i in range(30):
+        for i in range(5):
             redis_options = {'port': 2739+i, 'logfile': os.devnull}
             prop = {}
             name = 'mengsk'+str(i)
@@ -158,7 +158,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         reply = self.fetch(host, '/streams', method='POST', body=body,
                            headers=headers)
         self.assertEqual(reply.code, 200)
-        return reply
+        return json.loads(reply.body.decode())
 
     def _assign(self, host, target_id=None, engine='openmm',
                 engine_version='6.0', donor_token=None, expected_code=200):
@@ -254,6 +254,24 @@ class TestSimple(tornado.testing.AsyncTestCase):
                 self.assertTrue(counters[comb[0]] > counters[comb[1]])
             else:
                 self.assertTrue(counters[comb[0]] < counters[comb[1]])
+
+    def test_stream_shards(self):
+        k = 20
+        target_id = self._post_target(self.cc_host)['target_id']
+        stream_ids = set()
+        for i in range(k*len(self.scvs)):
+            content = self._post_stream(self.cc_host, target_id)
+            stream_ids.add(content['stream_id'])
+        info = self._get_target_info(self.cc_host, target_id)
+        self.assertEqual(set(info['shards']),
+                         set(i['app'].name for i in self.scvs))
+        headers = {'Authorization': self.auth_token}
+        reply = self.fetch(self.cc_host, '/targets/streams/'+target_id,
+                           headers=headers)
+        self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+        print('DEBUG:', content)
+        self.assertEqual(set(content['streams']), stream_ids)
 
 # class TestMultiWS(tornado.testing.AsyncTestCase):
 #     @classmethod

@@ -201,22 +201,14 @@ class TargetStreamsHandler(BaseHandler):
         """
         .. http:get:: /targets/streams/:target_id
 
-            Get a list of streams for the target on this particular scv
-            and their status and number of frames.
+            Get a list of streams for specified target on the scv.
 
             **Example reply**:
 
             .. sourcecode:: javascript
 
                 {
-                    "stream_id_1": {
-                        "status": "OK",
-                        "frames": 253,
-                    },
-                    "stream_id_2": {
-                        "status": "OK",
-                        "frames": 1902,
-                    }
+                    "streams": [stream_id1, stream_id2, stream_id3, ...]
                 }
 
             :status 200: OK
@@ -225,13 +217,9 @@ class TargetStreamsHandler(BaseHandler):
         """
         self.set_status(400)
         target = Target(target_id, self.db)
-        body = {}
-        for stream_id in target.smembers('streams'):
-            stream = Stream(stream_id, self.db)
-            body[stream_id] = {}
-            body[stream_id]['status'] = stream.hget('status')
-            body[stream_id]['frames'] = stream.hget('frames')
+        streams = list(target.smembers('streams'))
         self.set_status(200)
+        body = {'streams': streams}
         self.write(body)
 
 

@@ -162,10 +162,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertSetEqual({stream_id},
             scv.Target(target_id, self.scv.db).smembers('streams'))
         expected = {
-            stream_id: {
-                "frames": 0,
-                "status": "OK",
-            }
+            'streams': [stream_id]
         }
         self.assertEqual(self._get_streams(target_id), expected)
         cursor = self.scv.mdb.data.targets
