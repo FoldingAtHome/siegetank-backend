@@ -19,7 +19,6 @@ import tornado.web
 import tornado.httpserver
 import tornado.httpclient
 
-import shutil
 import json
 import os
 import uuid
@@ -926,6 +925,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         result = ccs.update({'_id': self.name},
                             {'_id': self.name, 'host': external_host},
                             upsert=True)
+        if result['err'] is not None:
+            raise Exception("Could not update CC status in MDB")
 
     def _load_scvs(self):
         """ Load a list of available SCVs from MDB. """
@@ -1007,14 +1008,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 cursor.hset('fail_count', 0)
             else:
                 cursor.hset('fail_count', self.application._max_ws_fails)
-
-    def ws_online(self, ws_id):
-        """ Returns True if the workserver is online, False otherwise """
-        ws = WorkServer(ws_id, self.db)
-        if ws.hget('fail_count') < self._max_ws_fails:
-            return True
-        else:
-            return False
 
 
 def start():
