@@ -103,13 +103,13 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         result['token'] = token
         return result
 
-    def _get_streams(self, target_id=None):
+    def _get_streams(self, target_id=None, expected_code=200):
+        headers = {'Authorization': self.auth_token}
         if target_id:
-            reply = self.fetch('/targets/streams/'+target_id)
-            if reply.code == 200:
-                return json.loads(reply.body.decode())
-            else:
-                return dict()
+            reply = self.fetch('/targets/streams/'+target_id,
+                               headers=headers)
+            self.assertEqual(reply.code, expected_code)
+            return json.loads(reply.body.decode())
         else:
             raise ValueError("not implemented!")
 
@@ -161,9 +161,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                          target_id)
         self.assertSetEqual({stream_id},
             scv.Target(target_id, self.scv.db).smembers('streams'))
-        expected = {
-            'streams': [stream_id]
-        }
+        expected = {'streams': [stream_id]}
         self.assertEqual(self._get_streams(target_id), expected)
         cursor = self.scv.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
@@ -178,7 +176,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [self.scv.name])
         self._delete_stream(stream_id)
-        self.assertEqual(self._get_streams(target_id), dict())
+        self._get_streams(target_id, expected_code=400)
         self.assertEqual(target.zscore('queue', stream_id), None)
         self.assertEqual(self.scv.db.keys('*'), [])
         result = cursor.find_one({'_id': target_id}, {'shards': 1})

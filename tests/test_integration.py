@@ -148,6 +148,14 @@ class TestSimple(tornado.testing.AsyncTestCase):
         body['target_id'] = target_id
         return body
 
+    def _delete_stream(self, stream_id):
+        headers = {'Authorization': self.auth_token}
+        scv_id = stream_id.split(':')[1]
+        host = self._get_scv_host(scv_id)
+        reply = self.fetch(host, '/streams/delete/'+stream_id, method='PUT',
+                           headers=headers, body='')
+        self.assertEqual(reply.code, 200)
+
     def _post_stream(self, host, target_id):
         headers = {'Authorization': self.auth_token}
         rand_bin = base64.b64encode(os.urandom(1024)).decode()
@@ -193,6 +201,38 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         return json.loads(reply.body.decode())
 
+    def _get_streams(self, host, target_id):
+        # get striated scvs
+        host = self.cc_host
+        headers = {'Authorization': self.auth_token}
+        shards = self._get_target_info(host, target_id)['shards']
+        streams = []
+        for scv in shards:
+            host = self._get_scv_host(scv)
+            reply = self.fetch(host, '/targets/streams/'+target_id,
+                               headers=headers)
+            self.assertEqual(reply.code, 200)
+            content = json.loads(reply.body.decode())
+            streams += content['streams']
+        return streams
+
+    def _get_scvs(self):
+        host = self.cc_host
+        reply = self.fetch(host, '/scv/status')
+        self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+        return content
+
+    def _get_scv_host(self, scv_name):
+        return self._get_scvs()[scv_name]['host']
+
+    def test_scv_status(self):
+        server_scvs = self._get_scvs()
+        for scv in self.scvs:
+            scv_name = scv['app'].name
+            scv_host = scv['host']
+            self.assertEqual(server_scvs[scv_name]['host'], scv_host)
+
     def test_post_stream(self):
         target_id = self._post_target(self.cc_host)['target_id']
         self._post_stream(self.cc_host, target_id)
@@ -201,18 +241,23 @@ class TestSimple(tornado.testing.AsyncTestCase):
                         [k['app'].name for k in self.scvs])
 
     def test_assign_target(self):
-        target_id = self._post_target(self.cc_host)['target_id']
+        content = self._post_target(self.cc_host)
+        target_id = content['target_id']
+        options = content['options']
         self._post_stream(self.cc_host, target_id)
         content = self._assign(self.cc_host, target_id)
+        self.assertEqual(content['options'], options)
         content = self._core_start(content['url'], content['token'])
         self.assertEqual(content['target_id'], target_id)
 
     def test_assign_private(self):
         content = self._post_target(self.cc_host, stage='private')
         target_id = content['target_id']
+        options = content['options']
         self._post_stream(self.cc_host, target_id)
         self._assign(self.cc_host, expected_code=400)
-        self._assign(self.cc_host, target_id, expected_code=200)
+        content = self._assign(self.cc_host, target_id)
+        self.assertEqual(content['options'], options)
 
     def test_assign(self):
         target_id = self._post_target(self.cc_host)['target_id']
@@ -265,302 +310,20 @@ class TestSimple(tornado.testing.AsyncTestCase):
         info = self._get_target_info(self.cc_host, target_id)
         self.assertEqual(set(info['shards']),
                          set(i['app'].name for i in self.scvs))
+        scv_streams = self._get_streams(self.cc_host, target_id)
+        self.assertEqual(set(scv_streams), stream_ids)
+
+    def test_target_delete(self):
+        target_id = self._post_target(self.cc_host)['target_id']
+        stream_id = self._post_stream(self.cc_host, target_id)['stream_id']
         headers = {'Authorization': self.auth_token}
-        reply = self.fetch(self.cc_host, '/targets/streams/'+target_id,
-                           headers=headers)
+        reply = self.fetch(self.cc_host, '/targets/delete/'+target_id,
+                           method='PUT', headers=headers, body='')
+        self.assertEqual(reply.code, 400)
+        self._delete_stream(stream_id)
+        reply = self.fetch(self.cc_host, '/targets/delete/'+target_id,
+                           method='PUT', headers=headers, body='')
         self.assertEqual(reply.code, 200)
-        content = json.loads(reply.body.decode())
-        print('DEBUG:', content)
-        self.assertEqual(set(content['streams']), stream_ids)
-
-# class TestMultiWS(tornado.testing.AsyncTestCase):
-#     @classmethod
-#     def setUpClass(cls):
-#         super(TestMultiWS, cls).setUpClass()
-#         cls.workservers = {}
-#         cls.workservers['flash'] = {}
-#         cls.workservers['jaedong'] = {}
-#         cls.workservers['bisu'] = {}
-
-#         rport_start = 2398
-#         hport_start = 9001
-
-#         for k, v in cls.workservers.items():
-#             v['hport'] = hport_start
-#             targets_folder = 'targets_folder_'+k
-#             streams_folder = 'streams_folder_'+k
-
-#             redis_options = {'port': rport_start, 'logfile': os.devnull}
-#             external_options = {'external_http_port': hport_start}
-
-#             v['ws'] = ws.WorkServer(k, redis_options=redis_options,
-#                                     external_options=external_options,
-#                                     targets_folder=targets_folder,
-#                                     streams_folder=streams_folder)
-#             rport_start += 1
-#             hport_start += 1
-
-#         cc_rport = 5872
-#         cls.cc_hport = 8342
-
-#         redis_options = {'port': cc_rport, 'logfile': os.devnull}
-
-#         mongo_options = {
-#             'host': 'localhost',
-#             'port': 27017
-#         }
-
-#         cls.cc = cc.CommandCenter(cc_name='goliath',
-#                                   cc_pass=None,
-#                                   redis_options=redis_options,
-#                                   mongo_options=mongo_options,
-#                                   targets_folder='cc_targets')
-
-#     def setUp(self):
-#         super(TestMultiWS, self).setUp()
-#         self.cc.mdb.users.managers.drop()
-#         self.cc.mdb.community.donors.drop()
-#         for k, v in self.workservers.items():
-#             self.cc.add_ws(k, '127.0.0.1', v['hport'])
-#             v['httpserver'] = tornado.httpserver.HTTPServer(
-#                 v['ws'],
-#                 io_loop=self.io_loop,
-#                 ssl_options={'certfile': 'certs/public.crt',
-#                              'keyfile': 'certs/private.pem'})
-#             v['httpserver'].listen(v['hport'])
-
-#         self.cc_httpserver = tornado.httpserver.HTTPServer(
-#             self.cc,
-#             io_loop=self.io_loop,
-#             ssl_options={'certfile': 'certs/public.crt',
-#                          'keyfile': 'certs/private.pem'})
-#         self.cc_httpserver.listen(self.cc_hport)
-
-#         # register a manager account
-#         client = tornado.httpclient.AsyncHTTPClient(io_loop=self.io_loop)
-#         url = '127.0.0.1'
-#         email = 'proteneer@gmail.com'
-#         password = 'test_pw_me'
-#         body = {
-#             'email': email,
-#             'password': password,
-#             'role': 'manager'
-#         }
-
-#         uri = 'https://'+url+':'+str(self.cc_hport)+'/managers'
-#         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-#                      validate_cert=common.is_domain(url))
-
-#         rep = self.wait()
-#         self.assertEqual(rep.code, 200)
-#         auth = json.loads(rep.body.decode())['token']
-
-#         self.auth, self.url, self.client = auth, url, client
-
-#     def tearDown(self):
-#         for k, v in self.workservers.items():
-#             v['httpserver'].stop()
-#             v['ws'].db.flushdb()
-#         self.cc_httpserver.stop()
-#         self.cc.mdb.users.managers.drop()
-
-#     def test_workserver_status(self):
-#         client = self.client
-#         client.fetch('https://127.0.0.1:'+str(self.cc_hport)+'/ws/status',
-#                      self.stop, validate_cert=False)
-#         reply = self.wait()
-#         self.assertEqual(reply.code, 200)
-#         content = json.loads(reply.body.decode())
-#         rep_servers = content.keys()
-#         self.assertEqual(rep_servers, self.workservers.keys())
-
-#     def test_specify_target(self):
-#         headers = {'Authorization': self.auth}
-#         client = self.client
-#         url = self.url
-
-#         available_targets = []
-
-#         for i in range(25):
-#             # post a target
-#             fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
-#                                   for i in range(4))
-#             description = "Diwakar and John's top secret project"
-#             body = {
-#                 'description': description,
-#                 'files': {'system.xml.gz.b64': fb1,
-#                           'integrator.xml.gz.b64': fb2},
-#                 'steps_per_frame': 50000,
-#                 'engine': 'openmm',
-#                 'engine_versions': ['6.0'],
-#                 # we should be able to get a target regardless of stage
-#                 }
-#             uri = 'https://127.0.0.1:'+str(self.cc_hport)+'/targets'
-#             client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-#                          validate_cert=common.is_domain(url), headers=headers)
-#             reply = self.wait()
-#             self.assertEqual(reply.code, 200)
-#             target_id = json.loads(reply.body.decode())['target_id']
-#             available_targets.append(target_id)
-#             # post a stream
-#             uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
-#             rand_bin = base64.b64encode(os.urandom(1024)).decode()
-#             body = {'target_id': target_id,
-#                     'files': {"state.xml.gz.b64": rand_bin}
-#                     }
-
-#             client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-#                          validate_cert=common.is_domain(url),
-#                          headers=headers)
-#             reply = self.wait()
-#             self.assertEqual(reply.code, 200)
-
-#         # check to make sure that the stream we activate corresponds to the
-#         # target we specify
-#         random.shuffle(available_targets)
-#         for specific_target in available_targets:
-#             body = {
-#                 'engine': 'openmm',
-#                 'engine_version': '6.0',
-#                 'target_id': specific_target
-#             }
-
-#             uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
-#             client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-#                          body=json.dumps(body), method='POST')
-#             reply = self.wait()
-#             self.assertEqual(reply.code, 200)
-#             content = json.loads(reply.body.decode())
-#             core_token = content['token']
-#             uri = content['uri']
-
-#             ws_headers = {'Authorization': core_token}
-#             client.fetch(uri, self.stop, headers=ws_headers,
-#                          validate_cert=common.is_domain(url))
-#             reply = self.wait()
-#             self.assertEqual(reply.code, 200)
-
-#             content = json.loads(reply.body.decode())
-#             self.assertEqual(content['target_id'], specific_target)
-
-#     def test_post_target_restricted(self):
-#         auth, url, client = self.auth, self.url, self.client
-#         headers = {'Authorization': auth}
-#         fb1, fb2, fb3, fb4 = (base64.b64encode(os.urandom(1024)).decode()
-#                               for i in range(4))
-#         description = "Diwakar and John's top secret project"
-#         body = {
-#             'description': description,
-#             'files': {'system.xml.gz.b64': fb1, 'integrator.xml.gz.b64': fb2},
-#             'steps_per_frame': 50000,
-#             'engine': 'openmm',
-#             'engine_versions': ['6.0'],
-#             'allowed_ws': ['flash', 'jaedong'],
-#             'stage': 'public'
-#             }
-#         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
-
-#         client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-#                      validate_cert=common.is_domain(url), headers=headers)
-#         reply = self.wait()
-#         self.assertEqual(reply.code, 200)
-
-#         target_id = json.loads(reply.body.decode())['target_id']
-#         # test POST 20 streams
-#         post_streams = set()
-#         for i in range(20):
-#             uri = 'https://'+url+':'+str(self.cc_hport)+'/streams'
-#             rand_bin = base64.b64encode(os.urandom(1024)).decode()
-#             body = {'target_id': target_id,
-#                     'files': {"state.xml.gz.b64": rand_bin}
-#                     }
-#             client.fetch(uri, self.stop, method='POST', body=json.dumps(body),
-#                          validate_cert=common.is_domain(url),
-#                          headers=headers)
-#             reply = self.wait()
-#             self.assertEqual(reply.code, 200)
-#             post_streams.add(json.loads(reply.body.decode())['stream_id'])
-
-#         # test GET the streams
-#         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/streams/'\
-#               +target_id
-#         client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-#                      headers=headers)
-#         reply = self.wait()
-#         self.assertEqual(reply.code, 200)
-
-#         body = json.loads(reply.body.decode())
-#         streams = set()
-#         striated_servers = set()
-
-#         for stream_name in body:
-#             ws_name = stream_name.split(':')[1]
-#             striated_servers.add(ws_name)
-#             streams.add(stream_name)
-#         self.assertEqual(streams, post_streams)
-#         self.assertEqual(striated_servers, {'flash', 'jaedong'})
-
-#         # test assigning
-#         for i in range(5):
-#             print('.', end='')
-#             sys.stdout.flush()
-#             body = {
-#                 'engine': 'openmm',
-#                 'engine_version': '6.0'
-#             }
-#             uri = 'https://'+url+':'+str(self.cc_hport)+'/core/assign'
-#             client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-#                          body=json.dumps(body), method='POST')
-#             reply = self.wait()
-#             self.assertEqual(reply.code, 200)
-#             content = json.loads(reply.body.decode())
-#             token = content['token']
-#             uri = content['uri']
-
-#             # fetch from the WS
-#             ws_headers = {'Authorization': token}
-#             client.fetch(uri, self.stop, headers=ws_headers,
-#                          validate_cert=common.is_domain(url))
-#             rep = self.wait()
-#             self.assertEqual(rep.code, 200)
-#             time.sleep(1)
-
-#         # test deleting the target
-#         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets/delete/'\
-#               +target_id
-#         client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-#                      headers=headers, method='PUT', body='')
-#         reply = self.wait()
-#         self.assertEqual(reply.code, 200)
-
-#         # test GET the targets
-#         uri = 'https://'+url+':'+str(self.cc_hport)+'/targets'
-#         client.fetch(uri, self.stop, validate_cert=common.is_domain(url),
-#                      headers=headers)
-#         reply = self.wait()
-#         self.assertEqual(reply.code, 200)
-
-#         reply_target = json.loads(reply.body.decode())['targets']
-#         self.assertEqual(reply_target, [])
-
-#         self.assertEqual(set(self.cc.db.keys('*')),
-#                          set(['ws:jaedong', 'ws:flash', 'wss', 'ws:bisu']))
-
-#         for ws in self.workservers:
-#             self.assertEqual(self.workservers[ws]['ws'].db.keys('*'), [])
-
-#     @classmethod
-#     def tearDownClass(cls):
-#         super(TestMultiWS, cls).tearDownClass()
-#         cls.cc.db.flushdb()
-#         cls.cc.shutdown(kill=False)
-
-#         shutil.rmtree(cls.cc.data_folder)
-#         for k, v in cls.workservers.items():
-#             v['ws'].db.flushdb()
-#             v['ws'].shutdown(kill=False)
-#             shutil.rmtree(v['ws'].data_folder)
-
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

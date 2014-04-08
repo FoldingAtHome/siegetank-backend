@@ -197,6 +197,7 @@ class StreamInfoHandler(BaseHandler):
 
 
 class TargetStreamsHandler(BaseHandler):
+    @authenticate_manager
     def get(self, target_id):
         """
         .. http:get:: /targets/streams/:target_id
@@ -216,7 +217,10 @@ class TargetStreamsHandler(BaseHandler):
 
         """
         self.set_status(400)
-        target = Target(target_id, self.db)
+        try:
+            target = Target(target_id, self.db)
+        except KeyError:
+            return self.error('specified target does not exist on this scv')
         streams = list(target.smembers('streams'))
         self.set_status(200)
         body = {'streams': streams}
@@ -481,6 +485,9 @@ class StreamDeleteHandler(BaseHandler):
             cursor = self.mdb.data.targets
             result = cursor.update({'_id': target_id},
                 {'$pull': {'shards': self.application.name}})
+            # we do not check for updatedExisting == False because the target
+            # may already be deleted from the mdb if this scv is detached
+            # from the target_id's "shards" field.
             if result['err'] is not None:
                 self.set_status(400)
                 return self.write(result['err'])

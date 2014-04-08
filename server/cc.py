@@ -306,7 +306,8 @@ class AddManagerHandler(BaseHandler):
         db_body = {'_id': email,
                    'password_hash': hash_password,
                    'token': token,
-                   'role': role
+                   'role': role,
+                   'weight': weight
                    }
 
         managers = self.mdb.users.managers
@@ -338,6 +339,7 @@ class TargetUpdateHandler(BaseHandler):
                     "engine_versions":  ["6.0", "6.5"]  //optional
                     "description": "description"  //optional
                     "weight": 2 // optional
+                    "shards": ["scv1", "sc2"] // optional
                 }
 
                 .. note:: ``engine_versions`` will only affect future streams.
@@ -345,6 +347,12 @@ class TargetUpdateHandler(BaseHandler):
                 .. note:: modifying ``stage`` only affects future assignments.
                     If you wish to stop the streams, you must explicitly stop
                     them.
+
+                .. note:: generally you want to avoid manually modifying the
+                    ``shards`` field. It should only modified when an SCV is
+                    permanently disabled for whatever reason. If you detach
+                    an SCV, then you are manually responsible for the cleanup
+                    unless you re-attach it.
 
             **Example reply**
 
@@ -381,9 +389,6 @@ def yates_generator(x):
         x[i], x[j] = x[j], x[i]
         yield x[i]
 
-
-def draw_prefix_sum(array):
-    """ Draws a """
 
 class CoreAssignHandler(BaseHandler):
     @tornado.gen.coroutine
@@ -422,6 +427,10 @@ class CoreAssignHandler(BaseHandler):
                 {
                     "token": "6lk2j5-tpoi2p6-poipoi23",
                     "url": "https://raynor.stanford.edu:1234/core/start",
+                    "options": {
+                        "steps_per_frame": 50000,
+                        "keep_waters": True,
+                    }
                 }
 
             :status 200: OK
@@ -446,9 +455,10 @@ class CoreAssignHandler(BaseHandler):
         if 'target_id' in content:
             target_id = content['target_id']
             result = cursor.find_one({'_id': target_id},
-                                     {'engine': engine,
-                                      'engine_versions': engine_version,
+                                     {'engine': 1,
+                                      'engine_versions': 1,
                                       'shards': 1,
+                                      'options': 1,
                                       })
             if result['engine'] != engine:
                 return self.error('target engine does not match core engine')
@@ -457,6 +467,7 @@ class CoreAssignHandler(BaseHandler):
             if not result['shards']:
                 return self.error('target specified has no shards')
             shards = result['shards']
+            options = result['options']
         else:
             result = cursor.find({'engine': engine,
                                   'engine_versions': {'$in': [engine_version]},
@@ -465,17 +476,20 @@ class CoreAssignHandler(BaseHandler):
                                  {'owner': 1,
                                   '_id': 1,
                                   'weight': 1,
-                                  'shards': 1})
+                                  'shards': 1,
+                                  'options': 1})
             owner_weights = dict()
             target_weights = dict()
             target_owners = dict()
             target_shards = dict()
+            target_options = dict()
             for match in result:
                 if match['shards']:
                     owner_weights[match['owner']] = None
                     target_weights[match['_id']] = match['weight']
                     target_owners[match['_id']] = match['owner']
                     target_shards[match['_id']] = match['shards']
+                    target_options[match['_id']] = match['options']
             if not target_weights:
                 return self.error('no valid targets could be found')
             cursor = self.mdb.users.managers
@@ -502,6 +516,7 @@ class CoreAssignHandler(BaseHandler):
                                  if target_owners[k] == picked_owner)
             target_id = weighted_sample(owner_targets)
             shards = target_shards[target_id]
+            options = target_options[target_id]
 
         def scv_online(scv_name):
             cursor = SCV(scv_name, self.db)
@@ -522,7 +537,8 @@ class CoreAssignHandler(BaseHandler):
                 token = json.loads(reply.body.decode())["token"]
                 host = SCV(scv, self.db).hget('host')
                 body = {'token': token,
-                        'url': 'https://'+host+'/core/start'
+                        'url': 'https://'+host+'/core/start',
+                        'options': options,
                         }
                 self.write(body)
                 return self.set_status(200)
@@ -654,40 +670,6 @@ class SCVDisconnectHandler(BaseHandler):
         return self.write(dict())
 
 
-class RoutedStreamHandler(BaseHandler):
-    @authenticate_manager
-    @tornado.gen.coroutine
-    def put(self, stream_id):
-        """
-        .. http:put:: /streams/[start,stop,delete]/:stream_id
-
-            Deletes a stream from the server. This method routes to the
-            appropriate ws automatically.
-
-            :reqheader Authorization: Manager's authorization token
-
-            **Example request**
-
-            .. sourcecode:: javascript
-
-                {
-                    // empty
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
-
-        """
-        self.set_status(400)
-        ws_name = stream_id.split(':')[1]
-        rep = yield self.fetch(ws_name, self.request.path, method='PUT',
-                               body=self.request.body,
-                               headers=self.request.headers)
-        self.set_status(rep.code)
-        self.write(rep.body)
-
-
 class PostStreamHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
@@ -770,45 +752,6 @@ class TargetInfoHandler(BaseHandler):
         self.write(info)
 
 
-class TargetStreamsHandler(BaseHandler):
-    @authenticate_manager
-    @tornado.gen.coroutine
-    def get(self, target_id):
-        """
-        .. http:get:: /targets/streams/:target_id
-
-            Return a list of streams across all scvs for this target
-
-            **Example reply**
-
-            .. sourcecode:: javascript
-
-                {
-                    "streams": [stream_id1, stream_id2, stream_id3, ...],
-                    "unreachable_scvs": [], //
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-
-        """
-        self.set_status(400)
-        cursor = self.mdb.data.targets
-        result = cursor.find_one({'_id': target_id}, {'shards': 1})
-        shards = result['shards']
-        streams = []
-        failed = []
-        for scv in shards:
-            reply = yield self.fetch(scv, '/targets/streams/'+target_id)
-            if reply.code == 200:
-                streams += json.loads(reply.body.decode())['streams']
-            else:
-                failed.append(scv)
-        self.set_status(200)
-        body = {'streams': streams, 'unreachable_scvs': failed}
-        self.write(body)
-
-
 class TargetDeleteHandler(BaseHandler):
     @authenticate_manager
     @tornado.gen.coroutine
@@ -816,9 +759,8 @@ class TargetDeleteHandler(BaseHandler):
         """
         .. http:put:: /targets/delete/:target_id
 
-            Delete a target from the Command Center. There is no undo button
-            once you call this. It will erase everything pertaining to the
-            target from Command Center and the Workservers.
+            Delete a target from the Command Center. The target must not have
+            any shards in order for this method to succeed.
 
             This will not affect mongo's community database in order to
             preserve statistics.
@@ -828,22 +770,13 @@ class TargetDeleteHandler(BaseHandler):
 
         """
         self.set_status(400)
-        target = Target(target_id, self.db)
-        striated_ws = target.smembers('striated_ws')
-        target_dir = os.path.join(self.application.targets_folder, target_id)
-        if os.path.exists(target_dir):
-            shutil.rmtree(target_dir)
-        for ws_name in striated_ws:
-            reply = yield self.fetch(ws_name, '/targets/delete/'+target_id,
-                                     method='PUT', body='')
-            if reply.code == 200:
-                target.srem('striated_ws', ws_name)
-            else:
-                self.write(reply.body.decode())
-        target.delete()
-        targets = self.mdb.data.targets
-        targets.remove(spec_or_id=target_id)
-        self.set_status(200)
+        cursor = self.mdb.data.targets
+        result = cursor.find_one({'_id': target_id}, {'shards': 1})
+        shards = result['shards']
+        if shards:
+            return self.error('This target has shards left')
+        else:
+            return self.set_status(200)
 
 
 class TargetsHandler(BaseHandler):
@@ -911,8 +844,8 @@ class TargetsHandler(BaseHandler):
                 "private".
             .. note:: ``description`` must be a JSON compatible string. That
                 means it must not contain double quotation marks and slashes.
-            .. note:: ``options`` pertains to the target as a whole.
-                Stream specific options are not available yet.
+            .. note:: ``options`` pertains to the target as a whole. Options
+                should be short and sweet, such as number of steps per frame.
 
             **Example reply**
 
@@ -1027,15 +960,11 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets', TargetsHandler),
             (r'/targets/delete/(.*)', TargetDeleteHandler),
             (r'/targets/info/(.*)', TargetInfoHandler),
-            (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/targets/update/(.*)', TargetUpdateHandler),
             (r'/scv/connect', SCVConnectHandler),
             (r'/scv/disconnect', SCVDisconnectHandler),
             (r'/scv/status', SCVStatusHandler),
             (r'/streams', PostStreamHandler),
-            (r'/streams/delete/(.*)', RoutedStreamHandler),
-            (r'/streams/start/(.*)', RoutedStreamHandler),
-            (r'/streams/stop/(.*)', RoutedStreamHandler)
             ])
 
     @tornado.gen.coroutine

@@ -67,12 +67,12 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         reply = self.fetch('/targets/info/'+target_id)
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
+        self.assertTrue(float(content['creation_date'])-time.time() < 2)
         self.assertEqual(content['description'], description)
         self.assertEqual(content['stage'], 'private')
         self.assertEqual(content['engine'], 'openmm')
         self.assertEqual(content['engine_versions'], ['6.0'])
         self.assertEqual(content['options'], options)
-        self.assertAlmostEqual(content['creation_date'], time.time(), 0)
         content['target_id'] = target_id
         return content
 
