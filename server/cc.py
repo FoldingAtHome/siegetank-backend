@@ -704,12 +704,15 @@ class PostStreamHandler(BaseHandler):
         """
         self.set_status(400)
          # randomly pick from available scvs
-        picked_scv = random.sample(SCV.members(self.db), 1)[0]
-        reply = yield self.fetch(picked_scv, '/streams', method='POST',
-                                 body=self.request.body,
-                                 headers=self.request.headers)
-        self.set_status(reply.code)
-        self.write(reply.body)
+        if SCV.members(self.db):
+            picked_scv = random.sample(SCV.members(self.db), 1)[0]
+            reply = yield self.fetch(picked_scv, '/streams', method='POST',
+                                     body=self.request.body,
+                                     headers=self.request.headers)
+            self.set_status(reply.code)
+            self.write(reply.body)
+        else:
+            self.error('no scvs available')
 
 
 class TargetInfoHandler(BaseHandler):
@@ -770,12 +773,12 @@ class TargetDeleteHandler(BaseHandler):
         """
         self.set_status(400)
         cursor = self.mdb.data.targets
-        result = cursor.find_one({'_id': target_id}, {'shards': 1})
-        shards = result['shards']
-        if shards:
-            return self.error('This target has shards left')
-        else:
+        result = cursor.remove({'_id': target_id, 'shards': {'$size': 0}})
+        if result['n'] > 0:
             return self.set_status(200)
+        else:
+            return self.error('Could not remove target, make sure it has no\
+                               shards and that target_id is correct')
 
 
 class TargetsHandler(BaseHandler):
@@ -962,9 +965,9 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/delete/(.*)', TargetDeleteHandler),
             (r'/targets/info/(.*)', TargetInfoHandler),
             (r'/targets/update/(.*)', TargetUpdateHandler),
-            (r'/scv/connect', SCVConnectHandler),
-            (r'/scv/disconnect', SCVDisconnectHandler),
-            (r'/scv/status', SCVStatusHandler),
+            (r'/scvs/connect', SCVConnectHandler),
+            (r'/scvs/disconnect', SCVDisconnectHandler),
+            (r'/scvs/status', SCVStatusHandler),
             (r'/streams', PostStreamHandler),
             ])
 

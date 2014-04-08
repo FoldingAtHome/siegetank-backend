@@ -5,7 +5,7 @@ from siegetank.util import is_domain, encode_files
 
 auth_token = None
 login_cc = None
-workservers = dict()
+scvs = dict()
 
 
 def login(cc, token):
@@ -19,8 +19,8 @@ def login(cc, token):
     auth_token = token
     global login_cc
     login_cc = cc
-    global workservers
-    workservers = refresh_workservers(cc)
+    global scvs
+    scvs = refresh_scvs(cc)
 
 
 def generate_token(cc, email, password):
@@ -38,26 +38,28 @@ def generate_token(cc, email, password):
     return token
 
 
-def refresh_workservers(cc):
-    """ Update and return the status of the workservers owned by `cc` """
-    global workservers
-    url = 'https://'+cc+'/ws/status'
+def refresh_scvs(cc):
+    """ Update and return the status of the workservers owned by ``cc`` """
+    global scvs
+    url = 'https://'+cc+'/scvs/status'
     reply = requests.get(url, verify=is_domain(cc))
     if reply.status_code == 200:
         content = reply.json()
-        for ws_name, ws_properties in content.items():
-            # sets url and status fields
-            workservers[ws_name] = ws_properties
-    return workservers
+        for scv_name, scv_prop in content.items():
+            # sets host and status fields
+            scvs[scv_name] = scv_prop
+    return scvs
 
 
 class Base:
     def __init__(self, uri):
         self.uri = uri
 
-    def _get(self, path):
+    def _get(self, path, host=None):
         headers = {'Authorization': auth_token}
-        url = 'https://'+self.uri+path
+        if host is None:
+            host = self.uri
+        url = 'https://'+host+path
         return requests.get(url, headers=headers, verify=is_domain(self.uri))
 
     def _put(self, path, body=None):
@@ -87,14 +89,14 @@ class Stream(Base):
         self._status = None
         self._error_count = None
         self._active = None
-        ws_name = stream_id.split(':')[1]
-        global workservers
-        ws_uri = workservers[ws_name]['url']
-        super(Stream, self).__init__(ws_uri)
+        scv_name = stream_id.split(':')[1]
+        global scvs
+        uri = scvs[scv_name]['host']
+        super(Stream, self).__init__(uri)
 
     def __repr__(self):
-        frames = str(self._frames)
-        return '<stream '+self.id+' s:'+self._status+' f:'+frames+'>'
+        frames = str(self.frames)
+        return '<stream '+self.id+' s:'+self.status+' f:'+frames+'>'
 
     def start(self):
         """ Start this stream. """
@@ -113,7 +115,7 @@ class Stream(Base):
         self.reload_info()
 
     def delete(self):
-        """ Delete this stream from the workserver. You must take care to not
+        """ Delete this stream from the SCV. You must take care to not
         use this stream object anymore afterwards.
 
         """
@@ -127,7 +129,7 @@ class Stream(Base):
         """ Download a file from the stream.
 
         :param filename: ``filename`` can be produced by the core,
-            or it can be a stream_file
+            or it can be a file you initialized passed in.
 
         """
         reply = self._get('/streams/download/'+self.id+'/'+filename)
@@ -140,11 +142,10 @@ class Stream(Base):
         :param filedata: base64 encoded data
 
         """
-
+        # make sure filedata is encoded in b64 format
         base64.b64decode(filedata)
-
         body = json.dumps({
-            "stream_files": {filename: filedata}
+            "files": {filename: filedata}
         })
         reply = self._put('/streams/replace/'+self.id, body=body)
         if reply.status_code != 200:
@@ -206,15 +207,21 @@ class Target(Base):
         self._description = None
         self._options = None
         self._creation_date = None
-        self._allowed_ws = None
+        self._shards = None
         self._engine = None
         self._engine_versions = None
-        self._files = None
         self._streams = None
+        self._weight = None
         super(Target, self).__init__(cc_uri)
 
     def __repr__(self):
         return '<target '+self.id+'>'
+
+    def attach_shard(self):
+        raise Exception('Not implemented')
+
+    def detach_shard(self):
+        raise Exception('Not implemented')
 
     def delete(self):
         """ Delete this target from the backend """
@@ -224,23 +231,11 @@ class Target(Base):
             raise Exception('Bad status code')
         self._id = None
 
-    def download(self, filename):
-        """ Download a target file from the command center.
-
-        :param filename: a particular target_file to retrieve
-
-        """
-        reply = self._get('/targets/download/'+self._id+'/'+filename)
-        if reply.status_code != 200:
-            raise Exception('Bad status_code')
-        return reply.content
-
     def add_stream(self, files):
-        """ Add a stream to the target. The filenames passed in here must be
-        consistent with the filenames used by other streams. Else the behavior
-        is undefined.
+        """ Add a stream to the target.
 
-        :param files: a dictionary of filenames to binaries
+        :param files: a dictionary of filenames to binaries matching the core's
+            requirements
 
         """
         assert isinstance(files, dict)
@@ -253,21 +248,20 @@ class Target(Base):
             print(reply.text)
             raise Exception('Bad status code')
         else:
-            #TODO: return Stream object? or return at all?
             return json.loads(reply.text)['stream_id']
 
     def reload_streams(self):
         """ Reload the target's set of streams """
-        reply = self._get('/targets/streams/'+self.id)
-        if reply.status_code != 200:
-            raise Exception('Failed to load target streams')
-        stream_info = json.loads(reply.text)
         self._streams = set()
-        for stream_name, prop in stream_info.items():
-            stream_object = Stream(stream_name)
-            stream_object._frames = prop['frames']
-            stream_object._status = prop['status']
-            self._streams.add(stream_object)
+        global scvs
+        for scv in self.shards:
+            host = scvs[scv]['host']
+            reply = self._get('/targets/streams/'+self.id, host=host)
+            if reply.status_code != 200:
+                raise Exception('Failed to load streams from SCV: '+scvs)
+            print(reply.json())
+            for stream_id in reply.json()['streams']:
+                self._streams.add(Stream(stream_id))
 
     def reload_info(self):
         """ Reload the target's information """
@@ -278,10 +272,10 @@ class Target(Base):
         self._description = info['description']
         self._options = info['options']
         self._creation_date = info['creation_date']
-        self._allowed_ws = info['allowed_ws']
+        self._shards = info['shards']
         self._engine = info['engine']
         self._engine_versions = info['engine_versions']
-        self._files = info['files']
+        self._weight = info['weight']
 
     @property
     def id(self):
@@ -316,12 +310,11 @@ class Target(Base):
         return self._creation_date
 
     @property
-    def allowed_ws(self):
-        """ Get the list of workservers the target is allowed to striate over
-        """
-        if not self._allowed_ws:
+    def shards(self):
+        """ Return a list of SCVs the streams are sharded across """
+        if not self._shards:
             self.reload_info()
-        return self._allowed_ws
+        return self._shards
 
     @property
     def engine(self):
@@ -337,11 +330,14 @@ class Target(Base):
             self.reload_info()
         return self._engine_versions
 
+    @property
+    def weight(self):
+        return self._weight
 
-def add_target(options, engine, engine_versions, cc_uri=None,
-               description='', stage='private', files=None, allowed_ws=None):
-    """ Add a target to be managed by the workserver at ``cc_uri``. Currently
-    supported ``engine`` is 'openmm'.
+
+def add_target(options, engine, engine_versions, cc_uri=None, weight=1,
+               description='', stage='private', files=None):
+    """ Add a target to be managed by the CC at ``cc_uri``.
 
     ``options`` is a dictionary of ,
     discard_water, xtc_precision, etc.
@@ -352,10 +348,8 @@ def add_target(options, engine, engine_versions, cc_uri=None,
     :param cc_uri: str, which cc to add the target to, eg. flash.stanford.edu
     :param description: str, JSON safe plain text description
     :param stage: str, stage of the target, allowed values are 'disabled',
-        'private', 'beta', 'public'
-    :param allowed_ws: str, which workserver we striated on. If None, then the
-        target will be striated over across all available workservers.
-
+        'private', 'public'
+    :param weight: int, the weight of the target relative to your other targets
     """
     if cc_uri is None:
         cc_uri = login_cc
@@ -371,8 +365,7 @@ def add_target(options, engine, engine_versions, cc_uri=None,
     body['engine_versions'] = engine_versions
     body['description'] = description
     body['stage'] = stage
-    if allowed_ws:
-        body['allowed_ws'] = allowed_ws
+    body['weight'] = weight
     url = 'https://'+cc_uri+'/targets'
     global auth_token
     headers = {'Authorization': auth_token}

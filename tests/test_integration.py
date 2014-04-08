@@ -218,7 +218,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def _get_scvs(self):
         host = self.cc_host
-        reply = self.fetch(host, '/scv/status')
+        reply = self.fetch(host, '/scvs/status')
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
         return content
@@ -324,6 +324,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
         reply = self.fetch(self.cc_host, '/targets/delete/'+target_id,
                            method='PUT', headers=headers, body='')
         self.assertEqual(reply.code, 200)
+        reply = self.fetch(self.cc_host, '/targets', headers=headers)
+        self.assertEqual(reply.code, 200)
+        self.assertEqual(json.loads(reply.body.decode())['targets'], [])
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

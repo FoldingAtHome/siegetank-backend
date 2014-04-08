@@ -1040,7 +1040,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         if tornado.process.task_id() == 0:
             client = tornado.httpclient.HTTPClient()
             for cc, host in self.ccs.items():
-                uri = 'https://'+host+'/scv/connect'
+                uri = 'https://'+host+'/scvs/connect'
                 body = {'name': self.name}
                 print('notifying '+cc+': ', end='')
                 try:
@@ -1055,7 +1055,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         if tornado.process.task_id() == 0:
             client = tornado.httpclient.HTTPClient()
             for cc, host in self.ccs.items():
-                uri = 'https://'+host+'/scv/disconnect'
+                uri = 'https://'+host+'/scvs/disconnect'
                 body = {'name': self.name}
                 try:
                     client.fetch(uri, method='PUT', body=json.dumps(body),
