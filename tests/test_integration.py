@@ -89,6 +89,13 @@ class TestSimple(tornado.testing.AsyncTestCase):
                    }
         managers = self.cc.mdb.users.managers
         managers.insert(db_body)
+        core_token = str(uuid.uuid4())
+        db_body = {'_id': core_token,
+                   'engine': 'openmm',
+                   'engine_version': '6.0'}
+        cores = self.cc.mdb.cores.keys
+        cores.insert(db_body)
+        self.core_token = core_token
         self.auth_token = token
         self.manager = test_manager
 
@@ -124,16 +131,13 @@ class TestSimple(tornado.testing.AsyncTestCase):
         body['token'] = json.loads(reply.body.decode())['token']
         return body
 
-    def _post_target(self, host, engine='openmm', stage='public',
-                     engine_versions=None, weight=1):
-        if engine_versions is None:
-            engine_versions = ['6.0']
+    def _post_target(self, host, stage='public', weight=1):
         headers = {'Authorization': self.auth_token}
         options = {'steps_per_frame': 50000}
         body = {
             'description': 'test project',
-            'engine': engine,
-            'engine_versions': engine_versions,
+            'engine': 'openmm',
+            'engine_versions': ['6.0'],
             'stage': stage,
             'options': options,
             'weight': weight
@@ -176,8 +180,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
             body['donor_token'] = donor_token
         if target_id:
             body['target_id'] = target_id
+        headers = {'Authorization': self.core_token}
         reply = self.fetch(host, '/core/assign', method='POST',
-                           body=json.dumps(body))
+                           body=json.dumps(body), headers=headers)
         self.assertEqual(reply.code, expected_code)
         return json.loads(reply.body.decode())
 

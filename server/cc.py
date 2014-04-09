@@ -28,10 +28,61 @@ import bcrypt
 import pymongo
 import io
 import socket
+import functools
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import authenticate_manager
 from server.apollo import Entity
+
+
+def authenticate_core(method):
+    """ Decorator for the assignment handler to ensure the request is coming
+    from a valid core.
+
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            key = self.request.headers['Authorization']
+        except:
+            self.write(json.dumps({'error': 'missing Authorization header'}))
+            return self.set_status(401)
+        else:
+            content = json.loads(self.request.body.decode())
+            engine = content['engine']
+            engine_version = content['engine_version']
+            query = {'engine_version': engine_version, 'engine': engine}
+            cursor = self.mdb.cores.keys
+            results = cursor.find(query, {'_id': 1})
+            keys = []
+            for match in results:
+                keys.append(match['_id'])
+            if key not in keys:
+                return self.error('Bad core key')
+            else:
+                return method(self, *args, **kwargs)
+    return wrapper
+
+
+def authenticate_admin(method):
+    """ Decorator for the handlers that require administrative power.
+
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            self.request.headers['Authorization']
+        except:
+            return self.error('missing Authorization header', code=401)
+        else:
+            current_user = self.get_current_user()
+            if current_user:
+                if self.get_user_role(current_user) != 'admin':
+                    return self.error('bad role', code=401)
+            else:
+                return self.error('bad role', code=401)
+            return method(self, *args, **kwargs)
+    return wrapper
 
 
 class SCV(Entity):
@@ -48,9 +99,9 @@ class BaseHandler(tornado.web.RequestHandler):
     def initialize(self):
         self.fetch = self.application.fetch
 
-    def error(self, message):
+    def error(self, message, code=400):
         """ Write a message to the output buffer """
-        self.set_status(400)
+        self.set_status(code)
         self.write({'error': message})
 
     @property
@@ -256,8 +307,7 @@ class AddManagerHandler(BaseHandler):
         """
         .. http:post:: /managers
 
-            Add a manager. This request can only be made by managers whose
-            role is *admin*.
+            Add a manager.
 
             :reqheader Authorization: access token of an administrator
 
@@ -389,7 +439,116 @@ def yates_generator(x):
         yield x[i]
 
 
+class CoreKeysHandler(BaseHandler):
+    @authenticate_admin
+    def post(self):
+        """
+        .. http:post:: /core/keys
+
+            Add a new core key for the specified core engine and version. The
+            corresponding core must identify itself using the token.
+
+            :reqheader Authorization: access token of an administrator
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "engine": "openmm", // required
+                    "engine_version": "6.0", // required
+                    "description": "some string" // optional
+                }
+
+            **Example reply**
+
+                {
+                    "core_key": "uuid4",
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        content = json.loads(self.request.body.decode())
+        for required_key in ['engine', 'engine_version']:
+            if required_key not in content:
+                return self.error('missing: '+required_key)
+        stored_id = str(uuid.uuid4())
+        content['_id'] = stored_id
+        cursor = self.mdb.cores.keys
+        cursor.insert(content)
+        self.set_status(200)
+        self.write({'core_key': stored_id})
+
+    @authenticate_admin
+    def get(self):
+        """
+        .. http:get:: /core/keys
+
+            Retrieve a list of core keys for all the engine and versions.
+
+            :reqheader Authorization: access token of an administrator
+
+            **Example reply**
+
+            {
+                "core_key_1": {
+                    "engine": "openmm",
+                    "engine_version": "6.0",
+                    "description": "v53",
+                },
+                "core_key_2": {
+                    "engine": "openmm",
+                    "engine_version": "6.0",
+                    "description": "v54",
+                },
+            }
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        self.set_status(400)
+        body = dict()
+        cursor = self.mdb.cores.keys
+        result = cursor.find()
+        for match in result:
+            core_key = match['_id']
+            match.pop('_id')
+            body[core_key] = match
+        self.set_status(200)
+        self.write(body)
+
+
+class CoreKeysDeleteHandler(BaseHandler):
+    @authenticate_admin
+    def put(self, core_key):
+        """
+        .. http:put:: /core/keys/delete/:key_id
+
+            Delete a specific core key ``key_id``.
+
+            :reqheader Authorization: access token of an administrator
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        self.set_status(400)
+        cursor = self.mdb.cores.keys
+        result = cursor.remove({'_id': core_key})
+        if result['n'] > 0:
+            self.set_status(200)
+        else:
+            return self.error('core_key not found')
+
+
 class CoreAssignHandler(BaseHandler):
+    @authenticate_core
     @tornado.gen.coroutine
     def post(self):
         """
@@ -622,7 +781,7 @@ class SCVConnectHandler(BaseHandler):
         scvs = self.application._load_scvs()
         host = scvs[name]
         if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
-            self.error('remote_ip does not match given host')
+            return self.error('remote_ip does not match given host')
         self.application._cache_scv(name, host)
         self.set_status(200)
         return self.write(dict())
@@ -668,7 +827,7 @@ class SCVDisconnectHandler(BaseHandler):
         self.set_status(200)
         return self.write(dict())
 
-import sys
+
 class PostStreamHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
@@ -955,6 +1114,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         self.base_init(name, redis_options, mongo_options)
         self._register(external_host)
         super(CommandCenter, self).__init__([
+            (r'/core/keys', CoreKeysHandler),
+            (r'/core/keys/delete/(.*)', CoreKeysDeleteHandler),
             (r'/core/assign', CoreAssignHandler),
             (r'/managers/verify', VerifyManagerHandler),
             (r'/managers/auth', AuthManagerHandler),

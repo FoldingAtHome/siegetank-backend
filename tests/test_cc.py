@@ -8,6 +8,7 @@ import json
 import time
 import bcrypt
 import uuid
+import random
 
 import server.cc as cc
 
@@ -75,6 +76,32 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['options'], options)
         content['target_id'] = target_id
         return content
+
+    def _add_core_key(self, auth, expected_code=200):
+        headers = {'Authorization': auth}
+        body = {
+            'engine': 'openmm',
+            'engine_version': '6.0',
+            'description': 'v12',
+        }
+        reply = self.fetch('/core/keys', method='POST', headers=headers,
+                           body=json.dumps(body))
+        self.assertEqual(reply.code, expected_code)
+        if expected_code == 200:
+            return json.loads(reply.body.decode())
+
+    def _delete_core_key(self, auth, core_key, expected_code=200):
+        headers = {'Authorization': auth}
+        reply = self.fetch('/core/keys/delete/'+core_key, method='PUT',
+                           headers=headers, body='')
+        self.assertEqual(reply.code, expected_code)
+
+    def _load_core_keys(self, auth, expected_code=200):
+        headers = {'Authorization': auth}
+        reply = self.fetch('/core/keys', headers=headers)
+        self.assertEqual(reply.code, expected_code)
+        if expected_code == 200:
+            return json.loads(reply.body.decode())
 
     def test_add_donor(self):
         username = 'jesse_v'
@@ -265,6 +292,28 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         reply = self.fetch('/targets/update/bad_id', method='PUT',
                            headers=headers, body=json.dumps(body))
         self.assertEqual(reply.code, 400)
+
+    def test_core_keys(self):
+        bad_token = self._add_manager()['token']
+        self._add_core_key(bad_token, 401)
+        result = self._add_manager(email='test2@gm.com', role='admin')
+        good_token = result['token']
+        keys = []
+        content = self._add_core_key(good_token)
+        keys.append(content['core_key'])
+        for i in range(5):
+            content = self._add_core_key(good_token)
+            keys.append(content['core_key'])
+        self._load_core_keys(bad_token, 401)
+        content = self._load_core_keys(good_token)
+        self.assertEqual(set(content.keys()), set(keys))
+        random_key = random.choice(keys)
+        self._delete_core_key(bad_token, random_key, 401)
+        self._delete_core_key(good_token, random_key)
+        keys.remove(random_key)
+        content = self._load_core_keys(good_token)
+        self.assertEqual(set(content.keys()), set(keys))
+        self._delete_core_key(good_token, '1234', 400)
 
     def get_app(self):
         return self.cc
