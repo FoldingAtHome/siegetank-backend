@@ -263,6 +263,7 @@ class StreamActivateHandler(BaseHandler):
         target_id = content["target_id"]
         target = Target(target_id, self.db)
         stream_id = target.zrevpop('queue')
+
         token = str(uuid.uuid4())
         if stream_id:
             fields = {

@@ -16,10 +16,8 @@ import server.scv as scv
 import server.cc as cc
 import server.common as common
 import sys
-import random
 import base64
 import json
-import time
 import tornado.ioloop
 
 
@@ -330,6 +328,4 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
-    #suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
-    #suite.addTest(WSInitTestCase())
     unittest.TextTestRunner(verbosity=3).run(suite)

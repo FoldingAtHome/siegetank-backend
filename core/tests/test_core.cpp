@@ -80,9 +80,9 @@ void test_set_target_id() {
     Core core(150, "openmm", "6.0");
     Poco::URI uri("https://127.0.0.1:8980/core/assign");
     core.target_id = custom_target_id;
-    map<string, string> target_files;
     map<string, string> stream_files;
-    core.startStream(uri, target_files, stream_files);
+    cout << "starting stream" << endl;
+    core.startStream(uri, stream_files);
 }
 
 void test_donor_token() {
@@ -115,32 +115,26 @@ void test_donor_token() {
     token = object->get("token").convert<std::string>();
 
     core.donor_token = token;
-    map<string, string> target_files;
     map<string, string> stream_files;
 
     Poco::URI uri2("https://127.0.0.1:8980/core/assign");
-    core.startStream(uri2, target_files, stream_files);
+    core.startStream(uri2, stream_files);
 }
 
 void test_initialize_and_start() { 
     Core core(150, "openmm", "6.0");
     Poco::URI uri("https://127.0.0.1:8980/core/assign");
-
-    map<string, string> target_files;
     map<string, string> stream_files;
-    core.startStream(uri, target_files, stream_files);
-
-    if(target_files.find("system.xml") == target_files.end())
-        throw std::runtime_error("system.xml not in target_files!");
-    if(target_files.find("integrator.xml") == target_files.end())
-        throw std::runtime_error("integrator.xml not in target_files!");
+    core.startStream(uri, stream_files);
+    if(stream_files.find("system.xml") == stream_files.end())
+        throw std::runtime_error("system.xml not in stream_files!");
+    if(stream_files.find("integrator.xml") == stream_files.end())
+        throw std::runtime_error("integrator.xml not in stream_files!");
     if(stream_files.find("state.xml") == stream_files.end())
         throw std::runtime_error("state.xml not in stream_files!");
-
     // its important we actually use a valid state.xml here to not break the
     // other openmm tests
     string test_state = stream_files["state.xml"];
-
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
         string filedata1 = gen_random(100);
@@ -151,9 +145,7 @@ void test_initialize_and_start() {
         frame_files[filename2] = filedata2;
         core.sendFrame(frame_files);
     }
-
     core.sendHeartbeat();
-
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
         string filedata1 = gen_random(100);
@@ -164,9 +156,7 @@ void test_initialize_and_start() {
         frame_files[filename2] = filedata2;
         core.sendFrame(frame_files, 1, 35.9);
     }
-
     core.sendHeartbeat();
-
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
         string filedata1 = gen_random(100);
@@ -177,14 +167,11 @@ void test_initialize_and_start() {
         frame_files[filename2] = filedata2;
         core.sendFrame(frame_files, 1, 38.9, true);
     }
-
     core.sendHeartbeat();
-
     string c_filename("state.xml");
     map<string, string> checkpoint_files;
     checkpoint_files[c_filename] = test_state;
     core.sendCheckpointFiles(checkpoint_files, true);
-
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
         string filedata1 = gen_random(100);
@@ -196,13 +183,9 @@ void test_initialize_and_start() {
         int count = (rand()%100)+1;
         core.sendFrame(frame_files, count);
     }
-
     core.sendHeartbeat();
-
     core.sendCheckpointFiles(checkpoint_files, true);
-
     core.stopStream();
-
 }
 
 int main() {

@@ -492,8 +492,7 @@ class CoreAssignHandler(BaseHandler):
             if not target_weights:
                 return self.error('no valid targets could be found')
             cursor = self.mdb.users.managers
-            result = cursor.find({'_id': {'$in': ['test_ws@gmail.com']}},
-                                 {'_id': 1, 'weight': 1})
+            result = cursor.find(fields={'_id': 1, 'weight': 1})
             for match in result:
                 owner_weights[match['_id']] = match['weight']
 
@@ -533,18 +532,19 @@ class CoreAssignHandler(BaseHandler):
             try:
                 reply = yield self.fetch(scv, '/streams/activate',
                                          method='POST', body=json.dumps(msg))
-                token = json.loads(reply.body.decode())["token"]
-                host = SCV(scv, self.db).hget('host')
-                body = {'token': token,
-                        'url': 'https://'+host+'/core/start',
-                        'options': options,
-                        }
-                self.write(body)
-                return self.set_status(200)
+                if reply.code == 200:
+                    token = json.loads(reply.body.decode())["token"]
+                    host = SCV(scv, self.db).hget('host')
+                    body = {'token': token,
+                            'url': 'https://'+host+'/core/start',
+                            'options': options,
+                            }
+                    self.write(body)
+                    return self.set_status(200)
             except tornado.httpclient.HTTPError:
-                print('--caught--httperror--')
+                print('--CAUGHT HTTP ERROR--')
                 pass
-        return self.error('no scvs available for the target')
+        return self.error('no streams available for the target')
 
 
 class SCVStatusHandler(BaseHandler):
@@ -668,7 +668,7 @@ class SCVDisconnectHandler(BaseHandler):
         self.set_status(200)
         return self.write(dict())
 
-
+import sys
 class PostStreamHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):

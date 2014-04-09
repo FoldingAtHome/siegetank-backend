@@ -39,7 +39,7 @@ def generate_token(cc, email, password):
 
 
 def refresh_scvs(cc):
-    """ Update and return the status of the workservers owned by ``cc`` """
+    """ Refresh the list of the SCVs. """
     global scvs
     url = 'https://'+cc+'/scvs/status'
     reply = requests.get(url, verify=is_domain(cc))

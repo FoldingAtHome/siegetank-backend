@@ -23,10 +23,9 @@ public:
     /* Main MD loop */
     virtual void main();
 
-    /* Start the stream, fetch files and their names */
+    /* Start the stream and fetch files */
     void startStream(const Poco::URI &cc_uri,
-                     std::map<std::string, std::string> &target_files,
-                     std::map<std::string, std::string> &stream_files);
+                     std::map<std::string, std::string> &files);
 
     /* Send frame files to the WS. This method automatically base64 encodes
        the file */

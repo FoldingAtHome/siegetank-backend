@@ -183,7 +183,7 @@ void Core::initializeSession(const Poco::URI &cc_uri) {
     
     Poco::JSON::Parser parser;
     try {
-        cout << "being assigned a ws..." << flush;
+        cout << "scv assignment..." << flush;
         Poco::Net::HTTPRequest request("POST", cc_uri.getPath());
         string body;
         body += "{\"engine\": \""+_engine+"\",";
@@ -196,7 +196,6 @@ void Core::initializeSession(const Poco::URI &cc_uri) {
         if(target_id.length() > 0) {
             body += "\"target_id\": \""+target_id+"\",";
         }
-
         stringstream core_version;
         core_version << CORE_VERSION;
         body += "\"core_version\": \""+core_version.str()+"\"}";
@@ -204,33 +203,27 @@ void Core::initializeSession(const Poco::URI &cc_uri) {
         cc_session.sendRequest(request) << body;
         Poco::Net::HTTPResponse response;
         istream &content_stream = cc_session.receiveResponse(response);
-
         string content;
         Poco::StreamCopier::copyToString(content_stream, content);
-
         if(response.getStatus() != 200) {
+            cout << "BAD STATUS CODE" << response.getStatus() << endl;
             string reason = parse_error(content);
             stringstream error;
             error << "Could not get an assignment from CC, reason: ";
             error << reason << endl;
             throw std::runtime_error(error.str());
         }
-        cout << "ok" << flush;
-
         {
         Poco::Dynamic::Var result = parser.parse(content);
         Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-        ws_uri = object->get("uri").convert<std::string>();
+        ws_uri = object->get("url").convert<std::string>();
         _auth_token = object->get("token").convert<std::string>();
-
         // extract _frame_write_interval
         {
         Poco::Dynamic::Var temp_obj = object->get("options");
         Poco::JSON::Object::Ptr object_ptr = temp_obj.extract<Poco::JSON::Object::Ptr>();
         _frame_write_interval = object_ptr->get("steps_per_frame").convert<int>();
         }
-
-
         parser.reset();
         }
     
@@ -245,9 +238,7 @@ void Core::initializeSession(const Poco::URI &cc_uri) {
 }
 
 void Core::startStream(const Poco::URI &cc_uri,
-                        map<string, string> &target_files,
-                        map<string, string> &stream_files) {
-
+                        map<string, string> &files) {
     if(_session == NULL)
         initializeSession(cc_uri);
     Poco::Net::HTTPRequest request("GET", _ws_uri.getPath());
@@ -258,7 +249,7 @@ void Core::startStream(const Poco::URI &cc_uri,
     if(response.getStatus() != 200) {
         cout << response.getStatus() << endl;
         cout << _ws_uri.getHost() << ":" << _ws_uri.getPort() << _ws_uri.getPath() << endl;
-        throw std::runtime_error("Could not start a stream from WS");
+        throw std::runtime_error("Could not start a stream from SCV");
     }
     string content;
     Poco::StreamCopier::copyToString(content_stream, content);
@@ -273,30 +264,8 @@ void Core::startStream(const Poco::URI &cc_uri,
         throw std::runtime_error("FATAL: Specified target_id mismatch");
     }
     target_id = temptarget_id;
-
-    // extract target files
-    {
-    Poco::Dynamic::Var temp_obj = object->get("target_files");
-    Poco::JSON::Object::Ptr object_ptr = temp_obj.extract<Poco::JSON::Object::Ptr>();
-    for(Poco::JSON::Object::ConstIterator it=object_ptr->begin();
-            it != object_ptr->end(); it++) {
-        string filename = it->first;
-        string filedata = it->second.convert<std::string>();
-        if(filename.find(".b64") != string::npos) {
-            filename = filename.substr(0, filename.length()-4);
-            filedata = decode_b64(filedata);
-            if(filename.find(".gz") != string::npos) {
-                filename = filename.substr(0, filename.length()-3);
-                filedata = decode_gz(filedata);
-            }
-        }
-        target_files[filename] = filedata;
-    }
-    }
-
-    // extract stream files
-    {
-    Poco::Dynamic::Var temp_obj = object->get("stream_files");
+    // extract files
+    Poco::Dynamic::Var temp_obj = object->get("files");
     Poco::JSON::Object::Ptr object_ptr = temp_obj.extract<Poco::JSON::Object::Ptr>();
     for(Poco::JSON::Object::ConstIterator it=object_ptr->begin();
             it != object_ptr->end(); it++) {
@@ -310,8 +279,7 @@ void Core::startStream(const Poco::URI &cc_uri,
                 filedata = decode_gz(filedata);
             }
         }
-        stream_files[filename] = filedata;
-    }
+        files[filename] = filedata;
     }
 }
 
