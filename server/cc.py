@@ -385,6 +385,7 @@ class TargetUpdateHandler(BaseHandler):
 
                 {
                     "stage": "disabled", private", "beta", "public"  //optional
+                    "engines_allowed": ["openmm", "openmm_cluster"]  //optional
                     "engine_versions":  ["6.0", "6.5"]  //optional
                     "description": "description"  //optional
                     "weight": 2 // optional
@@ -413,6 +414,8 @@ class TargetUpdateHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         payload = {}
+        if 'engines_allowed' in content:
+            payload['engines_allowed'] = content['engines_allowed']
         if 'engine_versions' in content:
             payload['engine_versions'] = content['engine_versions']
         if 'stage' in content:
@@ -477,6 +480,8 @@ class CoreKeysHandler(BaseHandler):
                 return self.error('missing: '+required_key)
         stored_id = str(uuid.uuid4())
         content['_id'] = stored_id
+        content['owner'] = self.get_current_user()
+        content['global'] = True
         cursor = self.mdb.cores.keys
         cursor.insert(content)
         self.set_status(200)
@@ -554,7 +559,12 @@ class CoreAssignHandler(BaseHandler):
         """
         .. http:post:: /core/assign
 
-            Assign a stream from an SCV to a core. The assignment algorithm is:
+            Assign a stream from an SCV to a core. There are several corner
+            cases to be aware of. Managers can specify their own set of tokens
+            if desired. 
+
+
+            The assignment algorithm is:
 
             1. Each user is assigned a weight by an administrator.
             2. The set of users who have targets that
@@ -577,6 +587,8 @@ class CoreAssignHandler(BaseHandler):
 
             .. note:: If ``target_id`` is specified, then the CC will disregard
                 the assignment algorithm.
+
+            .. note:: If the ``Authorization`` header corresponds to that 
 
             **Example reply**
 
@@ -618,8 +630,8 @@ class CoreAssignHandler(BaseHandler):
                                       'shards': 1,
                                       'options': 1,
                                       })
-            if result['engine'] != engine:
-                return self.error('target engine does not match core engine')
+            if engine not in result['engine']:
+                return self.error('core engine not allowed for this target')
             if engine_version not in result['engine_versions']:
                 return self.error('core engine_version not allowed')
             if not result['shards']:
@@ -627,10 +639,9 @@ class CoreAssignHandler(BaseHandler):
             shards = result['shards']
             options = result['options']
         else:
-            result = cursor.find({'engine': engine,
+            result = cursor.find({'engine': {'$in': [engine]},
                                   'engine_versions': {'$in': [engine_version]},
-                                  'stage': 'public',
-                                  },
+                                  'stage': 'public'},
                                  {'owner': 1,
                                   '_id': 1,
                                   'weight': 1,
@@ -990,7 +1001,7 @@ class TargetsHandler(BaseHandler):
 
                 {
                     "description": "some JSON compatible description",
-                    "engine": "openmm",
+                    "engines_allowed": ["openmm", "openmm_unix"],
                     "engine_versions": ["6.0", "5.5", "5.2"],
                     "stage": "disabled", private", "beta", or "public"
                     "options": {

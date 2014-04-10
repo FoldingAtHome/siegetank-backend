@@ -57,7 +57,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         options = {'steps_per_frame': 50000}
         body = {
             'description': description,
-            'engine': 'openmm',
+            'engine': ['openmm'],
             'engine_versions': ['6.0'],
             'options': options
             }
@@ -71,7 +71,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(float(content['creation_date'])-time.time() < 2)
         self.assertEqual(content['description'], description)
         self.assertEqual(content['stage'], 'private')
-        self.assertEqual(content['engine'], 'openmm')
+        self.assertEqual(content['engine'], ['openmm'])
         self.assertEqual(content['engine_versions'], ['6.0'])
         self.assertEqual(content['options'], options)
         content['target_id'] = target_id
@@ -270,10 +270,12 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         options = result['options']
         # update using a valid target_id
         description2 = 'hahah'
+        new_engines = ['openmm', 'ocorecpu']
         body = {
             'description': description2,
             'stage': 'public',
-            'engine_versions': ['9.9', '5.0']
+            'engine_versions': ['9.9', '5.0'],
+            'engines_allowed': new_engines,
         }
         reply = self.fetch('/targets/update/'+target_id, method='PUT',
                            headers=headers, body=json.dumps(body))
@@ -284,7 +286,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['description'], description2)
         self.assertEqual(content['owner'], email)
         self.assertEqual(content['stage'], 'public')
-        self.assertEqual(content['engine'], 'openmm')
+        self.assertEqual(content['engine'], new_engines)
         self.assertEqual(set(content['engine_versions']), set(['9.9', '5.0']))
         self.assertEqual(content['options'], options)
 

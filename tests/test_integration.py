@@ -136,7 +136,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         options = {'steps_per_frame': 50000}
         body = {
             'description': 'test project',
-            'engine': 'openmm',
+            'engine': ['openmm'],
             'engine_versions': ['6.0'],
             'stage': stage,
             'options': options,
