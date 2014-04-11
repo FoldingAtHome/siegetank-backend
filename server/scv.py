@@ -24,6 +24,7 @@ import datetime
 import gzip
 import functools
 import logging
+import glob
 
 import tornado.escape
 import tornado.ioloop
@@ -57,7 +58,6 @@ class ActiveStream(Entity):
               'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
               'frame_hash': str,  # md5sum of the received frame
-              'buffer_files': {str},  # set of frame files sent
               }
 
 
@@ -635,7 +635,6 @@ class CoreFrameHandler(BaseHandler):
         streams_folder = self.application.streams_folder
 
         # empty the set
-        active_stream.sremall('buffer_files')
         for filename, filedata in files.items():
             filedata = filedata.encode()
             f_root, f_ext = os.path.splitext(filename)
@@ -650,7 +649,6 @@ class CoreFrameHandler(BaseHandler):
                                            'buffer_'+filename)
             with open(buffer_filename, 'ab') as buffer_handle:
                 buffer_handle.write(filedata)
-            active_stream.sadd('buffer_files', filename)
         active_stream.hincrby('buffer_frames', frame_count)
 
         return self.set_status(200)
@@ -726,7 +724,6 @@ class CoreCheckpointHandler(BaseHandler):
         if buffer_frames == 0:
             return self.set_status(200)
         streams_folder = self.application.streams_folder
-        buffers_folder = os.path.join(streams_folder, stream_id)
         files_folder = os.path.join(streams_folder, stream_id, 'files')
 
         # 1) rename old checkpoint file
@@ -737,9 +734,12 @@ class CoreCheckpointHandler(BaseHandler):
             os.rename(src, dst)
 
         # 2) rename buffered files
-        for filename in active_stream.smembers('buffer_files'):
-            dst = os.path.join(buffers_folder, str(total_frames)+'_'+filename)
-            src = os.path.join(buffers_folder, 'buffer_'+filename)
+        buffers_dir = os.path.join(streams_folder, stream_id)
+        for buffer_file in glob.glob(buffers_dir+'/buffer_*'):
+            filename = os.path.split(buffer_file)[1]
+            new_filename = filename.split('buffer_')[1]
+            dst = os.path.join(buffers_dir, str(total_frames)+'_'+new_filename)
+            src = os.path.join(buffer_file)
             os.rename(src, dst)
 
         # 3) write checkpoint
@@ -1109,11 +1109,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
             pass
         else:
             self.db.zrem('heartbeats', stream_id)
-            buffer_files = active_stream.smembers('buffer_files')
-            for fname in buffer_files:
-                fname = 'buffer_'+fname
-                buffer_path = os.path.join(self.streams_folder,
-                                           stream_id, fname)
+            stream_path = os.path.join(self.streams_folder, stream_id)
+            for buffer_path in glob.glob(stream_path+'/buffer_*'):
                 if os.path.exists(buffer_path):
                     os.remove(buffer_path)
 
