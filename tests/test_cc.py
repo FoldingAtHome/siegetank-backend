@@ -77,11 +77,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
     def _add_core_key(self, auth, expected_code=200):
         headers = {'Authorization': auth}
-        body = {
-            'engine': 'openmm',
-            'description': 'testing',
-        }
-        reply = self.fetch('/core/keys', method='POST', headers=headers,
+        body = {'engine': 'openmm', 'description': 'testing'}
+        reply = self.fetch('/engines/keys', method='POST', headers=headers,
                            body=json.dumps(body))
         self.assertEqual(reply.code, expected_code)
         if expected_code == 200:
@@ -89,13 +86,13 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
     def _delete_core_key(self, auth, core_key, expected_code=200):
         headers = {'Authorization': auth}
-        reply = self.fetch('/core/keys/delete/'+core_key, method='PUT',
+        reply = self.fetch('/engines/keys/delete/'+core_key, method='PUT',
                            headers=headers, body='')
         self.assertEqual(reply.code, expected_code)
 
     def _load_core_keys(self, auth, expected_code=200):
         headers = {'Authorization': auth}
-        reply = self.fetch('/core/keys', headers=headers)
+        reply = self.fetch('/engines/keys', headers=headers)
         self.assertEqual(reply.code, expected_code)
         if expected_code == 200:
             return json.loads(reply.body.decode())
@@ -296,10 +293,10 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         good_token = result['token']
         keys = []
         content = self._add_core_key(good_token)
-        keys.append(content['core_key'])
+        keys.append(content['key'])
         for i in range(5):
             content = self._add_core_key(good_token)
-            keys.append(content['core_key'])
+            keys.append(content['key'])
         self._load_core_keys(bad_token, 401)
         content = self._load_core_keys(good_token)
         self.assertEqual(set(content.keys()), set(keys))

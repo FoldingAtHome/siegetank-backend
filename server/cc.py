@@ -37,7 +37,7 @@ from server.apollo import Entity
 
 def authenticate_core(method):
     """ Decorator for the assignment handler to ensure the request is coming
-    from a valid core.
+    from a valid core whose.
 
     """
     @functools.wraps(method)
@@ -50,14 +50,14 @@ def authenticate_core(method):
         else:
             content = json.loads(self.request.body.decode())
             core_engine = content['engine']
-            query = {'engines': {'$in': [core_engine]}}
-            cursor = self.mdb.cores.keys
+            query = {'engine': {'$in': [core_engine]}}
+            cursor = self.mdb.engines.keys
             results = cursor.find(query, {'_id': 1})
             keys = []
             for match in results:
                 keys.append(match['_id'])
             if key not in keys:
-                return self.error('Bad core key')
+                return self.error('Bad engine key')
             else:
                 return method(self, *args, **kwargs)
     return wrapper
@@ -410,7 +410,6 @@ class TargetUpdateHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         payload = {}
-        print(content)
         if 'engines' in content:
             payload['engines'] = content['engines']
         if 'stage' in content:
@@ -518,14 +517,14 @@ def yates_generator(x):
 #         self.set_status(200)
 
 
-class CoreKeysHandler(BaseHandler):
+class EngineKeysHandler(BaseHandler):
     @authenticate_admin
     def post(self):
         """
-        .. http:post:: /core/keys
+        .. http:post:: /engines/keys
 
-            Add a new core key for the specified core engine and version. The
-            corresponding core must identify itself using the token.
+            Add a new core key for the specified engine. The corresponding core
+            must identify itself using the token.
 
             :reqheader Authorization: access token of an administrator
 
@@ -556,15 +555,15 @@ class CoreKeysHandler(BaseHandler):
         stored_id = str(uuid.uuid4())
         content['_id'] = stored_id
         content['creation_date'] = time.time()
-        cursor = self.mdb.cores.keys
+        cursor = self.mdb.engines.keys
         cursor.insert(content)
         self.set_status(200)
-        self.write({'core_key': stored_id})
+        self.write({'key': stored_id})
 
     @authenticate_admin
     def get(self):
         """
-        .. http:get:: /core/keys
+        .. http:get:: /engines/keys
 
             Retrieve a list of core keys for all the engines.
 
@@ -597,7 +596,7 @@ class CoreKeysHandler(BaseHandler):
         """
         self.set_status(400)
         body = dict()
-        cursor = self.mdb.cores.keys
+        cursor = self.mdb.engines.keys
         result = cursor.find()
         for match in result:
             core_key = match['_id']
@@ -607,11 +606,11 @@ class CoreKeysHandler(BaseHandler):
         self.write(body)
 
 
-class CoreKeysDeleteHandler(BaseHandler):
+class EngineKeysDeleteHandler(BaseHandler):
     @authenticate_admin
     def put(self, core_key):
         """
-        .. http:put:: /core/keys/delete/:key_id
+        .. http:put:: /engines/keys/delete/:key_id
 
             Delete a specific core key ``key_id``.
 
@@ -623,7 +622,7 @@ class CoreKeysDeleteHandler(BaseHandler):
 
         """
         self.set_status(400)
-        cursor = self.mdb.cores.keys
+        cursor = self.mdb.engines.keys
         result = cursor.remove({'_id': core_key})
         if result['n'] > 0:
             self.set_status(200)
@@ -1066,12 +1065,12 @@ class TargetsHandler(BaseHandler):
                 {
                     "description": "some JSON compatible description",
                     "engines": ["openmm_60_opencl",
-                                        "openmm_60_cpu",
-                                        "openmm_60_cuda",
-                                        "openmm_60_opencl_ps4",
-                                        "openmm_60_cpu_ps4",
-                                        "openmm_55_opencl",
-                                        "openmm_55_cuda"],
+                                "openmm_60_cpu",
+                                "openmm_60_cuda",
+                                "openmm_60_opencl_ps4",
+                                "openmm_60_cpu_ps4",
+                                "openmm_55_opencl",
+                                "openmm_55_cuda"],
                     "stage": "disabled", private", "beta", or "public"
                     "options": {
                         "steps_per_frame": 50000,
@@ -1189,8 +1188,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         self.base_init(name, redis_options, mongo_options)
         self._register(external_host)
         super(CommandCenter, self).__init__([
-            (r'/core/keys', CoreKeysHandler),
-            (r'/core/keys/delete/(.*)', CoreKeysDeleteHandler),
+            (r'/engines/keys', EngineKeysHandler),
+            (r'/engines/keys/delete/(.*)', EngineKeysDeleteHandler),
             (r'/core/assign', CoreAssignHandler),
             (r'/managers/verify', VerifyManagerHandler),
             (r'/managers/auth', AuthManagerHandler),

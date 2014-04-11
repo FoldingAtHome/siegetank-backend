@@ -84,17 +84,11 @@ class TestSimple(tornado.testing.AsyncTestCase):
         test_manager = "test_ws@gmail.com"
         db_body = {'_id': test_manager,
                    'token': token,
-                   'role': 'manager',
+                   'role': 'admin',
                    'weight': 1
                    }
         managers = self.cc.mdb.users.managers
         managers.insert(db_body)
-        core_token = str(uuid.uuid4())
-        db_body = {'_id': core_token,
-                   'engine': 'openmm',
-                   'engine_version': '6.0'}
-        cores = self.cc.mdb.cores.keys
-        cores.insert(db_body)
         self.core_token = core_token
         self.auth_token = token
         self.manager = test_manager
@@ -136,8 +130,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         options = {'steps_per_frame': 50000}
         body = {
             'description': 'test project',
-            'engine': ['openmm'],
-            'engine_versions': ['6.0'],
+            'engines': ['openmm'],
             'stage': stage,
             'options': options,
             'weight': weight
@@ -170,19 +163,23 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
         return json.loads(reply.body.decode())
 
-    def _assign(self, host, target_id=None, engine='openmm',
-                engine_version='6.0', donor_token=None, expected_code=200):
-        body = {
-            'engine': engine,
-            'engine_version': engine_version,
-            }
+    def _assign(self, host, target_id=None, core_key=None,
+                donor_token=None, expected_code=200):
+        if core_key is None:
+            manager_headers = {'Authorization': self.auth_token}
+            body = {'engine': 'openmm', 'description': 'testing'}
+            reply = self.fetch(self.cc_host, '/engines/keys', method='POST',
+                               headers=manager_headers, body=json.dumps(body))
+            self.assertEqual(reply.code, 200)
+            core_key = json.loads(reply.body.decode())['key']
+        core_headers = {'Authorization': core_key}
+        body = {'engine': 'openmm'}
         if donor_token:
             body['donor_token'] = donor_token
         if target_id:
             body['target_id'] = target_id
-        headers = {'Authorization': self.core_token}
         reply = self.fetch(host, '/core/assign', method='POST',
-                           body=json.dumps(body), headers=headers)
+                           body=json.dumps(body), headers=core_headers)
         self.assertEqual(reply.code, expected_code)
         return json.loads(reply.body.decode())
 
@@ -261,6 +258,10 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self._assign(self.cc_host, expected_code=400)
         content = self._assign(self.cc_host, target_id)
         self.assertEqual(content['options'], options)
+
+    def test_assign_bad_core_key(self):
+        content = self._post_target(self.cc_host)
+        self._assign(self.cc_host, core_key='garbage', expected_code=400)
 
     def test_assign(self):
         target_id = self._post_target(self.cc_host)['target_id']
