@@ -442,6 +442,82 @@ def yates_generator(x):
         yield x[i]
 
 
+class EnginesHandler(BaseHandler):
+    @authenticate_manager
+    def get(self):
+        """ http:get:: /engines
+
+            Get a list of all available engines.
+
+            :reqheader Authorization: access token of a Manager
+
+            **Example reply**
+
+                {
+                    "openmm_60_opencl" : {
+                        "owner": "proteneer@gmail.com",
+                        "description": "OpenMM 6.0 running OpenCL platform"
+                    },
+                    "openmm_55_cuda" : {
+                        "owner": "proteneer@gmail.com",
+                        "description": "OpenMM 5.5 running CUDA platform"
+                    },
+                    "openmm_61_cpu": {
+                        "owner": "proteneer@gmail.com",
+                        "description": "OpenMM 6.1 running CPU platform"
+                    }
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        self.set_status(400)
+        cursor = self.mdb.engines.types
+        results = cursor.find()
+        body = dict()
+        for match in results:
+            engine = match['_id']
+            match.pop('_id')
+            body[engine] = match
+        self.set_status(200)
+        self.write(body)
+
+    @authenticate_manager
+    def post(self):
+        """ http:put:: /engines
+
+            Add a new engine.
+
+            :reqheader Authorization: access token of a Manager
+
+            **Example request**
+
+                {
+                    "name": "openmm_60_opencl",
+                    "description": "OpenMM 6.0 running on OpenCL"
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        self.set_status(400)
+        content = json.loads(self.request.body.decode())
+        engine_type = content['name']
+        description = content['description']
+        owner = self.get_current_user()
+        cursor = self.mdb.engines.types
+        result = cursor.insert({
+            '_id': engine_type,
+            'description': description,
+            'owner': owner
+            })
+        print(result)
+        self.set_status(200)
+
 class CoreKeysHandler(BaseHandler):
     @authenticate_admin
     def post(self):
@@ -459,8 +535,7 @@ class CoreKeysHandler(BaseHandler):
 
                 {
                     "engine": "openmm", // required
-                    "engine_version": "6.0", // required
-                    "description": "some string" // optional
+                    "description": "some string", // required
                 }
 
             **Example reply**
@@ -475,13 +550,12 @@ class CoreKeysHandler(BaseHandler):
 
         """
         content = json.loads(self.request.body.decode())
-        for required_key in ['engine', 'engine_version']:
+        for required_key in ['engine', 'description']:
             if required_key not in content:
                 return self.error('missing: '+required_key)
         stored_id = str(uuid.uuid4())
         content['_id'] = stored_id
-        content['owner'] = self.get_current_user()
-        content['global'] = True
+        content['creation_date'] = time.time()
         cursor = self.mdb.cores.keys
         cursor.insert(content)
         self.set_status(200)
@@ -492,7 +566,7 @@ class CoreKeysHandler(BaseHandler):
         """
         .. http:get:: /core/keys
 
-            Retrieve a list of core keys for all the engine and versions.
+            Retrieve a list of core keys for all the engines.
 
             :reqheader Authorization: access token of an administrator
 
@@ -500,14 +574,19 @@ class CoreKeysHandler(BaseHandler):
 
             {
                 "core_key_1": {
-                    "engine": "openmm",
-                    "engine_version": "6.0",
-                    "description": "v53",
+                    "engine": "openmm_55_opencl",
+                    "description": "all platforms",
+                    "creation_date": 874389297.4,
+                },
+                "core_key_1": {
+                    "engine": "openmm_60_opencl",
+                    "description": "all platforms",
+                    "creation_date": 874389291.4,
                 },
                 "core_key_2": {
-                    "engine": "openmm",
-                    "engine_version": "6.0",
-                    "description": "v54",
+                    "engine": "openmm_60_cuda",
+                    "description": "all platforms",
+                    "creation_date": 538929304.4,
                 },
             }
 
@@ -1001,8 +1080,13 @@ class TargetsHandler(BaseHandler):
 
                 {
                     "description": "some JSON compatible description",
-                    "engines_allowed": ["openmm", "openmm_unix"],
-                    "engine_versions": ["6.0", "5.5", "5.2"],
+                    "engines_allowed": ["openmm_60_opencl",
+                                        "openmm_60_cpu",
+                                        "openmm_60_cuda",
+                                        "openmm_60_opencl_ps4",
+                                        "openmm_60_cpu_ps4",
+                                        "openmm_55_opencl",
+                                        "openmm_55_cuda"],
                     "stage": "disabled", private", "beta", or "public"
                     "options": {
                         "steps_per_frame": 50000,

@@ -103,6 +103,18 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         if expected_code == 200:
             return json.loads(reply.body.decode())
 
+    def _add_engine(self, auth, name='openmm', description='gibberish'):
+        headers = {'Authorization': auth}
+        body = {
+            'engine': name,
+            'description': description
+        }
+        reply = self.fetch('/engines', method='POST', headers=headers, body='')
+        print(reply)
+
+    def test_add_engine(self):
+        self._add_manager()['token']
+
     def test_add_donor(self):
         username = 'jesse_v'
         email = 'jv@jv.com'
