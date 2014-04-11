@@ -57,8 +57,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         options = {'steps_per_frame': 50000}
         body = {
             'description': description,
-            'engine': ['openmm'],
-            'engine_versions': ['6.0'],
+            'engines': ['openmm_opencl', 'openmm_cuda'],
             'options': options
             }
         reply = self.fetch('/targets', method='POST', headers=headers,
@@ -71,8 +70,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertTrue(float(content['creation_date'])-time.time() < 2)
         self.assertEqual(content['description'], description)
         self.assertEqual(content['stage'], 'private')
-        self.assertEqual(content['engine'], ['openmm'])
-        self.assertEqual(content['engine_versions'], ['6.0'])
+        self.assertEqual(content['engines'], ['openmm_opencl', 'openmm_cuda'])
         self.assertEqual(content['options'], options)
         content['target_id'] = target_id
         return content
@@ -81,8 +79,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         headers = {'Authorization': auth}
         body = {
             'engine': 'openmm',
-            'engine_version': '6.0',
-            'description': 'v12',
+            'description': 'testing',
         }
         reply = self.fetch('/core/keys', method='POST', headers=headers,
                            body=json.dumps(body))
@@ -102,18 +99,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, expected_code)
         if expected_code == 200:
             return json.loads(reply.body.decode())
-
-    def _add_engine(self, auth, name='openmm', description='gibberish'):
-        headers = {'Authorization': auth}
-        body = {
-            'engine': name,
-            'description': description
-        }
-        reply = self.fetch('/engines', method='POST', headers=headers, body='')
-        print(reply)
-
-    def test_add_engine(self):
-        self._add_manager()['token']
 
     def test_add_donor(self):
         username = 'jesse_v'
@@ -282,12 +267,11 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         options = result['options']
         # update using a valid target_id
         description2 = 'hahah'
-        new_engines = ['openmm', 'ocorecpu']
+        new_engines = ['openmm', 'ocorecpu', 'test_engine']
         body = {
             'description': description2,
             'stage': 'public',
-            'engine_versions': ['9.9', '5.0'],
-            'engines_allowed': new_engines,
+            'engines': new_engines,
         }
         reply = self.fetch('/targets/update/'+target_id, method='PUT',
                            headers=headers, body=json.dumps(body))
@@ -298,10 +282,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['description'], description2)
         self.assertEqual(content['owner'], email)
         self.assertEqual(content['stage'], 'public')
-        self.assertEqual(content['engine'], new_engines)
-        self.assertEqual(set(content['engine_versions']), set(['9.9', '5.0']))
+        self.assertEqual(content['engines'], new_engines)
         self.assertEqual(content['options'], options)
-
         # update using an invalid target_id
         reply = self.fetch('/targets/update/bad_id', method='PUT',
                            headers=headers, body=json.dumps(body))
@@ -334,6 +316,4 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
-    #suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
-    #suite.addTest(WSInitTestCase())
     unittest.TextTestRunner(verbosity=3).run(suite)

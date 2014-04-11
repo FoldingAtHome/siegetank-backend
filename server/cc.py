@@ -49,9 +49,8 @@ def authenticate_core(method):
             return self.set_status(401)
         else:
             content = json.loads(self.request.body.decode())
-            engine = content['engine']
-            engine_version = content['engine_version']
-            query = {'engine_version': engine_version, 'engine': engine}
+            core_engine = content['engine']
+            query = {'engines': {'$in': [core_engine]}}
             cursor = self.mdb.cores.keys
             results = cursor.find(query, {'_id': 1})
             keys = []
@@ -385,14 +384,11 @@ class TargetUpdateHandler(BaseHandler):
 
                 {
                     "stage": "disabled", private", "beta", "public"  //optional
-                    "engines_allowed": ["openmm", "openmm_cluster"]  //optional
-                    "engine_versions":  ["6.0", "6.5"]  //optional
+                    "engines": ["openmm", "openmm_cluster"]  //optional
                     "description": "description"  //optional
                     "weight": 2 // optional
                     "shards": ["scv1", "sc2"] // optional
                 }
-
-                .. note:: ``engine_versions`` will only affect future streams.
 
                 .. note:: modifying ``stage`` only affects future assignments.
                     If you wish to stop the streams, you must explicitly stop
@@ -414,10 +410,9 @@ class TargetUpdateHandler(BaseHandler):
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         payload = {}
-        if 'engines_allowed' in content:
-            payload['engines_allowed'] = content['engines_allowed']
-        if 'engine_versions' in content:
-            payload['engine_versions'] = content['engine_versions']
+        print(content)
+        if 'engines' in content:
+            payload['engines'] = content['engines']
         if 'stage' in content:
             if content['stage'] in ['disabled', 'private', 'beta', 'public']:
                 payload['stage'] = content['stage']
@@ -442,81 +437,86 @@ def yates_generator(x):
         yield x[i]
 
 
-class EnginesHandler(BaseHandler):
-    @authenticate_manager
-    def get(self):
-        """ http:get:: /engines
+# Note: Ability to add custom engine types by a manager is currently disabled
+# until later on. We still need to decide if we will allow managers to schedule
+# arbitrary types of code.
 
-            Get a list of all available engines.
+# class EnginesHandler(BaseHandler):
+#     @authenticate_admin
+#     def get(self):
+#         """ http:get:: /engines
 
-            :reqheader Authorization: access token of a Manager
+#             Get a list of all available engines.
 
-            **Example reply**
+#             :reqheader Authorization: access token of a Manager
 
-                {
-                    "openmm_60_opencl" : {
-                        "owner": "proteneer@gmail.com",
-                        "description": "OpenMM 6.0 running OpenCL platform"
-                    },
-                    "openmm_55_cuda" : {
-                        "owner": "proteneer@gmail.com",
-                        "description": "OpenMM 5.5 running CUDA platform"
-                    },
-                    "openmm_61_cpu": {
-                        "owner": "proteneer@gmail.com",
-                        "description": "OpenMM 6.1 running CPU platform"
-                    }
-                }
+#             **Example reply**
 
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
+#                 {
+#                     "openmm_60_opencl" : {
+#                         "owner": "proteneer@gmail.com",
+#                         "description": "OpenMM 6.0 running OpenCL platform."
+#                     },
+#                     "openmm_55_cuda" : {
+#                         "owner": "proteneer@gmail.com",
+#                         "description": "OpenMM 5.5 running CUDA platform."
+#                     },
+#                     "openmm_61_cpu": {
+#                         "owner": "proteneer@gmail.com",
+#                         "description": "OpenMM 6.1 running CPU platform."
+#                     }
+#                 }
 
-        """
-        self.set_status(400)
-        cursor = self.mdb.engines.types
-        results = cursor.find()
-        body = dict()
-        for match in results:
-            engine = match['_id']
-            match.pop('_id')
-            body[engine] = match
-        self.set_status(200)
-        self.write(body)
+#             :status 200: OK
+#             :status 400: Bad request
+#             :status 401: Unauthorized
 
-    @authenticate_manager
-    def post(self):
-        """ http:put:: /engines
+#         """
+#         self.set_status(400)
+#         cursor = self.mdb.engines.types
+#         results = cursor.find()
+#         body = dict()
+#         for match in results:
+#             engine = match['_id']
+#             match.pop('_id')
+#             body[engine] = match
+#         self.set_status(200)
+#         self.write(body)
 
-            Add a new engine.
+#     @authenticate_admin
+#     def put(self):
+#         """ http:put:: /engines
 
-            :reqheader Authorization: access token of a Manager
+#             Add a new engine.
 
-            **Example request**
+#             :reqheader Authorization: access token of a Manager
 
-                {
-                    "name": "openmm_60_opencl",
-                    "description": "OpenMM 6.0 running on OpenCL"
-                }
+#             **Example request**
 
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
+#                 {
+#                     "name": "openmm_60_opencl",
+#                     "description": "OpenMM 6.0 running on OpenCL"
+#                 }
 
-        """
-        self.set_status(400)
-        content = json.loads(self.request.body.decode())
-        engine_type = content['name']
-        description = content['description']
-        owner = self.get_current_user()
-        cursor = self.mdb.engines.types
-        result = cursor.insert({
-            '_id': engine_type,
-            'description': description,
-            'owner': owner
-            })
-        print(result)
-        self.set_status(200)
+#             :status 200: OK
+#             :status 400: Bad request
+#             :status 401: Unauthorized
+
+#         """
+#         self.set_status(400)
+#         content = json.loads(self.request.body.decode())
+#         engine_type = content['name']
+#         description = content['description']
+#         owner = self.get_current_user()
+#         cursor = self.mdb.engines.types
+#         result = cursor.insert({
+#             '_id': engine_type,
+#             'description': description,
+#             'owner': owner
+#             })
+#         print(result)
+#         self.set_status(200)
+
 
 class CoreKeysHandler(BaseHandler):
     @authenticate_admin
@@ -534,7 +534,7 @@ class CoreKeysHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "engine": "openmm", // required
+                    "engine": "openmm_60_opencl", // required
                     "description": "some string", // required
                 }
 
@@ -638,36 +638,28 @@ class CoreAssignHandler(BaseHandler):
         """
         .. http:post:: /core/assign
 
-            Assign a stream from an SCV to a core. There are several corner
-            cases to be aware of. Managers can specify their own set of tokens
-            if desired. 
-
+            Assign a stream from an SCV to a core.
 
             The assignment algorithm is:
 
             1. Each user is assigned a weight by an administrator.
-            2. The set of users who have targets that
-                a. match the core's "engine"
-                c. allow the core's "engine_version"
-            3. A user is chosen based on his weight relative to other users
-            4. One of the user's targets is chosen based on the target's
-                weights
+            2. The set of users who have targets that match the core's engine
+                is determined.
+            3. A user is chosen based on his weight relative to other users.
+            4. One of the user's targets is chosen based on the target weights
 
             **Example request**
 
             .. sourcecode:: javascript
 
                 {
-                    "engine": "openmm",
-                    "engine_version": "6.0",
+                    "engine": "openmm_50_opencl",
                     "donor_token": "token", // optional
                     "target_id": "target_id" // optional
                 }
 
             .. note:: If ``target_id`` is specified, then the CC will disregard
                 the assignment algorithm.
-
-            .. note:: If the ``Authorization`` header corresponds to that 
 
             **Example reply**
 
@@ -698,28 +690,23 @@ class CoreAssignHandler(BaseHandler):
             donor_id = query['_id']
         else:
             donor_id = None
-        engine = content['engine']
-        engine_version = content['engine_version']
+        core_engine = content['engine']
         cursor = self.mdb.data.targets
         if 'target_id' in content:
             target_id = content['target_id']
             result = cursor.find_one({'_id': target_id},
-                                     {'engine': 1,
-                                      'engine_versions': 1,
+                                     {'engines': 1,
                                       'shards': 1,
                                       'options': 1,
                                       })
-            if engine not in result['engine']:
+            if core_engine not in result['engines']:
                 return self.error('core engine not allowed for this target')
-            if engine_version not in result['engine_versions']:
-                return self.error('core engine_version not allowed')
             if not result['shards']:
                 return self.error('target specified has no shards')
             shards = result['shards']
             options = result['options']
         else:
-            result = cursor.find({'engine': {'$in': [engine]},
-                                  'engine_versions': {'$in': [engine_version]},
+            result = cursor.find({'engines': {'$in': [core_engine]},
                                   'stage': 'public'},
                                  {'owner': 1,
                                   '_id': 1,
@@ -980,10 +967,8 @@ class TargetInfoHandler(BaseHandler):
                     "owner": "diwakar@gmail.com",
                     "creation_date": 1392784469,
                     "stage": "beta",
-                    "allowed_ws": ["raynor", "zeratul", "kerrigan"],
-                    "striated_ws": ["raynor", "zeratul"],
-                    "engine": "openmm"
-                    "engine_versions": ["6.0"]
+                    "shards": ["raynor", "zeratul"],
+                    "engines": ["openmm_50_opencl", "openmm_50_cpu"]
                     "files": ["filename1", "filename2"],
                     "options": {
                         "steps_per_frame": 50000,
@@ -1080,7 +1065,7 @@ class TargetsHandler(BaseHandler):
 
                 {
                     "description": "some JSON compatible description",
-                    "engines_allowed": ["openmm_60_opencl",
+                    "engines": ["openmm_60_opencl",
                                         "openmm_60_cpu",
                                         "openmm_60_cuda",
                                         "openmm_60_opencl_ps4",
@@ -1122,11 +1107,7 @@ class TargetsHandler(BaseHandler):
         #----------------#
         # verify request #
         #----------------#
-        engine = content['engine']
-        engine_versions = content['engine_versions']
-        for k in engine_versions:
-            if type(k) is not str:
-                return self.error('engine version must be a list of strings')
+        engines = content['engines']
         description = content['description']
         if 'stage' in content:
             if content['stage'] in ['disabled', 'private', 'beta', 'public']:
@@ -1153,8 +1134,7 @@ class TargetsHandler(BaseHandler):
             '_id': target_id,
             'description': description,
             'creation_date': time.time(),
-            'engine': engine,
-            'engine_versions': engine_versions,
+            'engines': engines,
             'owner': self.get_current_user(),
             'stage': stage,
             'options': options,
