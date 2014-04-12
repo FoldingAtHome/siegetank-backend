@@ -39,7 +39,7 @@ def generate_token(cc, email, password):
 
 
 def refresh_scvs(cc):
-    """ Refresh the list of the SCVs. """
+    """ Update and return the status of the workservers owned by ``cc`` """
     global scvs
     url = 'https://'+cc+'/scvs/status'
     reply = requests.get(url, verify=is_domain(cc))
@@ -208,8 +208,7 @@ class Target(Base):
         self._options = None
         self._creation_date = None
         self._shards = None
-        self._engine = None
-        self._engine_versions = None
+        self._engines = None
         self._streams = None
         self._weight = None
         super(Target, self).__init__(cc_uri)
@@ -273,8 +272,7 @@ class Target(Base):
         self._options = info['options']
         self._creation_date = info['creation_date']
         self._shards = info['shards']
-        self._engine = info['engine']
-        self._engine_versions = info['engine_versions']
+        self._engines = info['engines']
         self._weight = info['weight']
 
     @property
@@ -290,38 +288,38 @@ class Target(Base):
 
     @property
     def description(self):
-        """ Get the description of the target """
+        """ Get the description of the target. """
         if not self._description:
             self.reload_info()
         return self._description
 
     @property
     def options(self):
-        """ Get the options for this target """
+        """ Get the options for this target. """
         if not self._options:
             self.reload_info()
         return self._options
 
     @property
     def creation_date(self):
-        """ Get the date the target was created """
+        """ Get the date the target was created. """
         if not self._creation_date:
             self.reload_info()
         return self._creation_date
 
     @property
     def shards(self):
-        """ Return a list of SCVs the streams are sharded across """
+        """ Return a list of SCVs the streams are sharded across. """
         if not self._shards:
             self.reload_info()
         return self._shards
 
     @property
-    def engine(self):
-        """ Get the engine type """
-        if not self._engine:
+    def engines(self):
+        """ Get the list of engines being used. """
+        if not self._engines:
             self.reload_info()
-        return self._engine
+        return self._engines
 
     @property
     def engine_versions(self):
@@ -335,7 +333,7 @@ class Target(Base):
         return self._weight
 
 
-def add_target(options, engine, engine_versions, cc_uri=None, weight=1,
+def add_target(options, engines, cc_uri=None, weight=1,
                description='', stage='private', files=None):
     """ Add a target to be managed by the CC at ``cc_uri``.
 
@@ -343,9 +341,8 @@ def add_target(options, engine, engine_versions, cc_uri=None, weight=1,
     discard_water, xtc_precision, etc.
 
     :param options: dict, core specific options like ``steps_per_frame``.
-    :param engine: str, eg. ``openmm``
-    :param engine_versions: str, eg ``6.0``
-    :param cc_uri: str, which cc to add the target to, eg. flash.stanford.edu
+    :param engine: list, eg. ["openmm_60_opencl", "openmm_50_cuda"]
+    :param cc_uri: str, which cc to use, do not add http prefixes
     :param description: str, JSON safe plain text description
     :param stage: str, stage of the target, allowed values are 'disabled',
         'private', 'public'
@@ -360,9 +357,8 @@ def add_target(options, engine, engine_versions, cc_uri=None, weight=1,
     if files:
         body['files'] = encode_files(files)
     body['options'] = options
-    body['engine'] = engine
-    assert type(engine_versions) == list
-    body['engine_versions'] = engine_versions
+    body['engines'] = engines
+    assert type(engines) == list
     body['description'] = description
     body['stage'] = stage
     body['weight'] = weight
@@ -383,8 +379,7 @@ load_stream = Stream
 
 
 def get_targets(cc_uri=None):
-    """ Return a set of targets on the CC owned by you. If ``cc_uri`` is not
-    provided, then this retrieves the targets on the cc specified during login.
+    """ Return your set of targets.
 
     """
     if cc_uri is None:

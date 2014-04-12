@@ -89,7 +89,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
                    }
         managers = self.cc.mdb.users.managers
         managers.insert(db_body)
-        self.core_token = core_token
         self.auth_token = token
         self.manager = test_manager
 
