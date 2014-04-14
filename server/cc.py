@@ -405,10 +405,10 @@ class TargetUpdateHandler(BaseHandler):
                     an SCV, then you are manually responsible for the cleanup
                     unless you re-attach it.
 
-                .. note:: specifying ``options`` will replace the original
-                    options entirely. This means that if you are updating only
-                    one field, you must also include the values of all other
-                    fields. TODO: THIS MAY CHANGE
+                .. note:: fields in ``options`` will be updated if present,
+                    otherwise a new field will be added. Note that it is not
+                    possible to delete fields inside ``options``, so you must
+                    take care that the names are correct.
 
             **Example reply**
 
@@ -433,7 +433,6 @@ class TargetUpdateHandler(BaseHandler):
             for key, value in content['options'].items():
                 payload['options.'+key] = value
         cursor = self.mdb.data.targets
-        print('PAYLOAD:', payload)
         result = cursor.update({'_id': target_id}, {'$set': payload})
         if result['updatedExisting']:
             self.set_status(200)

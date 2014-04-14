@@ -73,9 +73,8 @@ class TestSiegeTank(unittest.TestCase):
         encoded_system = base64.b64encode(system_gz).decode()
         encoded_intg = base64.b64encode(integrator_gz).decode()
 
-        options = {'steps_per_frame': 10000}
+        options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}
         engines = ['openmm_60_opencl', 'openmm_60_cuda']
-        description = 'Test case for siegetank'
         files = {'system.xml.gz.b64': encoded_system,
                  'integrator.xml.gz.b64': encoded_intg
                  }
@@ -84,7 +83,6 @@ class TestSiegeTank(unittest.TestCase):
         target = siegetank.base.add_target(cc_uri=self.cc_uri,
                                            options=options,
                                            engines=engines,
-                                           description=description,
                                            stage='public',
                                            files=files,
                                            weight=weight,
@@ -92,7 +90,6 @@ class TestSiegeTank(unittest.TestCase):
 
         self.assertEqual(target.options, options)
         self.assertEqual(target.engines, engines)
-        self.assertEqual(target.description, target.description)
         self.assertEqual(target.weight, weight)
         self.assertAlmostEqual(target.creation_date, creation_time, places=0)
         target_ids = set()

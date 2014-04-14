@@ -204,7 +204,6 @@ class Target(Base):
         if cc_uri is None:
             raise Exception("You are not logged in to a cc!")
         self._id = target_id
-        self._description = None
         self._options = None
         self._creation_date = None
         self._shards = None
@@ -268,7 +267,6 @@ class Target(Base):
         if reply.status_code != 200:
             raise Exception('Failed to load target info')
         info = json.loads(reply.text)
-        self._description = info['description']
         self._options = info['options']
         self._creation_date = info['creation_date']
         self._shards = info['shards']
@@ -285,13 +283,6 @@ class Target(Base):
         """ Get the set of streams in this target """
         self.reload_streams()
         return self._streams
-
-    @property
-    def description(self):
-        """ Get the description of the target. """
-        if not self._description:
-            self.reload_info()
-        return self._description
 
     @property
     def options(self):
@@ -333,17 +324,12 @@ class Target(Base):
         return self._weight
 
 
-def add_target(options, engines, cc_uri=None, weight=1,
-               description='', stage='private', files=None):
+def add_target(options, engines, cc_uri=None, weight=1, stage='private', files=None):
     """ Add a target to be managed by the CC at ``cc_uri``.
 
-    ``options`` is a dictionary of ,
-    discard_water, xtc_precision, etc.
-
-    :param options: dict, core specific options like ``steps_per_frame``.
+    :param options: dict, describing target's options.
     :param engine: list, eg. ["openmm_60_opencl", "openmm_50_cuda"]
     :param cc_uri: str, which cc to use, do not add http prefixes
-    :param description: str, JSON safe plain text description
     :param stage: str, stage of the target, allowed values are 'disabled',
         'private', 'public'
     :param weight: int, the weight of the target relative to your other targets
@@ -359,7 +345,6 @@ def add_target(options, engines, cc_uri=None, weight=1,
     body['options'] = options
     body['engines'] = engines
     assert type(engines) == list
-    body['description'] = description
     body['stage'] = stage
     body['weight'] = weight
     url = 'https://'+cc_uri+'/targets'

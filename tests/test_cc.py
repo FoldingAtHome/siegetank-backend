@@ -278,16 +278,15 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['stage'], 'public')
         self.assertEqual(content['engines'], new_engines)
         self.assertEqual(content['options'], options)
-        print('ORIGINAL OPTIONS:', options)
-        new_options = {'description': 'ram'}
-        body = {'options': new_options}
+        options['description'] = 'ram'
+        body = {'options': options}
         reply = self.fetch('/targets/update/'+target_id, method='PUT',
                            headers=headers, body=json.dumps(body))
         self.assertEqual(reply.code, 200)
         reply = self.fetch('/targets/info/'+target_id)
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
-        self.assertEqual(content['options'], new_options)
+        self.assertEqual(content['options'], options)
         # update using an invalid target_id
         reply = self.fetch('/targets/update/bad_id', method='PUT',
                            headers=headers, body=json.dumps(body))
