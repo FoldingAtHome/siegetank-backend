@@ -515,10 +515,18 @@ class CoreStartHandler(BaseHandler):
                 {
                     "stream_id": "uuid4",
                     "target_id": "uuid4",
-                    "files": {"state.xml.gz.b64": "content.b64",
-                              "integrator.xml.gz.b64": "content.b64",
-                              "system.xml.gz.b64": "content.b64"
-                              }
+                    "files": {
+                        "state.xml.gz.b64": "content.b64",
+                        "integrator.xml.gz.b64": "content.b64",
+                        "system.xml.gz.b64": "content.b64"
+                    }
+                    "options": {
+                        "steps_per_frame": 50000,
+                        "title": "Dihydrofolate Reductase", // used by some
+                        "description": "This protein is the canonical benchmark
+                            protein used by the MD community."
+                        "category": "Benchmark"
+                    }
                 }
 
             :status 200: OK

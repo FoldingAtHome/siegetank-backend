@@ -53,10 +53,11 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
     def _post_target(self, auth):
         headers = {'Authorization': auth}
-        description = "Diwakar and John's top secret project"
-        options = {'steps_per_frame': 50000}
+        options = {
+            'description': "Diwakar and John's top secret project",
+            'steps_per_frame': 50000
+        }
         body = {
-            'description': description,
             'engines': ['openmm_opencl', 'openmm_cuda'],
             'options': options
             }
@@ -68,7 +69,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
         self.assertTrue(float(content['creation_date'])-time.time() < 2)
-        self.assertEqual(content['description'], description)
         self.assertEqual(content['stage'], 'private')
         self.assertEqual(content['engines'], ['openmm_opencl', 'openmm_cuda'])
         self.assertEqual(content['options'], options)
@@ -263,10 +263,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         target_id = result['target_id']
         options = result['options']
         # update using a valid target_id
-        description2 = 'hahah'
         new_engines = ['openmm', 'ocorecpu', 'test_engine']
         body = {
-            'description': description2,
             'stage': 'public',
             'engines': new_engines,
         }
@@ -276,11 +274,20 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         reply = self.fetch('/targets/info/'+target_id)
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
-        self.assertEqual(content['description'], description2)
         self.assertEqual(content['owner'], email)
         self.assertEqual(content['stage'], 'public')
         self.assertEqual(content['engines'], new_engines)
         self.assertEqual(content['options'], options)
+        print('ORIGINAL OPTIONS:', options)
+        new_options = {'description': 'ram'}
+        body = {'options': new_options}
+        reply = self.fetch('/targets/update/'+target_id, method='PUT',
+                           headers=headers, body=json.dumps(body))
+        self.assertEqual(reply.code, 200)
+        reply = self.fetch('/targets/info/'+target_id)
+        self.assertEqual(reply.code, 200)
+        content = json.loads(reply.body.decode())
+        self.assertEqual(content['options'], new_options)
         # update using an invalid target_id
         reply = self.fetch('/targets/update/bad_id', method='PUT',
                            headers=headers, body=json.dumps(body))

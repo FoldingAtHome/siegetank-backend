@@ -385,9 +385,14 @@ class TargetUpdateHandler(BaseHandler):
                 {
                     "stage": "disabled", private", "beta", "public"  //optional
                     "engines": ["openmm", "openmm_cluster"]  //optional
-                    "description": "description"  //optional
                     "weight": 2 // optional
                     "shards": ["scv1", "sc2"] // optional
+                    "options": {
+                        "description": "omgwtfbbq", // optional
+                        "title": "DHFR",
+                        "category": "wow",
+                        "steps_per_frame": 50000
+                    } // optional
                 }
 
                 .. note:: modifying ``stage`` only affects future assignments.
@@ -399,6 +404,11 @@ class TargetUpdateHandler(BaseHandler):
                     permanently disabled for whatever reason. If you detach
                     an SCV, then you are manually responsible for the cleanup
                     unless you re-attach it.
+
+                .. note:: specifying ``options`` will replace the original
+                    options entirely. This means that if you are updating only
+                    one field, you must also include the values of all other
+                    fields. TODO: THIS MAY CHANGE
 
             **Example reply**
 
@@ -417,11 +427,13 @@ class TargetUpdateHandler(BaseHandler):
                 payload['stage'] = content['stage']
             else:
                 return self.error('invalid stage')
-        if 'description' in content:
-            payload['description'] = content['description']
         if 'weight' in content:
             payload['weight'] = max(content['weight'], 0)
+        if 'options' in content:
+            for key, value in content['options'].items():
+                payload['options.'+key] = value
         cursor = self.mdb.data.targets
+        print('PAYLOAD:', payload)
         result = cursor.update({'_id': target_id}, {'$set': payload})
         if result['updatedExisting']:
             self.set_status(200)
@@ -962,13 +974,13 @@ class TargetInfoHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "description": "Some secret project",
                     "owner": "diwakar@gmail.com",
                     "creation_date": 1392784469,
                     "stage": "beta",
                     "shards": ["raynor", "zeratul"],
                     "engines": ["openmm_50_opencl", "openmm_50_cpu"]
                     "options": {
+                        "description": "Some secret project",
                         "steps_per_frame": 50000,
                     }
                 }
@@ -1062,16 +1074,20 @@ class TargetsHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "description": "some JSON compatible description",
-                    "engines": ["openmm_60_opencl",
-                                "openmm_60_cpu",
-                                "openmm_60_cuda",
-                                "openmm_60_opencl_ps4",
-                                "openmm_60_cpu_ps4",
-                                "openmm_55_opencl",
-                                "openmm_55_cuda"],
-                    "stage": "disabled", private", "beta", or "public"
+                    "engines": [
+                        "openmm_60_opencl",
+                        "openmm_60_cpu",
+                        "openmm_60_cuda",
+                        "openmm_60_opencl_ps4",
+                        "openmm_60_cpu_ps4",
+                        "openmm_55_opencl",
+                        "openmm_55_cuda"
+                    ],
+                    "stage": "disabled", "private", or "public"
                     "options": {
+                        "title": "Dihydrofolate reductase",
+                        "description": "project description",
+                        "category": "Benchmark",
                         "steps_per_frame": 50000,
                         "xtc_precision": 3,
                         "discard_water": True
@@ -1081,10 +1097,10 @@ class TargetsHandler(BaseHandler):
 
             .. note:: If ``stage`` is not given, then the stage defaults to
                 "private".
-            .. note:: ``description`` must be a JSON compatible string. That
-                means it must not contain double quotation marks and slashes.
-            .. note:: ``options`` pertains to the target as a whole. Options
-                should be short and sweet, such as number of steps per frame.
+            .. note:: ``description`` must be a JSON compatible string.
+            .. note:: ``options`` are generally core specific. Different cores
+                will interpret options differently. Refer to the core guide for
+                additional info.
 
             **Example reply**
 
@@ -1106,9 +1122,8 @@ class TargetsHandler(BaseHandler):
         # verify request #
         #----------------#
         engines = content['engines']
-        description = content['description']
         if 'stage' in content:
-            if content['stage'] in ['disabled', 'private', 'beta', 'public']:
+            if content['stage'] in ['disabled', 'private', 'public']:
                 stage = content['stage']
             else:
                 return self.error('unsupported stage')
@@ -1130,7 +1145,6 @@ class TargetsHandler(BaseHandler):
         targets = self.mdb.data.targets
         payload = {
             '_id': target_id,
-            'description': description,
             'creation_date': time.time(),
             'engines': engines,
             'owner': self.get_current_user(),
