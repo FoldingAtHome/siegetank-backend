@@ -968,7 +968,6 @@ class TargetInfoHandler(BaseHandler):
                     "stage": "beta",
                     "shards": ["raynor", "zeratul"],
                     "engines": ["openmm_50_opencl", "openmm_50_cpu"]
-                    "files": ["filename1", "filename2"],
                     "options": {
                         "steps_per_frame": 50000,
                     }

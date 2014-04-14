@@ -24,7 +24,7 @@ def login(cc, token):
 
 
 def generate_token(cc, email, password):
-    """ Generate a login token and login automatically. """
+    """ Generate a new login token and login automatically. """
     data = {
         "email": email,
         "password": password
@@ -162,33 +162,33 @@ class Stream(Base):
 
     @property
     def id(self):
-        """ Return the stream's id """
+        """ Return the stream's id. """
         return self._id
 
     @property
     def active(self):
-        """ Returns True if the stream is activated by a core """
+        """ Returns True if the stream is activated by a core. """
         if not self._active:
             self.reload_info()
         return self._active
 
     @property
     def frames(self):
-        """ Return the number of frames completed so far """
+        """ Return the number of frames completed so far. """
         if not self._frames:
             self.reload_info()
         return self._frames
 
     @property
     def status(self):
-        """ Return the status of the stream """
+        """ Return the status of the stream. """
         if not self._status:
             self.reload_info()
         return self._status
 
     @property
     def error_count(self):
-        """ Return the number of errors this stream has encountered """
+        """ Return the number of errors this stream has encountered. """
         if not self._error_count:
             self.reload_info()
         return self._error_count

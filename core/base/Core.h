@@ -14,23 +14,27 @@ class Core {
 public:
 
     // checkpoint_send_interval is in number of times per day (user config)
-    Core(int checkpoint_send_interval,
-         std::string engine,
-         std::string engine_version);
+    Core(std::string engine, std::string core_token,
+         int checkpoint_send_interval = 500);
 
     ~Core();
 
     /* Main MD loop */
     virtual void main();
 
-    /* Start the stream and fetch files */
-    void startStream(const Poco::URI &cc_uri,
-                     std::map<std::string, std::string> &files);
+    /* Start the stream and fetch files. options is a JSON string. */
+    void startStream(const std::string &cc_uri,
+                     std::map<std::string, std::string> &files,
+                     std::string &options,
+                     std::string &description);
+
+    /* Disengage the core from the stream and destroy the session */
+    void stopStream(std::string error_msg = "");
 
     /* Send frame files to the WS. This method automatically base64 encodes
        the file */
     void sendFrame(const std::map<std::string, std::string> &files,
-                   int frame_count=1, float speed=0, bool gzip=false) const;
+                   int frame_count=1, bool gzip=false) const;
 
     /* Send checkpoint files to the WS. This method automatically base64
        encodes the files, and adds '.b64' to the suffix. If gzip is true, the 
@@ -43,11 +47,8 @@ public:
            else:
             'state.xml' -> 'state.xml.b64'
     */
-    void sendCheckpointFiles(const std::map<std::string, std::string> &files,
-                             bool gzip=false) const;
-
-    /* Disengage the core from the stream and destroys the session */
-    void stopStream(std::string error_msg = "");
+    void sendCheckpoint(const std::map<std::string, std::string> &files,
+                        bool gzip=false) const;
 
     /* Send a heartbeat */
     void sendHeartbeat() const;
@@ -89,6 +90,8 @@ protected:
 
 private:
 
+    const string core_token;
+
     /* how often we send checkpoints in seconds */
     const int _checkpoint_send_interval;
 
@@ -109,7 +112,7 @@ private:
 
     Poco::URI _ws_uri;
 
-    /* every request must be validated by the authorization token */
+    /* every request must be validated by the Authorization token */
     std::string _auth_token;
 
     const std::string _engine;
