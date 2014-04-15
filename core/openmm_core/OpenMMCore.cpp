@@ -219,8 +219,11 @@ void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
                              const string &target_id) {
     start_time_ = time(NULL);
+    cout << "A" << endl;
     Core::startStream(cc_uri, donor_token, target_id);
+    cout << "B" << endl;
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
+    cout << steps_per_frame_ << endl;
     OpenMM::System *shared_system;
     OpenMM::State *initial_state;
     OpenMM::Integrator *ref_intg;
@@ -231,14 +234,16 @@ void OpenMMCore::startStream(const string &cc_uri,
     } else {
         throw std::runtime_error("Cannot find system.xml");
     }
-
+    cout << "C" << endl;
     if(files_.find("state.xml") != files_.end()) {
+        cout << "C.1" << endl;
         istringstream state_stream(files_["state.xml"]);
         initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
     } else {
+        cout << "C.2" << endl;
         throw std::runtime_error("Cannot find state.xml");
     }
-
+    cout << "D" << endl;
     if(files_.find("integrator.xml") != files_.end()) {
         istringstream core_integrator_stream(files_["integrator.xml"]);
         core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
@@ -263,6 +268,14 @@ void OpenMMCore::startStream(const string &cc_uri,
     changemode(0);
 }
 
+
+void OpenMMCore::stopStream(string error_msg) {
+    Core::stopStream(error_msg);
+    delete ref_context_;
+    ref_context_ = NULL;
+    delete core_context_;
+    ref_context_ = NULL;
+}
 
 void OpenMMCore::flushCheckpoint() {
     if(last_checkpoint_.size() == 0)

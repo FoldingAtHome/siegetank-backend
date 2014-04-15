@@ -26,17 +26,13 @@ public:
 
     virtual void main();
 
-    /* start the core */
     virtual void startStream(const std::string &uri,
                              const std::string &donor_token = "",
                              const std::string &target_id = "");
 
-    //virtual void stopStream(std::string error_msg="");
+    virtual void stopStream(std::string error_msg="");
 
-    int stepsPerFrame() const {
-        return steps_per_frame_;
-    }
-
+protected:
     /* check the step and determine if we need to 1) write frame/send frame, 
     or 2) send a checkpoint */
     void checkFrameWrite(int current_step);

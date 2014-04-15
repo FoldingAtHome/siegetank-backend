@@ -289,7 +289,7 @@ void Core::startStream(const string &cc_uri,
         }
         files_[filename] = filedata;
     }
-    options_ = json_object["options"].to_str();
+    options_ = json_object["options"].serialize();
 }
 
 void Core::sendFrame(const map<string, string> &files, 

@@ -24,6 +24,8 @@
 
 #include "picojson.h"
 
+#include <iostream>
+
 /**
  * A Core provides the basic interface for talking to the Siegetank Backend.
  *
@@ -43,7 +45,6 @@ public:
     virtual void main();
 
 protected:
-
     /* Start the stream and fetch files. options is a JSON string. */
     virtual void startStream(const std::string &cc_uri,
                              const std::string &donor_token = "",
@@ -74,6 +75,7 @@ protected:
     /* get a specific option */
     template<typename T>
     T getOption(const std::string &key) const {
+        std::cout << options_ << std::endl;
         std::stringstream ss(options_);
         picojson::value value;
         ss >> value;
