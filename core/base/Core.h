@@ -42,6 +42,8 @@ public:
     /* Main MD loop */
     virtual void main();
 
+protected:
+
     /* Start the stream and fetch files. options is a JSON string. */
     virtual void startStream(const std::string &cc_uri,
                              const std::string &donor_token = "",
@@ -79,7 +81,6 @@ public:
         return object[key].get<T>();
     }
 
-protected:
     std::map<std::string, std::string> files_;
     std::string target_id_;
     std::string stream_id_;
