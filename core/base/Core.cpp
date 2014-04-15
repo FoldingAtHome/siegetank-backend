@@ -294,7 +294,7 @@ void Core::sendFrame(const map<string, string> &files,
     }
 }
 
-void Core::sendCheckpointFiles(const map<string, string> &files, 
+void Core::sendCheckpoint(const map<string, string> &files, 
     bool gzip) const {
 
     Poco::Net::HTTPRequest request("PUT", "/core/checkpoint");
