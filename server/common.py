@@ -21,7 +21,7 @@ import time
 import tornado
 import ipaddress
 import os
-import pymongo
+import motor
 import signal
 import tornado.options
 import functools
@@ -152,7 +152,7 @@ class BaseServerMixin():
                 except AttributeError:
                     print('WARNING: SSL not enabled for MongoDB - this is OK\
                            if this message shows up during unit tests')
-            self.mdb = pymongo.MongoClient(host, **ssl_kwargs)
+            self.mdb = motor.MongoClient(host, **ssl_kwargs)
             self.mdb.community.donors.ensure_index("token")
 
         signal.signal(signal.SIGINT, self.shutdown)

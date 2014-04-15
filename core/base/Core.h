@@ -74,8 +74,7 @@ protected:
     template<typename T>
     T getOption(const std::string &key) const {
         std::stringstream ss(options_);
-        picojson::value value;
-        ss >> value;
+        picojson::value value; ss >> value;
         picojson::value::object &object = value.get<picojson::object>();
         return object[key].get<T>();
     }
