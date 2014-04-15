@@ -35,78 +35,6 @@ string gen_random(const int len) {
     return s;
 }
 
-/*
-
-void test_should_send_checkpoint() {
-    int checkpoint_increment = 6;
-    Core core(checkpoint_increment, "openmm", "6.0");
-    time_t current_time = time(0);
-    if(core.shouldSendCheckpoint()) {
-        throw std::runtime_error("1. should_checkpoint() returned true");
-    }
-    sleep(checkpoint_increment+2);
-    if(!core.shouldSendCheckpoint()) {
-        throw std::runtime_error("2. should_checkpoint() returned false");
-    }
-    if(core.shouldSendCheckpoint()) {
-        throw std::runtime_error("3. should_checkpoint() returned true");
-    }
-    sleep(checkpoint_increment+2);
-    if(!core.shouldSendCheckpoint()) {
-        throw std::runtime_error("2. should_checkpoint() returned false");
-    }
-}
-
-void test_set_target_id() {
-    ifstream targets_file("target_ids.log");
-    string custom_target_id;
-    targets_file >> custom_target_id;
-    Core core(150, "openmm", "6.0");
-    Poco::URI uri("https://127.0.0.1:8980/core/assign");
-    core.target_id = custom_target_id;
-    map<string, string> stream_files;
-    cout << "starting stream" << endl;
-    core.startStream(uri, stream_files);
-}
-
-void test_donor_token() {
-    Core core(150, "openmm", "6.0");
-    Poco::URI uri("https://127.0.0.1:8980");
-    Poco::Net::Context::Ptr context = new Poco::Net::Context(
-    Poco::Net::Context::CLIENT_USE, "", 
-    Poco::Net::Context::VERIFY_NONE, 9, false);
-    Poco::Net::HTTPSClientSession cc_session(uri.getHost(),
-                                             uri.getPort(),
-                                             context);
-    Poco::Net::HTTPRequest request("POST", "/donors/auth");
-    string body;
-    body += "{\"username\": \"test_donor\", \"password\": \"test_donor_pass\"}";
-    request.setContentLength(body.length());
-    cc_session.sendRequest(request) << body;
-
-    Poco::Net::HTTPResponse response;
-    istream &content_stream = cc_session.receiveResponse(response);
-    if(response.getStatus() != 200) {
-        throw std::runtime_error("Bad authorizaton token!");
-    }
-    string content;
-    Poco::StreamCopier::copyToString(content_stream, content);
-
-    Poco::JSON::Parser parser;
-    Poco::Dynamic::Var result = parser.parse(content);
-    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-    string token;
-    token = object->get("token").convert<std::string>();
-
-    core.donor_token = token;
-    map<string, string> stream_files;
-
-    Poco::URI uri2("https://127.0.0.1:8980/core/assign");
-    core.startStream(uri2, stream_files);
-}
-
-*/
-
 void testStartStream(string donor_token="", string target_id="") { 
     ifstream core_keys("core_keys.log");
     string key;
@@ -178,24 +106,15 @@ void testStartStream(string donor_token="", string target_id="") {
 }
 
 int main() {
-    testStartStream();
     ifstream donor_tokens("donor_tokens.log");
     string donor_token;
     donor_tokens >> donor_token;
-    testStartStream(donor_token);
     ifstream target_ids("target_ids.log");
     string target_id;
     target_ids >> target_id;
+    testStartStream();
+    testStartStream(donor_token);
     testStartStream("", target_id);
     testStartStream(donor_token, target_id);
-
-    /*
-    test_set_target_id();
-    test_sigint_signal();
-    test_sigterm_signal();
-    test_donor_token();
-    test_should_send_checkpoint();
-    test_initialize_and_start();
-    */
     return 0;
 }
