@@ -50,8 +50,11 @@ public:
     /* Disengage the core from the stream and destroy the session */
     virtual void stopStream(std::string error_msg = "");
 
-    /* Send frame files to the WS. This method automatically base64 encodes
-       the file. */
+    /* Send frame files to the WS.  This method automatically base64
+       encodes the files, and adds '.b64' to the suffix. If 'gzip' is true, the 
+       files will first be gzipped, with a '.gz' suffix appended, and then b64
+       encoded.
+    */
     void sendFrame(const std::map<std::string, std::string> &files,
                    int frame_count=1, bool gzip=false) const;
 
@@ -59,11 +62,6 @@ public:
        encodes the files, and adds '.b64' to the suffix. If 'gzip' is true, the 
        files will first be gzipped, with a '.gz' suffix appended, and then b64
        encoded.
-
-       ex: if gzip == true:
-            'state.xml' -> 'state.xml.gz.b64'
-           else:
-            'state.xml' -> 'state.xml.b64'
     */
     void sendCheckpoint(const std::map<std::string, std::string> &files,
                         bool gzip=false) const;

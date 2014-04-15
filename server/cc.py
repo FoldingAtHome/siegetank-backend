@@ -551,7 +551,7 @@ class EngineKeysHandler(BaseHandler):
             **Example reply**
 
                 {
-                    "core_key": "uuid4",
+                    "key": "uuid4",
                 }
 
             :status 200: OK

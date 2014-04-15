@@ -48,6 +48,33 @@
 
 using namespace std;
 
+static int getPort(const std::string &s, char delim=':') {
+    std::vector<std::string> elems;
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    if(elems.size() > 1) {
+        int port;
+        stringstream pss(elems[1]);
+        pss >> port;
+        return port;
+    } else {
+        return 443;
+    }
+}
+
+static std::string getHost(const std::string &s, char delim=':') {
+    std::vector<std::string> elems;
+    std::stringstream ss(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        elems.push_back(item);
+    }
+    return elems[0];
+}
+
 static void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
     // Add a stream of PEM formatted certificate strings to the trusted store
     // of the ctx.
@@ -117,7 +144,8 @@ static string decode_gz_b64(const string &encoded_string) {
 
 Core::Core(string engine, std::string core_key) :
     engine_(engine),
-    core_key_(core_key) {
+    core_key_(core_key),
+    session_(NULL) {
 /*
     _next_checkpoint_time = _start_time + _checkpoint_send_interval;
     _next_heartbeat_time = _start_time + _heartbeat_interval;
@@ -146,13 +174,12 @@ static string parse_error(string body) {
     return error;
 }
 
-void Core::assign(const string &cc_host,
+void Core::assign(const string &cc_uri,
                   const string &donor_token,
                   const string &target_id) {
-    Poco::URI cc_uri(cc_host);
     Poco::Net::Context::VerificationMode verify_mode;
-    if(is_domain(cc_uri.getHost())) {
-        cout << "USING SSL:" << " " << cc_uri.getHost() << endl;
+    if(is_domain(getHost(cc_uri))) {
+        cout << "USING SSL:" << " " << cc_uri << endl;
         verify_mode = Poco::Net::Context::VERIFY_RELAXED;
     } else {
         verify_mode = Poco::Net::Context::VERIFY_NONE;
@@ -169,18 +196,21 @@ void Core::assign(const string &cc_host,
     ss << ssl_string;
     read_cert_into_ctx(ss, ctx);
     cout << "connecting to cc..." << flush;
-    Poco::Net::HTTPSClientSession cc_session(cc_uri.getHost(),
-                                             cc_uri.getPort(),
+    Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
+                                             getPort(cc_uri),
                                              context);
     try {
         cout << "assigning core to a stream..." << flush;
-        Poco::Net::HTTPRequest request("POST", cc_uri.getPath());
+        Poco::Net::HTTPRequest request("POST", "/core/assign");
         string body;
-        body += "{\"engine\": \""+engine_+"\",";
+        body += "{";
         if(donor_token.length() > 0)
             body += "\"donor_token\": \""+donor_token+"\",";
         if(target_id.length() > 0)
-            body += "\"target_id\": \""+target_id+"\"}";
+            body += "\"target_id\": \""+target_id+"\",";
+        body += "\"engine\": \""+engine_+"\"}";
+        cout << "REQUEST BODY:" << endl;
+        cout << body << endl;    
         request.set("Authorization", core_key_);
         request.setContentLength(body.length());
         cc_session.sendRequest(request) << body;
@@ -219,11 +249,11 @@ void Core::assign(const string &cc_host,
 void Core::startStream(const string &cc_uri,
                        const string &donor_token,
                        const string &target_id) {
-
     if(session_ == NULL)
         assign(cc_uri, donor_token, target_id);
     else
         throw std::runtime_error("session_ is not NULL");
+    cout << "assignment complete" << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");
     request.set("Authorization", core_token_);
     session_->sendRequest(request);
@@ -239,9 +269,9 @@ void Core::startStream(const string &cc_uri,
     if(!json_value.is<picojson::object>())
         throw(std::runtime_error("no JSON object could be read"+err));
     picojson::value::object &json_object = json_value.get<picojson::object>();
-    stream_id_ = json_object["url"].get<string>();
+    stream_id_ = json_object["stream_id"].get<string>();
     target_id_ = json_object["target_id"].get<string>();
-    if(target_id != target_id_) {
+    if(target_id.size() > 0 && target_id != target_id_) {
         throw std::runtime_error("FATAL: Specified target_id mismatch");
     }
     picojson::value::object &json_files = json_object["files"].get<picojson::object>();
@@ -264,7 +294,6 @@ void Core::startStream(const string &cc_uri,
 
 void Core::sendFrame(const map<string, string> &files, 
     int frame_count, bool gzip) const {
-
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
     stringstream frame_count_str;
     frame_count_str << frame_count;

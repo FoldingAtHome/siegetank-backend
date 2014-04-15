@@ -1,4 +1,3 @@
-#include <Core.h>
 #include <map>
 #include <string>
 #include <stdexcept>
@@ -16,6 +15,11 @@
 #include <Poco/JSON/Object.h>
 #include <Poco/StreamCopier.h>
 
+#define private public
+#define protected public
+
+#include <Core.h>
+
 using namespace std;
 
 string gen_random(const int len) {
@@ -31,27 +35,7 @@ string gen_random(const int len) {
     return s;
 }
 
-void test_sigint_signal() {
-    Core core(150, "openmm", "6.0");
-    if(core.exit() == true) {
-        throw std::runtime_error("exit() returned true before signal");
-    }
-    raise(SIGINT);
-    if(core.exit() == false) {
-        throw std::runtime_error("exit() returned false before signal");
-    }
-}
-
-void test_sigterm_signal() {
-    Core core(150, "openmm", "6.0");
-    if(core.exit() == true) {
-        throw std::runtime_error("exit() returned true before signal");
-    }
-    raise(SIGTERM);
-    if(core.exit() == false) {
-        throw std::runtime_error("exit() returned false before signal");
-    }
-}
+/*
 
 void test_should_send_checkpoint() {
     int checkpoint_increment = 6;
@@ -121,11 +105,19 @@ void test_donor_token() {
     core.startStream(uri2, stream_files);
 }
 
-void test_initialize_and_start() { 
-    Core core(150, "openmm", "6.0");
-    Poco::URI uri("https://127.0.0.1:8980/core/assign");
-    map<string, string> stream_files;
-    core.startStream(uri, stream_files);
+*/
+
+void testStartStream(string donor_token="", string target_id="") { 
+    
+    ifstream core_keys("core_keys.log");
+    string key;
+    core_keys >> key;
+
+    Core core("openmm", key);
+    string uri("127.0.0.1:8980");
+    core.startStream(uri, donor_token, target_id);
+
+    map<string, string> &stream_files = core.files_;
     if(stream_files.find("system.xml") == stream_files.end())
         throw std::runtime_error("system.xml not in stream_files!");
     if(stream_files.find("integrator.xml") == stream_files.end())
@@ -154,7 +146,7 @@ void test_initialize_and_start() {
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.sendFrame(frame_files, 1, 35.9);
+        core.sendFrame(frame_files, 1);
     }
     core.sendHeartbeat();
     for(int i=0; i < 10; i++) {
@@ -165,13 +157,13 @@ void test_initialize_and_start() {
         map<string, string> frame_files;
         frame_files[filename1] = filedata1;
         frame_files[filename2] = filedata2;
-        core.sendFrame(frame_files, 1, 38.9, true);
+        core.sendFrame(frame_files, 1, true);
     }
     core.sendHeartbeat();
     string c_filename("state.xml");
     map<string, string> checkpoint_files;
     checkpoint_files[c_filename] = test_state;
-    core.sendCheckpointFiles(checkpoint_files, true);
+    core.sendCheckpoint(checkpoint_files, true);
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
         string filedata1 = gen_random(100);
@@ -184,16 +176,19 @@ void test_initialize_and_start() {
         core.sendFrame(frame_files, count);
     }
     core.sendHeartbeat();
-    core.sendCheckpointFiles(checkpoint_files, true);
+    core.sendCheckpoint(checkpoint_files, true);
     core.stopStream();
 }
 
 int main() {
+    testStartStream();
+    /*
     test_set_target_id();
     test_sigint_signal();
     test_sigterm_signal();
     test_donor_token();
     test_should_send_checkpoint();
     test_initialize_and_start();
+    */
     return 0;
 }
