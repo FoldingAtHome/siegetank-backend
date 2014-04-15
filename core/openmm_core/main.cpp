@@ -76,7 +76,7 @@ int main(int argc, const char * argv[]) {
     );
 
     opt.add(
-        "https://127.0.0.1:8980/core/assign", // Default.
+        "127.0.0.1:8980", // Default.
         0, // Required?
         1, // Number of args expected.
         0, // Delimiter if expecting multiple args.
@@ -138,8 +138,8 @@ int main(int argc, const char * argv[]) {
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
 
     try {
-        const string engine = "openmm_opencl_6.0";
-        OpenMMCore core(engine, "1234");
+        const string engine = "openmm";
+        OpenMMCore core(engine, "7fbb7868-471c-419a-b6c8-8ef2e731a879");
         string donor_token;
         if(opt.isSet("--donor_token")) {
             opt.get("--donor_token")->getString(donor_token);

@@ -153,6 +153,7 @@ Core::Core(string engine, std::string core_key) :
 }
 
 Core::~Core() {
+    cout << "calling Core destructor" << endl;
     delete session_;
 }
 
