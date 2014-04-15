@@ -245,21 +245,19 @@ class TestSimple(tornado.testing.AsyncTestCase):
         options = content['options']
         self._post_stream(self.cc_host, target_id)
         content = self._assign(self.cc_host, target_id)
-        self.assertEqual(content['options'], options)
         content = self._core_start(content['url'], content['token'])
+        self.assertEqual(content['options'], options)
         self.assertEqual(content['target_id'], target_id)
 
     def test_assign_private(self):
         content = self._post_target(self.cc_host, stage='private')
         target_id = content['target_id']
-        options = content['options']
         self._post_stream(self.cc_host, target_id)
         self._assign(self.cc_host, expected_code=400)
         content = self._assign(self.cc_host, target_id)
-        self.assertEqual(content['options'], options)
 
     def test_assign_bad_core_key(self):
-        content = self._post_target(self.cc_host)
+        self._post_target(self.cc_host)
         self._assign(self.cc_host, core_key='garbage', expected_code=400)
 
     def test_assign(self):

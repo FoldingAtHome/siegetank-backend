@@ -32,12 +32,6 @@ public:
 
 private:
 
-    /* send _checkpoint_xml to the server safely. This method is idempotent.
-
-    if _checkpoint_xml is empty, then nothing is sent. Once a send succeeds
-    then _checkpoint_xml is cleared().
-
-    */
     void _send_saved_checkpoint();
 
     OpenMM::Context* _ref_context;

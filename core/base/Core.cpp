@@ -8,6 +8,7 @@
 #include <Poco/UnicodeConverter.h>
 #include <Poco/Util/Application.h>
 #include <Poco/StreamCopier.h>
+#include <Poco/URI.h>
 #include <Poco/Dynamic/Var.h>
 
 #include <Poco/Base64Decoder.h>
@@ -28,8 +29,10 @@
 #include <locale>
 
 #include <signal.h>
-#include "Core.h"
 #include <ctime>
+
+#include "Core.h"
+#include "picojson.h"
 
 using namespace std;
 
@@ -106,36 +109,24 @@ static string decode_gz_b64(const string &encoded_string) {
     return decode_gz(decode_b64(encoded_string));
 }
 
-Core::Core(int checkpoint_send_interval,
-           string engine,
-           string engine_version) :
-    _frame_send_interval(0),
-    _frame_write_interval(0),
-    _logstream(_logstring),
-    _checkpoint_send_interval(checkpoint_send_interval),
-    _start_time(time(NULL)),
-    _heartbeat_interval(60),
-    _session(NULL),
-    _engine(engine),
-    _engine_version(engine_version) {
-
+Core::Core(string engine, std::string core_key) :
+    engine_(engine),
+    core_key_(core_key) {
+/*
     _global_exit = false;
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
     _next_checkpoint_time = _start_time + _checkpoint_send_interval;
     _next_heartbeat_time = _start_time + _heartbeat_interval;
+*/
 }
 
 Core::~Core() {
-    delete _session;
-}
-
-bool Core::exit() const {
-    return _global_exit;
+    delete session_;
 }
 
 // see if host is a domain name or an ip address by checking the last char
-static bool is_domain(string host) {
+static bool is_domain(const string &host) {
     char c = *host.rbegin();
     if(isdigit(c))
         return false;
@@ -143,7 +134,7 @@ static bool is_domain(string host) {
         return true;
 }
 
-static string parse_error(const string& body) {
+static string parse_error(string body) {
     Poco::JSON::Parser parser;
     Poco::Dynamic::Var result = parser.parse(body);
     Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
@@ -152,7 +143,8 @@ static string parse_error(const string& body) {
     return error;
 }
 
-void Core::initializeSession(const Poco::URI &cc_uri) {
+void Core::assign(const string &cc_host, const string &donor_token) {
+    Poco::URI cc_uri(cc_host);
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(cc_uri.getHost())) {
         cout << "USING SSL:" << " " << cc_uri.getHost() << endl;
@@ -160,117 +152,99 @@ void Core::initializeSession(const Poco::URI &cc_uri) {
     } else {
         verify_mode = Poco::Net::Context::VERIFY_NONE;
     }
-
+    // TODO: Do I need to delete this?
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
         Poco::Net::Context::CLIENT_USE, "", 
         verify_mode, 9, false);
     SSL_CTX *ctx = context->sslContext();
     std::string ssl_string;
-
     // hacky as hell :)
     #include "root_certs.h"
-
     stringstream ss;
     ss << ssl_string;
     read_cert_into_ctx(ss, ctx);
-
     cout << "connecting to cc..." << flush;
     Poco::Net::HTTPSClientSession cc_session(cc_uri.getHost(),
                                              cc_uri.getPort(),
                                              context);
-    string ws_uri;
-    string ws_token;
-    
-    Poco::JSON::Parser parser;
     try {
-        cout << "scv assignment..." << flush;
+        cout << "assigning core to a stream..." << flush;
         Poco::Net::HTTPRequest request("POST", cc_uri.getPath());
         string body;
-        body += "{\"engine\": \""+_engine+"\",";
-        body += "\"engine_version\": \""+_engine_version+"\",";
-
-        if(donor_token.length() > 0) {
+        body += "{\"engine\": \""+engine_+"\",";
+        if(donor_token.length() > 0)
             body += "\"donor_token\": \""+donor_token+"\",";
-        }
-
-        if(target_id.length() > 0) {
-            body += "\"target_id\": \""+target_id+"\",";
-        }
-        stringstream core_version;
-        core_version << CORE_VERSION;
-        body += "\"core_version\": \""+core_version.str()+"\"}";
+        if(target_id_.length() > 0)
+            body += "\"target_id\": \""+target_id_+"\"}";
+        request.set("Authorization", core_key_);
         request.setContentLength(body.length());
         cc_session.sendRequest(request) << body;
         Poco::Net::HTTPResponse response;
         istream &content_stream = cc_session.receiveResponse(response);
-        string content;
-        Poco::StreamCopier::copyToString(content_stream, content);
         if(response.getStatus() != 200) {
+            /*
             cout << "BAD STATUS CODE" << response.getStatus() << endl;
-            string reason = parse_error(content);
+            string reason = parse_error(content_stream.rdbuf());
             stringstream error;
             error << "Could not get an assignment from CC, reason: ";
             error << reason << endl;
-            throw std::runtime_error(error.str());
+            */
+            throw std::runtime_error("Bad assignment");
         }
-        {
-        Poco::Dynamic::Var result = parser.parse(content);
-        Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-        ws_uri = object->get("url").convert<std::string>();
-        _auth_token = object->get("token").convert<std::string>();
-        // extract _frame_write_interval
-        {
-        Poco::Dynamic::Var temp_obj = object->get("options");
-        Poco::JSON::Object::Ptr object_ptr = temp_obj.extract<Poco::JSON::Object::Ptr>();
-        _frame_write_interval = object_ptr->get("steps_per_frame").convert<int>();
-        }
-        parser.reset();
-        }
-    
-    _ws_uri = Poco::URI(ws_uri);
-    _session = new Poco::Net::HTTPSClientSession(_ws_uri.getHost(), 
-        _ws_uri.getPort(), context);
-
+        picojson::value json_value;
+        content_stream >> json_value;
+        string err = picojson::get_last_error();
+        if(!err.empty())
+            throw(std::runtime_error("assign() picojson error"+err));
+        if(!json_value.is<picojson::object>())
+            throw(std::runtime_error("no JSON object could be read"+err));
+        // find() is too verbose, use c++11's at when we switch later on..
+        picojson::value::object &json_object = json_value.get<picojson::object>();
+        string ws_url(json_object["url"].get<string>());
+        Poco::URI poco_url(ws_url);
+        core_token_ = json_object["token"].get<string>();
+        session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
+            poco_url.getPort(), context);
     } catch(Poco::Net::SSLException &e) {
         cout << e.displayText() << endl;
         throw;
     }
 }
 
-void Core::startStream(const Poco::URI &cc_uri,
-                        map<string, string> &files) {
-    if(_session == NULL)
-        initializeSession(cc_uri);
-    Poco::Net::HTTPRequest request("GET", _ws_uri.getPath());
-    request.set("Authorization", _auth_token);
-    _session->sendRequest(request);
-    Poco::Net::HTTPResponse response;
-    istream &content_stream = _session->receiveResponse(response);
-    if(response.getStatus() != 200) {
-        cout << response.getStatus() << endl;
-        cout << _ws_uri.getHost() << ":" << _ws_uri.getPort() << _ws_uri.getPath() << endl;
-        throw std::runtime_error("Could not start a stream from SCV");
-    }
-    string content;
-    Poco::StreamCopier::copyToString(content_stream, content);
-    Poco::JSON::Parser parser;
-    Poco::Dynamic::Var result = parser.parse(content);
-    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();        
-    _stream_id = object->get("stream_id").convert<std::string>();
-    string temptarget_id = object->get("target_id").convert<std::string>();
+void Core::startStream(const string &cc_uri,
+                       const string &donor_token,
+                       map<string, string> &files,
+                       string &options) {
 
-    // if user specified a target_id then we attempt to fetch the specified id
-    if(target_id.length() > 0 && temptarget_id != target_id) {
+    if(session_ == NULL)
+        assign(cc_uri, donor_token);
+    else
+        throw std::runtime_error("session_ is not NULL");
+    Poco::Net::HTTPRequest request("GET", "/core/start");
+    request.set("Authorization", core_token_);
+    session_->sendRequest(request);
+    Poco::Net::HTTPResponse response;
+    istream &content_stream = session_->receiveResponse(response);
+    if(response.getStatus() != 200)
+        throw std::runtime_error("Could not start a stream from SCV");
+    picojson::value json_value;
+    content_stream >> json_value;
+    string err = picojson::get_last_error();
+    if(!err.empty())
+        throw(std::runtime_error("assign() picojson error"+err));
+    if(!json_value.is<picojson::object>())
+            throw(std::runtime_error("no JSON object could be read"+err));
+    picojson::value::object &json_object = json_value.get<picojson::object>();
+    stream_id_ = json_object["url"].get<string>();
+    string new_target_id(json_object["target_id"].get<string>());
+    if(target_id_.length() > 0 && new_target_id != target_id_) {
         throw std::runtime_error("FATAL: Specified target_id mismatch");
     }
-    target_id = temptarget_id;
-    // extract files
-    Poco::Dynamic::Var temp_obj = object->get("files");
-    Poco::JSON::Object::Ptr object_ptr = temp_obj.extract<Poco::JSON::Object::Ptr>();
-    for(Poco::JSON::Object::ConstIterator it=object_ptr->begin();
-            it != object_ptr->end(); it++) {
+    picojson::value::object &json_files = json_object["files"].get<picojson::object>();
+    for (picojson::value::object::const_iterator it = json_files.begin();
+         it != json_files.end(); ++it) {
         string filename = it->first;
-        string filedata = it->second.convert<std::string>();
+        string filedata = it->second.get<string>();
         if(filename.find(".b64") != string::npos) {
             filename = filename.substr(0, filename.length()-4);
             filedata = decode_b64(filedata);
@@ -281,20 +255,18 @@ void Core::startStream(const Poco::URI &cc_uri,
         }
         files[filename] = filedata;
     }
+    options = json_object["options"].to_str();
 }
 
 void Core::sendFrame(const map<string, string> &files, 
-    int frame_count, float speed, bool gzip) const {
+    int frame_count, bool gzip) const {
 
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
     stringstream frame_count_str;
     frame_count_str << frame_count;
-    stringstream speed_str;
-    speed_str << speed;
     string message;
     message += "{";
     message += "\"frames\":"+frame_count_str.str()+",";
-    message += "\"speed\":"+speed_str.str()+",";
     message += "\"files\":{";
     for(map<string, string>::const_iterator it=files.begin();
         it != files.end(); it++) {
@@ -312,11 +284,11 @@ void Core::sendFrame(const map<string, string> &files,
         message += "\""+filedata+"\"";
     }
     message += "}}";
-    request.set("Authorization", _auth_token);
+    request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    _session->sendRequest(request) << message;
+    session_->sendRequest(request) << message;
     Poco::Net::HTTPResponse response;
-    _session->receiveResponse(response);
+    session_->receiveResponse(response);
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::sendFrame bad status code");
     }
@@ -344,11 +316,11 @@ void Core::sendCheckpointFiles(const map<string, string> &files,
         message += "\""+filedata+"\"";
     }
     message += "}}";
-    request.set("Authorization", _auth_token);
+    request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    _session->sendRequest(request) << message;
+    session_->sendRequest(request) << message;
     Poco::Net::HTTPResponse response;
-    _session->receiveResponse(response);
+    session_->receiveResponse(response);
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::sendCheckpointFiles bad status code");
     }
@@ -364,26 +336,26 @@ void Core::stopStream(string err_msg) {
         message += "\"error\": \"" + b64_error + "\"";
     }
     message += "}";
-    request.set("Authorization", _auth_token);
+    request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    _session->sendRequest(request) << message;
+    session_->sendRequest(request) << message;
     Poco::Net::HTTPResponse response;
-    _session->receiveResponse(response);
+    session_->receiveResponse(response);
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::stopStream bad status code");
     }
-    delete _session;
-    _session = NULL;
+    delete session_;
+    session_ = NULL;
 }
 
 void Core::sendHeartbeat() const {
     Poco::Net::HTTPRequest request("POST", "/core/heartbeat");
     string message("{}");
-    request.set("Authorization", _auth_token);
+    request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    _session->sendRequest(request) << message;
+    session_->sendRequest(request) << message;
     Poco::Net::HTTPResponse response;
-    _session->receiveResponse(response);
+    session_->receiveResponse(response);
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::sendHeartbeat bad status code");
     }
@@ -393,6 +365,7 @@ void Core::main() {
 
 }
 
+/*
 bool Core::shouldSendCheckpoint() {
     time_t current_time = time(NULL);
     if(current_time > _next_checkpoint_time) {
@@ -412,3 +385,4 @@ bool Core::shouldHeartbeat() {
         return false;
     }
 }
+*/

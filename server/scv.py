@@ -561,6 +561,9 @@ class CoreStartHandler(BaseHandler):
                 reply['files'][filename] = handle.read()
         reply['stream_id'] = stream_id
         reply['target_id'] = target_id
+        cursor = self.mdb.data.targets
+        result = cursor.find_one({'_id': target_id}, {'options': 1})
+        reply['options'] = result['options']
         self.set_status(200)
         return self.write(reply)
 

@@ -678,10 +678,6 @@ class CoreAssignHandler(BaseHandler):
                 {
                     "token": "6lk2j5-tpoi2p6-poipoi23",
                     "url": "https://raynor.stanford.edu:1234/core/start",
-                    "options": {
-                        "steps_per_frame": 50000,
-                        "keep_waters": True,
-                    }
                 }
 
             :status 200: OK
@@ -707,34 +703,29 @@ class CoreAssignHandler(BaseHandler):
             result = cursor.find_one({'_id': target_id},
                                      {'engines': 1,
                                       'shards': 1,
-                                      'options': 1,
                                       })
             if core_engine not in result['engines']:
                 return self.error('core engine not allowed for this target')
             if not result['shards']:
                 return self.error('target specified has no shards')
             shards = result['shards']
-            options = result['options']
         else:
             result = cursor.find({'engines': {'$in': [core_engine]},
                                   'stage': 'public'},
                                  {'owner': 1,
                                   '_id': 1,
                                   'weight': 1,
-                                  'shards': 1,
-                                  'options': 1})
+                                  'shards': 1})
             owner_weights = dict()
             target_weights = dict()
             target_owners = dict()
             target_shards = dict()
-            target_options = dict()
             for match in result:
                 if match['shards']:
                     owner_weights[match['owner']] = None
                     target_weights[match['_id']] = match['weight']
                     target_owners[match['_id']] = match['owner']
                     target_shards[match['_id']] = match['shards']
-                    target_options[match['_id']] = match['options']
             if not target_weights:
                 return self.error('no valid targets could be found')
             cursor = self.mdb.users.managers
@@ -760,7 +751,6 @@ class CoreAssignHandler(BaseHandler):
                                  if target_owners[k] == picked_owner)
             target_id = weighted_sample(owner_targets)
             shards = target_shards[target_id]
-            options = target_options[target_id]
 
         def scv_online(scv_name):
             cursor = SCV(scv_name, self.db)
@@ -782,8 +772,7 @@ class CoreAssignHandler(BaseHandler):
                     token = json.loads(reply.body.decode())["token"]
                     host = SCV(scv, self.db).hget('host')
                     body = {'token': token,
-                            'url': 'https://'+host+'/core/start',
-                            'options': options,
+                            'url': 'https://'+host+'/core/start'
                             }
                     self.write(body)
                     return self.set_status(200)

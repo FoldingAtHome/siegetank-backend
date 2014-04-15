@@ -58,7 +58,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         if target_id is None:
             target_id = str(uuid.uuid4())
             targets = self.scv.mdb.data.targets
-            body = {'_id': target_id, 'owner': self.test_manager}
+            body = {'_id': target_id,
+                    'owner': self.test_manager,
+                    'options': {'steps_per_frame': 50000}}
             targets.insert(body)
         files = {}
         for i in range(4):
@@ -639,19 +641,10 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
     def test_priority_queue(self):
         # test to make sure we get the stream with the most number of frames
-        target_id = str(uuid.uuid4())
-        fn1 = 'system.xml.gz.b64'
-        fn2 = 'integrator.xml.gz.b64'
-        fn3 = 'state.xml.gz.b64'
-        headers = {'Authorization': self.auth_token}
-        fb1, fb2, fb3 = (str(uuid.uuid4()) for i in range(3))
-        for i in range(20):
-            body = {'target_id': target_id,
-                    'files': {fn1: fb1, fn2: fb2, fn3: fb3}
-                    }
-            response = self.fetch('/streams', method='POST', headers=headers,
-                                  body=json.dumps(body))
-            self.assertEqual(response.code, 200)
+        result = self._post_stream()
+        stream_id = result['stream_id']
+        target_id = result['target_id']
+        files = result['files']
 
         token = str(uuid.uuid4())
         stream_id, token = self._activate_stream(target_id)
@@ -680,7 +673,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         # PUT a checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
-        body = {'files': {'state.xml.gz.b64': checkpoint_bin.decode()}}
+        random_file = random.choice(list(files.keys()))
+        body = {'files': {random_file: checkpoint_bin.decode()}}
         response = self.fetch('/core/checkpoint', headers=headers,
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)

@@ -17,5 +17,5 @@ set(CORE_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 enable_testing()
 
 add_subdirectory(base)
-add_subdirectory(openmm_core)
-add_subdirectory(tests)
+#add_subdirectory(openmm_core)
+#add_subdirectory(tests)
