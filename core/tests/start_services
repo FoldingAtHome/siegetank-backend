@@ -39,6 +39,7 @@ def add_donor():
                                            'password': 'test_donor_pass'}),
                           verify=False)
     assert reply.status_code == 200
+    return reply.json()['token']
 
 
 def auth_manager():
@@ -99,14 +100,8 @@ if __name__ == '__main__':
         log.write(str(pid1.pid))
         log.write(' ')
         log.write(str(pid2.pid))
-    try:
-        add_manager()
-    except Exception:
-        pass
-    try:
-        add_donor()
-    except Exception:
-        pass
+
+    add_manager()
 
     token = auth_manager()
     core_key = add_engine_token(token)
@@ -131,9 +126,12 @@ if __name__ == '__main__':
 
     target_id = post_target(token)
     post_streams(target_id, files, token)
+    donor_token = add_donor()
 
     # post a private target
     with open('target_ids.log', 'w') as log:
         log.write(str(target_id))
     with open('core_keys.log', 'w') as log:
         log.write(str(core_key))
+    with open('donor_tokens.log', 'w') as log:
+        log.write(str(donor_token))

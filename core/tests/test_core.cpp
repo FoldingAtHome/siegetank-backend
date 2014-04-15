@@ -108,15 +108,12 @@ void test_donor_token() {
 */
 
 void testStartStream(string donor_token="", string target_id="") { 
-    
     ifstream core_keys("core_keys.log");
     string key;
     core_keys >> key;
-
     Core core("openmm", key);
     string uri("127.0.0.1:8980");
     core.startStream(uri, donor_token, target_id);
-
     map<string, string> &stream_files = core.files_;
     if(stream_files.find("system.xml") == stream_files.end())
         throw std::runtime_error("system.xml not in stream_files!");
@@ -182,6 +179,16 @@ void testStartStream(string donor_token="", string target_id="") {
 
 int main() {
     testStartStream();
+    ifstream donor_tokens("donor_tokens.log");
+    string donor_token;
+    donor_tokens >> donor_token;
+    testStartStream(donor_token);
+    ifstream target_ids("target_ids.log");
+    string target_id;
+    target_ids >> target_id;
+    testStartStream("", target_id);
+    testStartStream(donor_token, target_id);
+
     /*
     test_set_target_id();
     test_sigint_signal();

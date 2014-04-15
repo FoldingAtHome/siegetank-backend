@@ -238,6 +238,10 @@ class AddDonorHandler(BaseHandler):
         self.write({'token': token})
 
 
+class VerifyDonorHandler(BaseHandler):
+    def get(self):
+
+
 class VerifyManagerHandler(BaseHandler):
     @authenticate_manager
     def get(self):
@@ -1195,6 +1199,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/managers/verify', VerifyManagerHandler),
             (r'/managers/auth', AuthManagerHandler),
             (r'/managers', AddManagerHandler),
+            (r'/donors/verify', VerifyDonorHandler),
             (r'/donors/auth', AuthDonorHandler),
             (r'/donors', AddDonorHandler),
             (r'/targets', TargetsHandler),
