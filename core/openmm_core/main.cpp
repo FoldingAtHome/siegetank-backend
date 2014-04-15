@@ -1,3 +1,17 @@
+// Authors: Yutong Zhao <proteneer@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+// License for the specific language governing permissions and limitations
+// under the License.
+
 #include "OpenMMCore.h"
 #include "ezOptionParser.h"
 
@@ -101,56 +115,46 @@ int main(int argc, const char * argv[]) {
         0,
         1,
         0,
-        "Donor access token",
+        "Donor's access token",
         "--donor_token");
 
     opt.parse(argc, argv);
-
     if(opt.isSet("-h")) {
         std::string usage;
         opt.getUsage(usage);
         std::cout << usage;
         return 1;
     }
-
     if(opt.isSet("--version")) {
         std::cout << CORE_VERSION << endl;
         return 1;
     }
-
     if(!opt.isSet("--nospoiler")) {
         write_spoiler(cout);
     }
-
-
-
     string cc_uri;
     opt.get("--cc")->getString(cc_uri);
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
 
     try {
-
-        OpenMMCore core(checkpoint_frequency);
+        const string engine = "openmm_opencl_6.0";
+        OpenMMCore core(engine, "1234");
+        string donor_token;
         if(opt.isSet("--donor_token")) {
-            string donor_token;
             opt.get("--donor_token")->getString(donor_token);
             if(donor_token.length() != 36) {
                 throw std::runtime_error("donor_token must be 36 characters");
             }
-            core.donor_token = donor_token;
         }
-
+        string target_id;
         if(opt.isSet("--target_id")) {
-            string target_id;
             opt.get("--target_id")->getString(target_id);
             if(target_id.length() != 36) {
                 throw std::runtime_error("target_id must be 36 characters");
             }
-            core.target_id = target_id;
         }
-
-        core.initialize(cc_uri);
+        core.startStream(cc_uri, donor_token, target_id);
         core.main();
     } catch(const exception &e) {
         cout << e.what() << endl;

@@ -1,3 +1,17 @@
+// Authors: Yutong Zhao <proteneer@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+// License for the specific language governing permissions and limitations
+// under the License.
+
 #ifndef CORE_H_
 #define CORE_H_
 
@@ -8,6 +22,7 @@
 #include <ostream>
 #include <sstream>
 
+#include "picojson.h"
 
 /**
  * A Core provides the basic interface for talking to the Siegetank Backend.
@@ -20,7 +35,7 @@
 class Core {
 public:
     // checkpoint_send_interval is in number of times per day (user config)
-    Core(std::string engine, std::string core_key = "");
+    Core(std::string engine, std::string core_key);
 
     ~Core();
 
@@ -28,13 +43,12 @@ public:
     virtual void main();
 
     /* Start the stream and fetch files. options is a JSON string. */
-    void startStream(const std::string &cc_uri,
-                     const std::string &donor_token,
-                     std::map<std::string, std::string> &files,
-                     std::string &options);
+    virtual void startStream(const std::string &cc_uri,
+                             const std::string &donor_token = "",
+                             const std::string &target_id = "");
 
     /* Disengage the core from the stream and destroy the session */
-    void stopStream(std::string error_msg = "");
+    virtual void stopStream(std::string error_msg = "");
 
     /* Send frame files to the WS. This method automatically base64 encodes
        the file. */
@@ -57,20 +71,31 @@ public:
     /* Send a heartbeat */
     void sendHeartbeat() const;
 
-    /* Get the target id */
-    std::string getTargetId() const;
+    /* get a specific option */
+    template<typename T>
+    T getOption(const std::string &key) const {
+        std::stringstream ss(options_);
+        picojson::value value;
+        ss >> value;
+        picojson::value::object &object = value.get<picojson::object>();
+        return object[key].get<T>();
+    }
 
-    /* Get the stream id */
-    std::string getStreamId() const;
-
-private:
+protected:
+    std::map<std::string, std::string> files_;
     std::string target_id_;
     std::string stream_id_;
+
+private:
     std::string core_token_;
+    std::string options_;
+
     Poco::Net::HTTPSClientSession* session_;
     const std::string engine_;
     const std::string core_key_;
-    void assign(const std::string &cc_host, const std::string &donor_token);
+    void assign(const std::string &cc_host,
+                const std::string &donor_token,
+                const std::string &target_id);
 
 };
 

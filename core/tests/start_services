@@ -38,10 +38,11 @@ def auth_manager():
 
 
 def post_target(auth_token, stage='private'):
-    message = json.dumps({'description': 'foo_bar',
-                          'engine': 'openmm',
-                          'engine_versions': ['6.0'],
-                          'options': {'steps_per_frame': 10000},
+    message = json.dumps({'engines': ['openmm'],
+                          'options': {
+                              'description': 'foo',
+                              'steps_per_frame': 10000
+                          },
                           'stage': stage,
                           'weight': 1,
                           })

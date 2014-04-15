@@ -1,3 +1,17 @@
+// Authors: Yutong Zhao <proteneer@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+// License for the specific language governing permissions and limitations
+// under the License.
+
 // OS X SSL instructions:
 // ./Configure darwin64-x86_64-cc -noshared
 // g++ -I ~/poco/include Core.cpp ~/poco/lib/libPoco* /usr/local/ssl/lib/lib*
@@ -14,11 +28,14 @@
 #include <ctime>
 #include <sstream>
 #include <OpenMM.h>
+#include <signal.h>
+
 #include "XTCWriter.h"
 #include "OpenMMCore.h"
 #include "kbhit.h"
 #include "StateTests.h"
 
+#include <signal.h>
 using namespace std;
 
 extern "C" void registerSerializationProxies();
@@ -29,14 +46,55 @@ extern "C" void registerCudaPlatform();
     extern "C" void registerCpuPmeKernelFactories();
 #endif
 
-OpenMMCore::OpenMMCore(int checkpoint_send_interval):
-    Core(checkpoint_send_interval, "openmm", "6.0") {
+static sig_atomic_t global_exit = false;
+
+static void exit_signal_handler(int param) {
+    global_exit = true;
+}
+
+OpenMMCore::OpenMMCore(string engine, string core_key) :
+    Core(engine, core_key),
+    checkpoint_send_interval_(6000),
+    heartbeat_interval_(60),
+    ref_context_(NULL),
+    core_context_(NULL) {
+
+    registerSerializationProxies();
+#ifdef OPENMM_CPU
+    registerCpuPlatform();
+    #ifdef USE_PME_PLUGIN
+        registerCpuPmeKernelFactories();
+    #endif
+    platform_name_ = "CPU";
+#elif OPENMM_CUDA
+    registerCudaPlatform();
+    platform_name_ = "CUDA";
+#elif OPENMM_OPENCL
+    registerOpenCLPlatform();
+    platform_name_ = "OpenCL";
+#else
+    BAD DEFINE
+#endif
+
+    global_exit = false;
+    signal(SIGINT, exit_signal_handler);
+    signal(SIGTERM, exit_signal_handler);
 
 }
 
 OpenMMCore::~OpenMMCore() {
     // renable proper keyboard input
+    delete ref_context_;
+    delete core_context_;
     changemode(0);
+}
+
+void OpenMMCore::setCheckpointSendInterval(int interval) {
+    checkpoint_send_interval_ = interval;
+}
+
+void OpenMMCore::setHeartbeatInterval(int interval) {
+    heartbeat_interval_ = interval;
 }
 
 static vector<string> setupForceGroups(OpenMM::System *sys) {
@@ -59,26 +117,27 @@ static vector<string> setupForceGroups(OpenMM::System *sys) {
     return forceGroupNames;
 }
 
-void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
+
+void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
     vector<string> forceGroupNames;
-    _logstream << "setup system" << endl;
+    cout << "setup system" << endl;
     forceGroupNames = setupForceGroups(sys);
     for(int i=0;i<forceGroupNames.size();i++) {
-        _logstream << "    Group " << i << ": " << forceGroupNames[i] << endl;
+        cout << "    Group " << i << ": " << forceGroupNames[i] << endl;
     }
     for(int i=0; i<sys->getNumForces(); i++) {
         OpenMM::Force &force = sys->getForce(i);
         try {
             OpenMM::AndersenThermostat &ATForce = dynamic_cast<OpenMM::AndersenThermostat &>(force);
             ATForce.setRandomNumberSeed(randomSeed);
-            _logstream << "  Found AndersenThermostat @ " << ATForce.getDefaultTemperature() << " (default) Kelvin, " 
+            cout << "  Found AndersenThermostat @ " << ATForce.getDefaultTemperature() << " (default) Kelvin, " 
                        << ATForce.getDefaultCollisionFrequency() << " (default) collision frequency. " << endl; 
             continue;
         } catch(const std::bad_cast &bc) {}
         try {
             OpenMM::MonteCarloBarostat &MCBForce = dynamic_cast<OpenMM::MonteCarloBarostat &>(force);
             MCBForce.setRandomNumberSeed(randomSeed);
-            _logstream << "  Found MonteCarloBarostat @ " << MCBForce.getDefaultPressure() << " (default) Bar, " << MCBForce.getTemperature() 
+            cout << "  Found MonteCarloBarostat @ " << MCBForce.getDefaultPressure() << " (default) Bar, " << MCBForce.getTemperature() 
                        << " Kelvin, " << MCBForce.getFrequency() << " pressure change frequency." << endl;     
             continue;
         } catch(const std::bad_cast &bc) {}
@@ -87,8 +146,9 @@ void OpenMMCore::_setup_system(OpenMM::System *sys, int randomSeed) const {
         } catch(const std::bad_cast &bc) {}
     }
     int numAtoms = sys->getNumParticles();
-    _logstream << "    Found: " << numAtoms << " atoms, " << sys->getNumForces() << " forces." << std::endl;
+    cout << "    Found: " << numAtoms << " atoms, " << sys->getNumForces() << " forces." << std::endl;
 }
+
 
 static string format_time(int input_seconds) {
 
@@ -154,86 +214,69 @@ static void status_header(ostream &out) {
     out << "\n";
 }
 
-void OpenMMCore::initialize(string cc_uri) {
-    registerSerializationProxies();
-#ifdef OPENMM_CPU
-    registerCpuPlatform();
-    #ifdef USE_PME_PLUGIN
-        registerCpuPmeKernelFactories();
-    #endif
-    string platform_name("CPU");
-#elif OPENMM_CUDA
-    registerCudaPlatform();
-    string platform_name("CUDA");
-#elif OPENMM_OPENCL
-    registerOpenCLPlatform();
-    string platform_name("OpenCL");
-#else
-    BAD DEFINE
-#endif
-    Poco::URI uri(cc_uri);
-    map<string, string> stream_files;
-    startStream(uri, stream_files);
-    // eg. _frame_send_interval = 50000 for OpenMM simulations
-    _frame_send_interval = _frame_write_interval;
-        
+
+void OpenMMCore::startStream(const string &cc_uri,
+                             const string &donor_token,
+                             const string &target_id) {
+    start_time_ = time(NULL);
+    Core::startStream(cc_uri, donor_token, target_id);
+    steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
     OpenMM::System *shared_system;
     OpenMM::State *initial_state;
     OpenMM::Integrator *ref_intg;
     OpenMM::Integrator *core_intg;
-    if(stream_files.find("system.xml") != stream_files.end()) {
-        istringstream system_stream(stream_files["system.xml"]);
+    if(files_.find("system.xml") != files_.end()) {
+        istringstream system_stream(files_["system.xml"]);
         shared_system = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
     } else {
         throw std::runtime_error("Cannot find system.xml");
     }
 
-    if(stream_files.find("state.xml") != stream_files.end()) {
-        istringstream state_stream(stream_files["state.xml"]);
+    if(files_.find("state.xml") != files_.end()) {
+        istringstream state_stream(files_["state.xml"]);
         initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
     } else {
         throw std::runtime_error("Cannot find state.xml");
     }
 
-    if(stream_files.find("integrator.xml") != stream_files.end()) {
-        istringstream core_integrator_stream(stream_files["integrator.xml"]);
+    if(files_.find("integrator.xml") != files_.end()) {
+        istringstream core_integrator_stream(files_["integrator.xml"]);
         core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
-        istringstream ref_integrator_stream(stream_files["integrator.xml"]);
+        istringstream ref_integrator_stream(files_["integrator.xml"]);
         ref_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(ref_integrator_stream);
     } else {
         throw std::runtime_error("Cannot find integrator.xml");
     }
     int random_seed = time(NULL);
-    _setup_system(shared_system, random_seed);
+    setupSystem(shared_system, random_seed);
     cout << "\r                                                             " << flush;
     cout << "\rcreating contexts: reference... " << flush;
-    _ref_context = new OpenMM::Context(*shared_system, *ref_intg, OpenMM::Platform::getPlatformByName("Reference"));
+    ref_context_ = new OpenMM::Context(*shared_system, *ref_intg,
+        OpenMM::Platform::getPlatformByName("Reference"));
     cout << "core..." << flush;
-    _core_context = new OpenMM::Context(*shared_system, *core_intg, OpenMM::Platform::getPlatformByName(platform_name));
+    core_context_ = new OpenMM::Context(*shared_system, *core_intg,
+        OpenMM::Platform::getPlatformByName(platform_name_));
     cout << "ok";
-    _ref_context->setState(*initial_state);
-    _core_context->setState(*initial_state);
+    ref_context_->setState(*initial_state);
+    core_context_->setState(*initial_state);
     delete(initial_state);
     changemode(0);
 }
 
-void OpenMMCore::_send_saved_checkpoint() {
-    // do not send a checkpoint if there's nothing there
-    if(_checkpoint_xml.size() == 0) {
-        return;
-    }
-    map<string, string> checkpoint_files;
-    checkpoint_files["state.xml"] = _checkpoint_xml;
-    sendCheckpointFiles(checkpoint_files, true);
-    // flush
-    _checkpoint_xml.clear();
-}
 
+void OpenMMCore::flushCheckpoint() {
+    if(last_checkpoint_.size() == 0)
+        return;
+    map<string, string> checkpoint_files;
+    checkpoint_files["state.xml"] = last_checkpoint_;
+    sendCheckpoint(checkpoint_files, true);
+    last_checkpoint_.clear();
+}
 
 void OpenMMCore::checkState(const OpenMM::State &core_state) const {
 
-    _ref_context->setState(core_state);
-    OpenMM::State reference_state = _ref_context->getState(
+    ref_context_->setState(core_state);
+    OpenMM::State reference_state = ref_context_->getState(
         OpenMM::State::Energy | 
         OpenMM::State::Forces);
 
@@ -245,8 +288,8 @@ void OpenMMCore::checkState(const OpenMM::State &core_state) const {
 
 void OpenMMCore::checkFrameWrite(int current_step) {
     // nothing is written on the first step;
-    if(current_step > 0 && current_step % _frame_write_interval == 0) {
-        OpenMM::State state = _core_context->getState(
+    if(current_step > 0 && current_step % steps_per_frame_ == 0) {
+        OpenMM::State state = core_context_->getState(
             OpenMM::State::Positions | 
             OpenMM::State::Velocities | 
             OpenMM::State::Parameters | 
@@ -281,23 +324,23 @@ void OpenMMCore::checkFrameWrite(int current_step) {
         // write checkpoint
         ostringstream checkpoint;
         OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
-        _checkpoint_xml = checkpoint.str();
+        last_checkpoint_ = checkpoint.str();
     }
 }
 
 int OpenMMCore::timePerFrame(long long steps_completed) const {
-    int time_diff = time(NULL)-_start_time;
+    int time_diff = time(NULL)-start_time_;
     if(steps_completed == 0)
         return 0;
-    return int(double(_frame_write_interval)*(time_diff)/steps_completed);
+    return int(double(steps_per_frame_)*(time_diff)/steps_completed);
 }
 
 float OpenMMCore::nsPerDay(long long steps_completed) const {
-    int time_diff = time(NULL)-_start_time;
+    int time_diff = time(NULL)-start_time_;
     if(time_diff == 0)
         return 0;
     // time_step is in picoseconds
-    double time_step = _core_context->getIntegrator().getStepSize();
+    double time_step = core_context_->getIntegrator().getStepSize();
     return (double(steps_completed)/time_diff)*(time_step/1e3)*86400;
 }
 
@@ -306,35 +349,39 @@ void OpenMMCore::main() {
         long long current_step = 0;
         changemode(1);
         status_header(cout);
+
+        double next_checkpoint = time(NULL) + checkpoint_send_interval_;
+        double next_heartbeat = time(NULL) + heartbeat_interval_;
+
         while(true) {
             if(current_step % 10 == 0) {
-                update_status(target_id,
-                              _stream_id,
+                update_status(target_id_,
+                              stream_id_,
                               timePerFrame(current_step),
                               nsPerDay(current_step),
-                              current_step/_frame_write_interval,
+                              current_step/steps_per_frame_,
                               current_step);
             }
-            if(exit()) {
+            if(global_exit) {
                 changemode(0);
                 break;
             }
             if(kbhit()) {
-                // handle keyboard events
-                // c sends the previous checkpoints
                 if('c' == char(getchar())) {
                     cout << "\rsending checkpoint" << flush;
-                    _send_saved_checkpoint();
+                    flushCheckpoint();
                 }
             }
             checkFrameWrite(current_step);
-            if(shouldHeartbeat()) { 
+            if(time(NULL) > next_heartbeat) { 
                 sendHeartbeat();
+                next_heartbeat = time(NULL) + heartbeat_interval_;
             }
-            if(shouldSendCheckpoint()) {
-               _send_saved_checkpoint();
+            if(time(NULL) > next_checkpoint) {
+               flushCheckpoint();
+               next_checkpoint = time(NULL) + checkpoint_send_interval_;
             }
-            _core_context->getIntegrator().step(1);
+            core_context_->getIntegrator().step(1);
             current_step++;
         }
         stopStream();

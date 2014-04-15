@@ -25,25 +25,7 @@ Then run the unit tests:
 Configuration
 -------------
 
-The ``cc.conf`` and ``ws.conf`` files provide typical setup configurations. Note that this is just a regular python file. Each command center has a secret password called ``cc_pass``. This password is used for workservers to automatically register themselves to the command centers. The information for the cc is added to the ``command_centers`` section in the ``ws.conf`` file. A good way to generate the password for the cc is:
-
-.. sourcecode:: bash
-    
-    $> python
-    >>> import os, hashlib
-    >>> hashlib.sha256(os.urandom(2048)).hexdigest()
-    '6f14e0d553d5ad81d03b8808ca3c73e0d1eb1d65ee131281471c23b689d63489'
-
-Another section of interest is:
-
-.. sourcecode:: python
-
-    external_options = {
-        'external_url': '127.0.0.1',
-        'external_http_port': '8960'
-    }
-
-This specifies the externally visible url and port that should be used by the CC to communicate with the WS. ``external_url`` corresponds to the signed certificate's domain name, eg: *proteneer.stanford.edu*. The workserver listens on ``internal_http_port`` and iptables can used to redirect incoming requests from ``external_http_port`` to ``internal_http_port``.
+The ``cc.conf`` and ``ws.conf`` files provide typical setup configurations. Note that this is just a regular python file. One important field in the config file is ``external_host``, which specifies the externally visible url and port that HTTP requests should be made to. The URL specified should correspond to host specified in the signed certificate, eg: *proteneer.stanford.edu*. The servers listen on ``internal_http_port`` and iptables can used to redirect incoming requests from ``external_http_port`` to ``internal_http_port`` (since only root can listen on ports <1024).
 
 SSL Certificates
 ----------------

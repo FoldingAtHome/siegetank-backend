@@ -11,9 +11,6 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   siegetank
-   ws
-   cc
    deployment
 
 Indices and tables

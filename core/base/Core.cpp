@@ -1,3 +1,17 @@
+// Authors: Yutong Zhao <proteneer@gmail.com>
+//
+// Licensed under the Apache License, Version 2.0 (the "License"); you may
+// not use this file except in compliance with the License. You may obtain
+// a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+// License for the specific language governing permissions and limitations
+// under the License.
+
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
 #include <Poco/JSON/Object.h>
@@ -28,19 +42,11 @@
 #include <algorithm>
 #include <locale>
 
-#include <signal.h>
 #include <ctime>
 
 #include "Core.h"
-#include "picojson.h"
 
 using namespace std;
-
-static sig_atomic_t _global_exit = false;
-
-static void exit_signal_handler(int param) {
-    _global_exit = true;
-}
 
 static void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
     // Add a stream of PEM formatted certificate strings to the trusted store
@@ -113,9 +119,6 @@ Core::Core(string engine, std::string core_key) :
     engine_(engine),
     core_key_(core_key) {
 /*
-    _global_exit = false;
-    signal(SIGINT, exit_signal_handler);
-    signal(SIGTERM, exit_signal_handler);
     _next_checkpoint_time = _start_time + _checkpoint_send_interval;
     _next_heartbeat_time = _start_time + _heartbeat_interval;
 */
@@ -143,7 +146,9 @@ static string parse_error(string body) {
     return error;
 }
 
-void Core::assign(const string &cc_host, const string &donor_token) {
+void Core::assign(const string &cc_host,
+                  const string &donor_token,
+                  const string &target_id) {
     Poco::URI cc_uri(cc_host);
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(cc_uri.getHost())) {
@@ -174,8 +179,8 @@ void Core::assign(const string &cc_host, const string &donor_token) {
         body += "{\"engine\": \""+engine_+"\",";
         if(donor_token.length() > 0)
             body += "\"donor_token\": \""+donor_token+"\",";
-        if(target_id_.length() > 0)
-            body += "\"target_id\": \""+target_id_+"\"}";
+        if(target_id.length() > 0)
+            body += "\"target_id\": \""+target_id+"\"}";
         request.set("Authorization", core_key_);
         request.setContentLength(body.length());
         cc_session.sendRequest(request) << body;
@@ -213,11 +218,10 @@ void Core::assign(const string &cc_host, const string &donor_token) {
 
 void Core::startStream(const string &cc_uri,
                        const string &donor_token,
-                       map<string, string> &files,
-                       string &options) {
+                       const string &target_id) {
 
     if(session_ == NULL)
-        assign(cc_uri, donor_token);
+        assign(cc_uri, donor_token, target_id);
     else
         throw std::runtime_error("session_ is not NULL");
     Poco::Net::HTTPRequest request("GET", "/core/start");
@@ -233,15 +237,15 @@ void Core::startStream(const string &cc_uri,
     if(!err.empty())
         throw(std::runtime_error("assign() picojson error"+err));
     if(!json_value.is<picojson::object>())
-            throw(std::runtime_error("no JSON object could be read"+err));
+        throw(std::runtime_error("no JSON object could be read"+err));
     picojson::value::object &json_object = json_value.get<picojson::object>();
     stream_id_ = json_object["url"].get<string>();
-    string new_target_id(json_object["target_id"].get<string>());
-    if(target_id_.length() > 0 && new_target_id != target_id_) {
+    target_id_ = json_object["target_id"].get<string>();
+    if(target_id != target_id_) {
         throw std::runtime_error("FATAL: Specified target_id mismatch");
     }
     picojson::value::object &json_files = json_object["files"].get<picojson::object>();
-    for (picojson::value::object::const_iterator it = json_files.begin();
+    for(picojson::value::object::const_iterator it = json_files.begin();
          it != json_files.end(); ++it) {
         string filename = it->first;
         string filedata = it->second.get<string>();
@@ -253,9 +257,9 @@ void Core::startStream(const string &cc_uri,
                 filedata = decode_gz(filedata);
             }
         }
-        files[filename] = filedata;
+        files_[filename] = filedata;
     }
-    options = json_object["options"].to_str();
+    options_ = json_object["options"].to_str();
 }
 
 void Core::sendFrame(const map<string, string> &files, 
@@ -364,25 +368,3 @@ void Core::sendHeartbeat() const {
 void Core::main() {
 
 }
-
-/*
-bool Core::shouldSendCheckpoint() {
-    time_t current_time = time(NULL);
-    if(current_time > _next_checkpoint_time) {
-        _next_checkpoint_time = current_time + _checkpoint_send_interval;
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool Core::shouldHeartbeat() {
-    time_t current_time = time(NULL);
-    if(current_time > _next_heartbeat_time) {
-        _next_heartbeat_time = current_time + _heartbeat_interval;
-        return true;
-    } else {
-        return false;
-    }
-}
-*/
