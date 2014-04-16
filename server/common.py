@@ -148,15 +148,16 @@ class BaseServerMixin():
         self.redis_options = redis_options
         self.mongo_options = mongo_options
 
+        if 'appendfilename' in redis_options:
+            redis_options['appendonly'] = 'yes'
+        self.db = init_redis(redis_options, cwd=self.data_folder)
+
         channel = logging.handlers.RotatingFileHandler(
             filename=os.path.join(self.data_folder, 'server.log'))
         logging.getLogger('tornado.access').addHandler(channel)
         logging.getLogger('tornado.application').addHandler(channel)
+        #this channel causes unit tests to blow up for some reason...
         logging.getLogger('tornado.general').addHandler(channel)
-
-        if 'appendfilename' in redis_options:
-            redis_options['appendonly'] = 'yes'
-        self.db = init_redis(redis_options, cwd=self.data_folder)
 
         self._mongo_options = mongo_options
 

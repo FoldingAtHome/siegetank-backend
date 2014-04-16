@@ -9,29 +9,34 @@ import time
 import bcrypt
 import uuid
 import random
+import pymongo
+import logging
 
 import server.cc as cc
 
 
 class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     def setUp(self):
-        self.increment = 3
-        redis_options = {'port': 3828, 'logfile': os.devnull}
-        mongo_options = {'host': 'localhost', 'port': 27017}
-        self.cc = cc.CommandCenter(name='test_cc',
-                                   external_host='localhost',
-                                   redis_options=redis_options,
-                                   mongo_options=mongo_options)
-        self.cc.initialize_motor()
+        self.mongo_options = {'host': 'localhost', 'port': 27017}
+        self.mdb = pymongo.MongoClient('localhost', 27017)
         super(TestCommandCenter, self).setUp()
 
     def tearDown(self):
         self.cc.db.flushdb()
         self.cc.shutdown_redis()
-        for db_name in self.cc.mdb.database_names():
-            self.cc.mdb.drop_database(db_name)
-        shutil.rmtree(self.cc.data_folder)
+        for db_name in self.mdb.database_names():
+            self.mdb.drop_database(db_name)
         super(TestCommandCenter, self).tearDown()
+        #shutil.rmtree(self.cc.data_folder)
+
+    def get_app(self):
+        redis_options = {'port': 3828, 'logfile': os.devnull}
+        self.cc = cc.CommandCenter(name='test_cc',
+                                   external_host='localhost',
+                                   redis_options=redis_options,
+                                   mongo_options=self.mongo_options)
+        self.cc.initialize_motor()
+        return self.cc
 
     def _add_manager(self, email='test@gm.com', role='manager', auth=None):
         password = str(uuid.uuid4())
@@ -109,7 +114,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         }
         rep = self.fetch('/donors', method='POST', body=json.dumps(body))
         self.assertEqual(rep.code, 200)
-        query = self.cc.mdb.community.donors.find_one({'_id': username})
+        query = self.mdb.community.donors.find_one({'_id': username})
         stored_hash = query['password_hash']
         stored_token = query['token']
         self.assertEqual(stored_hash,
@@ -127,7 +132,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
                              body=json.dumps(body))
             self.assertEqual(rep.code, 200)
             reply_token = json.loads(rep.body.decode())['token']
-            query = self.cc.mdb.community.donors.find_one({'_id': username})
+            query = self.mdb.community.donors.find_one({'_id': username})
             stored_token = query['token']
             self.assertEqual(reply_token, stored_token)
 
@@ -154,7 +159,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         email = result['email']
         password = result['password']
         token = result['token']
-        query = self.cc.mdb.users.managers.find_one({'_id': email})
+        query = self.mdb.users.managers.find_one({'_id': email})
         stored_hash = query['password_hash']
         stored_token = query['token']
         stored_role = query['role']
@@ -173,7 +178,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
                              body=json.dumps(body))
             self.assertEqual(rep.code, 200)
             reply_token = json.loads(rep.body.decode())['token']
-            query = self.cc.mdb.users.managers.find_one({'_id': email})
+            query = self.mdb.users.managers.find_one({'_id': email})
             stored_token = query['token']
             self.assertEqual(reply_token, stored_token)
 
@@ -314,9 +319,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         content = self._load_core_keys(good_token)
         self.assertEqual(set(content.keys()), set(keys))
         self._delete_core_key(good_token, '1234', 400)
-
-    def get_app(self):
-        return self.cc
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

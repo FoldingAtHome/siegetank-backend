@@ -264,6 +264,7 @@ class VerifyManagerHandler(BaseHandler):
 
 
 class AuthManagerHandler(BaseHandler):
+    @tornado.gen.coroutine
     def post(self):
         """
         .. http:post:: /managers/auth
@@ -295,13 +296,12 @@ class AuthManagerHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         password = content['password']
         email = content['email']
-        managers = self.mdb.users.managers
-        query = managers.find_one({'_id': email},
-                                  fields=['password_hash'])
+        cursor = self.motor.users.managers
+        query = yield cursor.find_one({'_id': email}, fields=['password_hash'])
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
-            managers.update({'_id': email}, {'$set': {'token': new_token}})
+            cursor.update({'_id': email}, {'$set': {'token': new_token}})
         else:
             return self.status(401)
         self.set_status(200)
@@ -309,6 +309,7 @@ class AuthManagerHandler(BaseHandler):
 
 
 class AddManagerHandler(BaseHandler):
+    @tornado.gen.coroutine
     def post(self):
         """
         .. http:post:: /managers
@@ -365,9 +366,9 @@ class AddManagerHandler(BaseHandler):
                    'weight': weight
                    }
 
-        managers = self.mdb.users.managers
+        cursor = self.motor.users.managers
         try:
-            managers.insert(db_body)
+            yield cursor.insert(db_body)
         except pymongo.errors.DuplicateKeyError:
             return self.error(email+' exists')
 
