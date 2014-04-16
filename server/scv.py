@@ -135,6 +135,18 @@ class BaseHandler(tornado.web.RequestHandler):
         self.set_status(400)
         self.write({'error': message})
 
+    def authenticate_core(self):
+        """ Returns a stream_id if token is valid, None otherwise """
+        try:
+            token = self.request.headers['Authorization']
+            stream_id = ActiveStream.lookup('auth_token', token, self.db)
+            if stream_id:
+                return stream_id
+            else:
+                return None
+        except:
+            return None
+
 
 def authenticate_cc(method):
     """ Decorator for handlers that require the incoming request's remote_ip
@@ -310,7 +322,7 @@ class StreamActivateHandler(BaseHandler):
 
 
 class StreamsHandler(BaseHandler):
-    @authenticate_manager
+    @tornado.gen.coroutine
     def post(self):
         """
         .. http:post:: /streams
@@ -344,6 +356,10 @@ class StreamsHandler(BaseHandler):
 
         """
         self.set_status(400)
+        current_user = yield self.get_current_user()
+        if current_user is None:
+            return self.error('Bad credentials', 401)
+
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
         stream_files = content['files']
@@ -354,8 +370,8 @@ class StreamsHandler(BaseHandler):
             target = Target(target_id, self.db)
 
         # Bad if server dies here
-        cursor = self.mdb.data.targets
-        result = cursor.update({'_id': target_id},
+        cursor = self.motor.data.targets
+        result = yield cursor.update({'_id': target_id},
             {'$addToSet': {'shards': self.application.name}})
         if not result['ok']:
             self.set_status(400)
@@ -457,7 +473,7 @@ class StreamStopHandler(BaseHandler):
         if stream_owner != current_user:
             self.set_status(401)
 
-        self.deactivate_stream(stream_id)
+        yield self.deactivate_stream(stream_id)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -506,13 +522,13 @@ class StreamDeleteHandler(BaseHandler):
         target = Target(target_id, self.db)
 
         pipeline = self.db.pipeline()
-        self.deactivate_stream(stream_id)
+        yield self.deactivate_stream(stream_id)
         target.zrem('queue', stream_id, pipeline=pipeline)
         stream.delete(pipeline=pipeline)
         pipeline.execute()
         if target.scard('streams') == 0:
-            cursor = self.mdb.data.targets
-            result = cursor.update({'_id': target_id},
+            cursor = self.motor.data.targets
+            result = yield cursor.update({'_id': target_id},
                 {'$pull': {'shards': self.application.name}})
             # we do not check for updatedExisting == False because the target
             # may already be deleted from the mdb if this scv is detached
@@ -527,8 +543,8 @@ class StreamDeleteHandler(BaseHandler):
 
 
 class CoreStartHandler(BaseHandler):
-    @authenticate_core
-    def get(self, stream_id):
+    @tornado.gen.coroutine
+    def get(self):
         """
         .. http:get:: /core/start
 
@@ -574,8 +590,10 @@ class CoreStartHandler(BaseHandler):
         #         ---------------------| ------------------------------- ---
         #
         # In other words, the core does not write frames for the zeroth frame.
-
         self.set_status(400)
+        stream_id = self.authenticate_core()
+        if not stream_id:
+            return self.error('Bad core token', code=401)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         assert stream.hget('status') == 'OK'
@@ -589,16 +607,15 @@ class CoreStartHandler(BaseHandler):
                 reply['files'][filename] = handle.read()
         reply['stream_id'] = stream_id
         reply['target_id'] = target_id
-        cursor = self.mdb.data.targets
-        result = cursor.find_one({'_id': target_id}, {'options': 1})
+        cursor = self.motor.data.targets
+        result = yield cursor.find_one({'_id': target_id}, {'options': 1})
         reply['options'] = result['options']
         self.set_status(200)
         return self.write(reply)
 
 
 class CoreFrameHandler(BaseHandler):
-    @authenticate_core
-    def put(self, stream_id):
+    def put(self):
         """
         ..  http:put:: /core/frame
 
@@ -656,6 +673,9 @@ class CoreFrameHandler(BaseHandler):
         # fwi = 2
         # fsi = cwf = 100
         # sci = 2x per day
+        stream_id = self.authenticate_core()
+        if not stream_id:
+            return self.error('Bad core token', code=401)
         self.set_status(400)
         active_stream = ActiveStream(stream_id, self.db)
         frame_hash = hashlib.md5(self.request.body).hexdigest()
@@ -694,8 +714,7 @@ class CoreFrameHandler(BaseHandler):
 
 
 class CoreCheckpointHandler(BaseHandler):
-    @authenticate_core
-    def put(self, stream_id):
+    def put(self):
         """
         .. http:put:: /core/checkpoint
 
@@ -750,8 +769,10 @@ class CoreCheckpointHandler(BaseHandler):
         # 3) Remove all frame files with a frame number greater than # of the
         #    checkpoint, as well as all buffer files
         # 4) Rename checkpoint files to their proper names.
-
         self.set_status(400)
+        stream_id = self.authenticate_core()
+        if not stream_id:
+            return self.error('Bad core token', code=401)
         content = json.loads(self.request.body.decode())
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
@@ -801,8 +822,8 @@ class CoreCheckpointHandler(BaseHandler):
 
 
 class CoreStopHandler(BaseHandler):
-    @authenticate_core
-    def put(self, stream_id):
+    @tornado.gen.coroutine
+    def put(self):
         """
         ..  http:put:: /core/stop
 
@@ -824,6 +845,9 @@ class CoreStopHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        stream_id = self.authenticate_core()
+        if not stream_id:
+            return self.error('Bad core token', code=401)
         # TODO: add field denoting if stream should be finished
         stream = Stream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
@@ -835,7 +859,7 @@ class CoreStopHandler(BaseHandler):
             with open(log_path, 'a') as handle:
                 handle.write(time.strftime("%c")+'\n'+message)
         self.set_status(200)
-        self.deactivate_stream(stream_id)
+        yield self.application.deactivate_stream(stream_id)
 
 
 class ActiveStreamsHandler(BaseHandler):
@@ -1137,10 +1161,12 @@ class SCV(BaseServerMixin, tornado.web.Application):
         self.notify_shutdown()
         BaseServerMixin.shutdown(self, *args, **kwargs)
 
+    @tornado.gen.coroutine
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
-            self.deactivate_stream(dead_stream)
+            yield self.deactivate_stream(dead_stream)
 
+    @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
         # activation happens atomically so we can deactivate without too much
         # worrying about atomicity
@@ -1154,7 +1180,18 @@ class SCV(BaseServerMixin, tornado.web.Application):
             for buffer_path in glob.glob(stream_path+'/buffer_*'):
                 if os.path.exists(buffer_path):
                     os.remove(buffer_path)
-
+            donor = active_stream.hget('donor')
+            start_time = active_stream.hget('start_time')
+            end_time = time.time()
+            frames = active_stream.hget('total_frames')
+            body = {
+                'donor': donor,
+                'start_time': start_time,
+                'end_time': end_time,
+                'frames': frames
+            }
+            cursor = self.motor.stats.fragments
+            yield cursor.insert(body)
             active_stream.delete()
             # push this stream back into queue
             stream = Stream(stream_id, self.db)
@@ -1169,7 +1206,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
 #########################
 
 tornado.options.define('heartbeat_increment', default=900, type=int)
-tornado.options.define('pulse_frequency_in_ms', default=3000, type=int)
+#tornado.options.define('heartbeat_increment', default=5, type=int)
+tornado.options.define('check_heart_frequency_in_ms', default=300, type=int)
 
 
 def start():
@@ -1198,7 +1236,7 @@ def start():
 
     if tornado.process.task_id() == 0:
         tornado.ioloop.IOLoop.instance().add_callback(instance.notify_startup)
-        frequency = tornado.options.options['pulse_frequency_in_ms']
+        frequency = tornado.options.options['check_heart_frequency_in_ms']
         pulse = tornado.ioloop.PeriodicCallback(instance.check_heartbeats,
                                                 frequency)
         pulse.start()
