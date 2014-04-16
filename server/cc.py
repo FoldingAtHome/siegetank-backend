@@ -62,26 +62,6 @@ def authenticate_core(method):
                 return method(self, *args, **kwargs)
     return wrapper
 
-
-def authenticate_admin(method):
-    """ Decorator for the handlers that require administrative power.
-
-    """
-    @tornado.gen.coroutine
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        try:
-            self.request.headers['Authorization']
-        except:
-            return self.error('missing Authorization header', code=401)
-        else:
-            if(yield self.get_user_role()) == 'admin':
-                return method(self, *args, **kwargs)
-            else:
-                return self.error('bad role', code=401)     
-    return wrapper
-
-
 class SCV(Entity):
     prefix = 'scv'
     fields = {'host': str,  # http request url (verify based on if IP or not)

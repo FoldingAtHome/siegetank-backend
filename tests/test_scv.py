@@ -11,31 +11,24 @@ import time
 import base64
 import random
 import hashlib
+import pymongo
+
 from os.path import isfile
 
 
 class TestSCV(tornado.testing.AsyncHTTPTestCase):
-    @classmethod
-    def setUpClass(self):
-        super(TestSCV, self).setUpClass()
-        redis_options = {'port': 3828, 'logfile': os.devnull}
-        mongo_options = {'host': 'localhost', 'port': 27017}
-        self.scv = scv.SCV(name='test_scv',
-                           external_host='127.0.0.1',
-                           mongo_options=mongo_options,
-                           redis_options=redis_options)
-
-    @classmethod
-    def tearDownClass(self):
-        super(TestSCV, self).tearDownClass()
-        self.scv.shutdown_redis()
-        shutil.rmtree(self.scv.data_folder)
-
     def get_app(self):
+        redis_options = {'port': 3828, 'logfile': os.devnull}
+        self.scv = scv.SCV(name='test_scv',
+                   external_host='127.0.0.1',
+                   mongo_options=self.mongo_options,
+                   redis_options=redis_options)
+        self.scv.initialize_motor()
         return self.scv
 
     def setUp(self):
-        super(TestSCV, self).setUp()
+        self.mongo_options = {'host': 'localhost', 'port': 27017}
+        self.mdb = pymongo.MongoClient('localhost', 27017)
         token = str(uuid.uuid4())
         test_manager = "test_ws@gmail.com"
         db_body = {'_id': test_manager,
@@ -43,21 +36,24 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                    'role': 'manager',
                    'weight': 1,
                    }
-        managers = self.scv.mdb.users.managers
+        managers = self.mdb.users.managers
         managers.insert(db_body)
         self.auth_token = token
         self.test_manager = test_manager
+        super(TestSCV, self).setUp()
 
     def tearDown(self):
         super(TestSCV, self).tearDown()
         self.scv.db.flushdb()
-        for db_name in self.scv.mdb.database_names():
-            self.scv.mdb.drop_database(db_name)
+        self.scv.shutdown_redis()
+        for db_name in self.mdb.database_names():
+            self.mdb.drop_database(db_name)
+        shutil.rmtree(self.scv.data_folder)
 
     def _post_stream(self, target_id=None):
         if target_id is None:
             target_id = str(uuid.uuid4())
-            targets = self.scv.mdb.data.targets
+            targets = self.mdb.data.targets
             body = {'_id': target_id,
                     'owner': self.test_manager,
                     'options': {'steps_per_frame': 50000}}
@@ -165,7 +161,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             scv.Target(target_id, self.scv.db).smembers('streams'))
         expected = {'streams': [stream_id]}
         self.assertEqual(self._get_streams(target_id), expected)
-        cursor = self.scv.mdb.data.targets
+        cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [self.scv.name])
 
@@ -174,7 +170,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         stream_id = result['stream_id']
         target_id = result['target_id']
         target = scv.Target(target_id, self.scv.db)
-        cursor = self.scv.mdb.data.targets
+        cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [self.scv.name])
         self._delete_stream(stream_id)
@@ -192,7 +188,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         target_id = result['target_id']
         result = self._post_stream(target_id)
         stream2 = result['stream_id']
-        cursor = self.scv.mdb.data.targets
+        cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [self.scv.name])
         self._delete_stream(stream1)
@@ -272,7 +268,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             stream_dir = os.path.join(self.scv.streams_folder, stream_id)
             self.assertFalse(os.path.exists(stream_dir))
         self.assertEqual(self.scv.db.keys('*'), [])
-        cursor = self.scv.mdb.data.targets
+        cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [])
 

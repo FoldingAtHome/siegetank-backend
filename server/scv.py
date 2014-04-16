@@ -85,27 +85,49 @@ class BaseHandler(tornado.web.RequestHandler):
         return self.application.mdb
 
     @property
+    def motor(self):
+        return self.application.motor
+
+    @property
     def deactivate_stream(self):
         return self.application.deactivate_stream
 
+    @tornado.gen.coroutine
     def get_current_user(self):
         try:
             header_token = self.request.headers['Authorization']
         except KeyError:
             return None
-        managers = self.mdb.users.managers
-        query = managers.find_one({'token': header_token},
-                                  fields=['_id'])
+        managers = self.motor.users.managers
+        query = yield managers.find_one({'token': header_token},
+                                        fields=['_id'])
         if query:
             return query['_id']
         else:
             return None
 
+    @tornado.gen.coroutine
+    def get_user_role(self):
+        try:
+            token = self.request.headers['Authorization']
+        except KeyError:
+            if self.request.remote_ip == '127.0.0.1':
+                return 'admin'
+            else:
+                return None
+        cursor = self.motor.users.managers
+        query = yield cursor.find_one({'token': token}, fields=['role'])
+        try:
+            return query['role']
+        except:
+            return None
+
+    @tornado.gen.coroutine
     def get_stream_owner(self, stream_id):
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
-        query = self.mdb.data.targets.find_one({'_id': target_id},
-                                               fields=['owner'])
+        cursor = self.motor.data.targets
+        query = yield cursor.find_one({'_id': target_id}, fields=['owner'])
         return query['owner']
 
     def error(self, message):
@@ -335,9 +357,9 @@ class StreamsHandler(BaseHandler):
         cursor = self.mdb.data.targets
         result = cursor.update({'_id': target_id},
             {'$addToSet': {'shards': self.application.name}})
-        if result['err'] is not None:
+        if not result['ok']:
             self.set_status(400)
-            return self.write(result['err'])
+            return self.write(result['ok'])
 
         stream_id = str(uuid.uuid4())+':'+self.application.name
         stream_dir = os.path.join(self.application.streams_folder, stream_id)
@@ -363,7 +385,7 @@ class StreamsHandler(BaseHandler):
 
 
 class StreamStartHandler(BaseHandler):
-    @authenticate_manager
+    @tornado.gen.coroutine
     def put(self, stream_id):
         """
         .. http:put:: /streams/start/:stream_id
@@ -386,8 +408,10 @@ class StreamStartHandler(BaseHandler):
         """
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
-        if self.get_stream_owner(stream_id) != self.get_current_user():
-            return self.set_status(401)
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
+            self.set_status(401)
 
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
@@ -405,7 +429,7 @@ class StreamStartHandler(BaseHandler):
 
 
 class StreamStopHandler(BaseHandler):
-    @authenticate_manager
+    @tornado.gen.coroutine
     def put(self, stream_id):
         """
         .. http:put:: /streams/stop/:stream_id
@@ -428,8 +452,10 @@ class StreamStopHandler(BaseHandler):
         """
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
-        if self.get_stream_owner(stream_id) != self.get_current_user():
-            return self.set_status(401)
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
+            self.set_status(401)
 
         self.deactivate_stream(stream_id)
         stream = Stream(stream_id, self.db)
@@ -444,7 +470,7 @@ class StreamStopHandler(BaseHandler):
 
 
 class StreamDeleteHandler(BaseHandler):
-    @authenticate_manager
+    @tornado.gen.coroutine
     def put(self, stream_id):
         """
         .. http:put:: /streams/delete/:stream_id
@@ -471,8 +497,10 @@ class StreamDeleteHandler(BaseHandler):
         # delete from database before deleting from disk
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
-        if self.get_stream_owner(stream_id) != self.get_current_user():
-            return self.set_status(401)
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
+            self.set_status(401)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -489,9 +517,9 @@ class StreamDeleteHandler(BaseHandler):
             # we do not check for updatedExisting == False because the target
             # may already be deleted from the mdb if this scv is detached
             # from the target_id's "shards" field.
-            if result['err'] is not None:
+            if not result['ok']:
                 self.set_status(400)
-                return self.write(result['err'])
+                return self.write(result['ok'])
             target.delete()
         stream_path = os.path.join(self.application.streams_folder, stream_id)
         shutil.rmtree(stream_path)
@@ -862,7 +890,6 @@ class ActiveStreamsHandler(BaseHandler):
 
 
 class StreamReplaceHandler(BaseHandler):
-    @authenticate_manager
     @tornado.gen.coroutine
     def put(self, stream_id):
         """
@@ -894,7 +921,9 @@ class StreamReplaceHandler(BaseHandler):
         """
         self.set_status(400)
         stream = Stream(stream_id, self.db)
-        if self.get_stream_owner(stream_id) != self.get_current_user():
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
             self.set_status(401)
         if stream.hget('status') != 'STOPPED':
             return self.error('stream must be stopped first')
@@ -912,7 +941,6 @@ class StreamReplaceHandler(BaseHandler):
 
 
 class StreamDownloadHandler(BaseHandler):
-    @authenticate_manager
     @tornado.gen.coroutine
     def get(self, stream_id, filename):
         """
@@ -950,7 +978,9 @@ class StreamDownloadHandler(BaseHandler):
         if(file_dir != os.path.abspath(stream_dir)):
             return
         stream = Stream(stream_id, self.db)
-        if self.get_stream_owner(stream_id) != self.get_current_user():
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
             self.set_status(401)
 
         buf_size = 4096
@@ -1164,6 +1194,7 @@ def start():
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
     server.bind(options.internal_http_port)
     server.start(0)
+    instance.initialize_motor()
 
     if tornado.process.task_id() == 0:
         tornado.ioloop.IOLoop.instance().add_callback(instance.notify_startup)
