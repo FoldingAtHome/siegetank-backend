@@ -37,7 +37,7 @@ from server.apollo import Entity
 
 def authenticate_core(method):
     """ Decorator for the assignment handler to ensure the request is coming
-    from a valid core whose.
+    from a valid core.
 
     """
     @functools.wraps(method)
@@ -52,7 +52,7 @@ def authenticate_core(method):
             core_engine = content['engine']
             query = {'engine': {'$in': [core_engine]}}
             cursor = self.mdb.engines.keys
-            results = cursor.find(query, {'_id': 1})
+            results = yield cursor.find(query, {'_id': 1})
             keys = []
             for match in results:
                 keys.append(match['_id'])
@@ -110,6 +110,10 @@ class BaseHandler(tornado.web.RequestHandler):
     @property
     def mdb(self):
         return self.application.mdb
+
+    @property
+    def motor(self):
+        return self.application.motor
 
     def get_current_user(self):
         try:
@@ -192,12 +196,13 @@ class AuthDonorHandler(BaseHandler):
 
 
 class AddDonorHandler(BaseHandler):
+    @tornado.gen.coroutine
     def post(self):
         """ Add a F@H Donor
 
         Request: {
-            "username": jesse_v,
-            "password": jesse's password
+            "username": "jesse_v",
+            "password": "jesse's password"
             "email": 'jv@gmail.com'
         }
 
@@ -217,9 +222,11 @@ class AddDonorHandler(BaseHandler):
         username = content['username']
         password = content['password']
         email = content['email']
-        donors = self.mdb.community.donors
+        cursor = self.motor.community.donors
         # see if email exists:
-        query = donors.find_one({'email': email})
+        print('A')
+        query = yield cursor.find_one({'email': email})
+        print('B')
         if query:
             return self.error('email exists in db!')
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
@@ -230,7 +237,7 @@ class AddDonorHandler(BaseHandler):
                    'email': email}
 
         try:
-            donors.insert(db_body)
+            yield cursor.insert(db_body)
         except:
             return self.error(username+' exists')
 
@@ -1162,7 +1169,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         result = ccs.update({'_id': self.name},
                             {'_id': self.name, 'host': external_host},
                             upsert=True)
-        if result['err'] is not None:
+        if not result['ok']:
             raise Exception("Could not update CC status in MDB")
 
     def _load_scvs(self):
@@ -1250,9 +1257,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
 
 def start():
-    extra_options = {
-        'allowed_core_keys': set
-    }
+    extra_options = {'allowed_core_keys': set}
     config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                '..', 'cc.conf')
     configure_options(config_file, extra_options)
@@ -1271,6 +1276,7 @@ def start():
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
     cc_server.bind(options.internal_http_port)
     cc_server.start(0)
+    instance.initialize_motor()
     if tornado.process.task_id() == 0:
         tornado.ioloop.IOLoop.instance().add_callback(instance._check_scvs)
         pulse = tornado.ioloop.PeriodicCallback(instance._check_scvs, 5000)

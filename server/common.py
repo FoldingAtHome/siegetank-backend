@@ -21,6 +21,7 @@ import time
 import tornado
 import ipaddress
 import os
+import pymongo
 import motor
 import signal
 import tornado.options
@@ -120,6 +121,23 @@ def init_redis(redis_options, cwd=None):
 
 
 class BaseServerMixin():
+    def initialize_motor(self):
+        print('INITIALIZING MOTOR')
+        mongo_options = self._mongo_options
+        if mongo_options:
+            host = mongo_options['host']
+            ssl_kwargs = {}
+            if is_domain(host):
+                options = tornado.options.options
+                try:
+                    ssl_kwargs['ssl_certfile'] = options.ssl_certfile
+                    ssl_kwargs['ssl_keyfile'] = options.ssl_keyfile
+                    ssl_kwargs['ssl_ca_certs'] = options.ssl_ca_certs
+                except AttributeError:
+                    print('WARNING: SSL not enabled for MongoDB - this is OK\
+                           if this message shows up during unit tests')
+            self.motor = motor.MotorClient(host, **ssl_kwargs)
+
     def base_init(self, name, redis_options, mongo_options):
         """ A BaseServer is a server that is connected to both a redis server
         and a mongo server """
@@ -140,6 +158,8 @@ class BaseServerMixin():
             redis_options['appendonly'] = 'yes'
         self.db = init_redis(redis_options, cwd=self.data_folder)
 
+        self._mongo_options = mongo_options
+
         if mongo_options:
             host = mongo_options['host']
             ssl_kwargs = {}
@@ -152,7 +172,7 @@ class BaseServerMixin():
                 except AttributeError:
                     print('WARNING: SSL not enabled for MongoDB - this is OK\
                            if this message shows up during unit tests')
-            self.mdb = motor.MongoClient(host, **ssl_kwargs)
+            self.mdb = pymongo.MongoClient(host, **ssl_kwargs)
             self.mdb.community.donors.ensure_index("token")
 
         signal.signal(signal.SIGINT, self.shutdown)

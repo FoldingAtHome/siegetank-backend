@@ -22,6 +22,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
                                    external_host='localhost',
                                    redis_options=redis_options,
                                    mongo_options=mongo_options)
+        self.cc.initialize_motor()
         super(TestCommandCenter, self).setUp()
 
     def tearDown(self):
