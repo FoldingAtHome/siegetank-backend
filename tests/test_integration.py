@@ -33,6 +33,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
                                    external_host=self.cc_host,
                                    redis_options=redis_options,
                                    mongo_options=mongo_options)
+        self.cc.initialize_motor()
         self.cc_server = tornado.httpserver.HTTPServer(
             self.cc,
             io_loop=io_loop,
@@ -50,6 +51,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
                                   external_host=host,
                                   redis_options=redis_options,
                                   mongo_options=mongo_options)
+            prop['app'].initialize_motor()
             prop['server'] = tornado.httpserver.HTTPServer(
                 prop['app'], io_loop=io_loop,
                 ssl_options={'certfile': 'certs/public.crt',
@@ -239,6 +241,16 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.assertTrue(info['shards'][0] in
                         [k['app'].name for k in self.scvs])
 
+    def test_assign(self):
+        target_id = self._post_target(self.cc_host)['target_id']
+        for i in range(10):
+            self._post_stream(self.cc_host, target_id)
+        content = self._assign(self.cc_host)
+        token, url = content['token'], content['url']
+        self._core_start(url, token)
+        host = urllib.parse.urlparse(url).netloc
+        self._core_stop(host, token)
+
     def test_assign_target(self):
         content = self._post_target(self.cc_host)
         target_id = content['target_id']
@@ -259,16 +271,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def test_assign_bad_core_key(self):
         self._post_target(self.cc_host)
         self._assign(self.cc_host, core_key='garbage', expected_code=400)
-
-    def test_assign(self):
-        target_id = self._post_target(self.cc_host)['target_id']
-        for i in range(10):
-            self._post_stream(self.cc_host, target_id)
-        content = self._assign(self.cc_host)
-        token, url = content['token'], content['url']
-        self._core_start(url, token)
-        host = urllib.parse.urlparse(url).netloc
-        self._core_stop(host, token)
 
     def test_assign_donor(self):
         content = self._add_donor()

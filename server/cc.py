@@ -644,7 +644,6 @@ class EngineKeysDeleteHandler(BaseHandler):
 
 
 class CoreAssignHandler(BaseHandler):
-    @authenticate_core
     @tornado.gen.coroutine
     def post(self):
         """
@@ -686,23 +685,41 @@ class CoreAssignHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        # core authentication
+        try:
+            key = self.request.headers['Authorization']
+        except:
+            self.write(json.dumps({'error': 'missing Authorization header'}))
+            return self.set_status(401)
+        content = json.loads(self.request.body.decode())
+        core_engine = content['engine']
+        query = {'engine': {'$in': [core_engine]}}
+        cursor = self.motor.engines.keys
+        keys = []
+        results = cursor.find(query, {'_id': 1})
+        while (yield results.fetch_next):
+            document = results.next_object()
+            keys.append(document['_id'])
+        if key not in keys:
+            return self.error('Bad engine key')
+
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         if 'donor_token' in content:
             donor_token = content['donor_token']
-            donors = self.mdb.community.donors
-            query = donors.find_one({'token': donor_token},
-                                    fields=['_id'])
+            donors = self.motor.community.donors
+            query = yield donors.find_one({'token': donor_token},
+                                          fields=['_id'])
             if not query:
                 return self.error('bad donor token')
             donor_id = query['_id']
         else:
             donor_id = None
         core_engine = content['engine']
-        cursor = self.mdb.data.targets
+        cursor = self.motor.data.targets
         if 'target_id' in content:
             target_id = content['target_id']
-            result = cursor.find_one({'_id': target_id},
+            result = yield cursor.find_one({'_id': target_id},
                                      {'engines': 1,
                                       'shards': 1,
                                       })
@@ -712,28 +729,30 @@ class CoreAssignHandler(BaseHandler):
                 return self.error('target specified has no shards')
             shards = result['shards']
         else:
-            result = cursor.find({'engines': {'$in': [core_engine]},
-                                  'stage': 'public'},
-                                 {'owner': 1,
-                                  '_id': 1,
-                                  'weight': 1,
-                                  'shards': 1})
+            results = cursor.find({'engines': {'$in': [core_engine]},
+                                   'stage': 'public'},
+                                  {'owner': 1,
+                                   '_id': 1,
+                                   'weight': 1,
+                                   'shards': 1})
             owner_weights = dict()
             target_weights = dict()
             target_owners = dict()
             target_shards = dict()
-            for match in result:
-                if match['shards']:
-                    owner_weights[match['owner']] = None
-                    target_weights[match['_id']] = match['weight']
-                    target_owners[match['_id']] = match['owner']
-                    target_shards[match['_id']] = match['shards']
+            while (yield results.fetch_next):
+                document = results.next_object()
+                if document['shards']:
+                    owner_weights[document['owner']] = None
+                    target_weights[document['_id']] = document['weight']
+                    target_owners[document['_id']] = document['owner']
+                    target_shards[document['_id']] = document['shards']
             if not target_weights:
                 return self.error('no valid targets could be found')
-            cursor = self.mdb.users.managers
-            result = cursor.find(fields={'_id': 1, 'weight': 1})
-            for match in result:
-                owner_weights[match['_id']] = match['weight']
+            cursor = self.motor.users.managers
+            results = cursor.find(fields={'_id': 1, 'weight': 1})
+            while (yield results.fetch_next):
+                document = results.next_object()
+                owner_weights[document['_id']] = document['weight']
 
             def weighted_sample(d):
                 keys = list(d.keys())
