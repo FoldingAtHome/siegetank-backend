@@ -10,7 +10,6 @@ import bcrypt
 import uuid
 import random
 import pymongo
-import logging
 
 import server.cc as cc
 
@@ -27,7 +26,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         for db_name in self.mdb.database_names():
             self.mdb.drop_database(db_name)
         super(TestCommandCenter, self).tearDown()
-        #shutil.rmtree(self.cc.data_folder)
+        shutil.rmtree(self.cc.data_folder)
 
     def get_app(self):
         redis_options = {'port': 3828, 'logfile': os.devnull}

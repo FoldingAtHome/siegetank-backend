@@ -67,6 +67,7 @@ def authenticate_admin(method):
     """ Decorator for the handlers that require administrative power.
 
     """
+    @tornado.gen.coroutine
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         try:
@@ -74,13 +75,10 @@ def authenticate_admin(method):
         except:
             return self.error('missing Authorization header', code=401)
         else:
-            current_user = self.get_current_user()
-            if current_user:
-                if self.get_user_role(current_user) != 'admin':
-                    return self.error('bad role', code=401)
+            if(yield self.get_user_role()) == 'admin':
+                return method(self, *args, **kwargs)
             else:
-                return self.error('bad role', code=401)
-            return method(self, *args, **kwargs)
+                return self.error('bad role', code=401)     
     return wrapper
 
 
@@ -115,23 +113,32 @@ class BaseHandler(tornado.web.RequestHandler):
     def motor(self):
         return self.application.motor
 
+    @tornado.gen.coroutine
     def get_current_user(self):
         try:
             header_token = self.request.headers['Authorization']
         except KeyError:
             return None
-        managers = self.mdb.users.managers
-        query = managers.find_one({'token': header_token},
-                                  fields=['_id'])
+        managers = self.motor.users.managers
+        query = yield managers.find_one({'token': header_token},
+                                        fields=['_id'])
         if query:
             return query['_id']
         else:
             return None
 
     # TODO: refactor to common
-    def get_user_role(self, email):
-        mdb = self.mdb.users
-        query = mdb.managers.find_one({'_id': email}, fields={'role'})
+    @tornado.gen.coroutine
+    def get_user_role(self):
+        try:
+            token = self.request.headers['Authorization']
+        except KeyError:
+            if self.request.remote_ip == '127.0.0.1':
+                return 'admin'
+            else:
+                return None
+        cursor = self.motor.users.managers
+        query = yield cursor.find_one({'token': token}, fields=['role'])
         try:
             return query['role']
         except:
@@ -150,6 +157,7 @@ class BaseHandler(tornado.web.RequestHandler):
 
 
 class AuthDonorHandler(BaseHandler):
+    @tornado.gen.coroutine
     def post(self):
         """
         .. http:post:: /managers/auth
@@ -181,9 +189,9 @@ class AuthDonorHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         username = content['username']
         password = content['password']
-        donors = self.mdb.community.donors
-        query = donors.find_one({'_id': username},
-                                fields=['password_hash'])
+        donors = self.motor.community.donors
+        query = yield donors.find_one({'_id': username},
+                                      fields=['password_hash'])
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
@@ -224,9 +232,7 @@ class AddDonorHandler(BaseHandler):
         email = content['email']
         cursor = self.motor.community.donors
         # see if email exists:
-        print('A')
         query = yield cursor.find_one({'email': email})
-        print('B')
         if query:
             return self.error('email exists in db!')
         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
@@ -343,10 +349,8 @@ class AddManagerHandler(BaseHandler):
 
         """
         self.set_status(400)
-        current_user = self.get_current_user()
-        if current_user:
-            if self.get_user_role(current_user) != 'admin':
-                return self.set_status(401)
+        if(yield self.get_user_role()) != 'admin':
+            return self.set_status(401)
         elif self.request.remote_ip != '127.0.0.1':
             return self.set_status(401)
 
@@ -377,7 +381,7 @@ class AddManagerHandler(BaseHandler):
 
 
 class TargetUpdateHandler(BaseHandler):
-    @authenticate_manager
+    @tornado.gen.coroutine
     def put(self, target_id):
         """
         .. http:put:: /targets/update/:target_id
@@ -426,6 +430,9 @@ class TargetUpdateHandler(BaseHandler):
 
         """
         self.set_status(400)
+        current_user = yield self.get_current_user()
+        if not current_user:
+            self.error('Bad credentials', code=401)
         content = json.loads(self.request.body.decode())
         payload = {}
         if 'engines' in content:
@@ -440,8 +447,8 @@ class TargetUpdateHandler(BaseHandler):
         if 'options' in content:
             for key, value in content['options'].items():
                 payload['options.'+key] = value
-        cursor = self.mdb.data.targets
-        result = cursor.update({'_id': target_id}, {'$set': payload})
+        cursor = self.motor.data.targets
+        result = yield cursor.update({'_id': target_id}, {'$set': payload})
         if result['updatedExisting']:
             self.set_status(200)
         else:
@@ -537,7 +544,7 @@ def yates_generator(x):
 
 
 class EngineKeysHandler(BaseHandler):
-    @authenticate_admin
+    @tornado.gen.coroutine
     def post(self):
         """
         .. http:post:: /engines/keys
@@ -567,6 +574,8 @@ class EngineKeysHandler(BaseHandler):
             :status 401: Unauthorized
 
         """
+        if(yield self.get_user_role()) != 'admin':
+            return self.error('Bad credentials', 401)
         content = json.loads(self.request.body.decode())
         for required_key in ['engine', 'description']:
             if required_key not in content:
@@ -574,12 +583,12 @@ class EngineKeysHandler(BaseHandler):
         stored_id = str(uuid.uuid4())
         content['_id'] = stored_id
         content['creation_date'] = time.time()
-        cursor = self.mdb.engines.keys
-        cursor.insert(content)
+        cursor = self.motor.engines.keys
+        yield cursor.insert(content)
         self.set_status(200)
         self.write({'key': stored_id})
 
-    @authenticate_admin
+    @tornado.gen.coroutine
     def get(self):
         """
         .. http:get:: /engines/keys
@@ -613,20 +622,23 @@ class EngineKeysHandler(BaseHandler):
             :status 401: Unauthorized
 
         """
+        if(yield self.get_user_role()) != 'admin':
+            return self.error('Bad credentials', 401)
         self.set_status(400)
         body = dict()
-        cursor = self.mdb.engines.keys
-        result = cursor.find()
-        for match in result:
-            core_key = match['_id']
-            match.pop('_id')
-            body[core_key] = match
+        cursor = self.motor.engines.keys
+        results = cursor.find()
+        while(yield results.fetch_next):
+            document = results.next_object()
+            core_key = document['_id']
+            document.pop('_id')
+            body[core_key] = document
         self.set_status(200)
         self.write(body)
 
 
 class EngineKeysDeleteHandler(BaseHandler):
-    @authenticate_admin
+    @tornado.gen.coroutine
     def put(self, core_key):
         """
         .. http:put:: /engines/keys/delete/:key_id
@@ -640,13 +652,15 @@ class EngineKeysDeleteHandler(BaseHandler):
             :status 401: Unauthorized
 
         """
+        if(yield self.get_user_role()) != 'admin':
+            return self.error('Bad credentials', 401)
         self.set_status(400)
-        cursor = self.mdb.engines.keys
-        result = cursor.remove({'_id': core_key})
+        cursor = self.motor.engines.keys
+        result = yield cursor.remove({'_id': core_key})
         if result['n'] > 0:
             self.set_status(200)
         else:
-            return self.error('core_key not found')
+            return self.error('engine key not found')
 
 
 class CoreAssignHandler(BaseHandler):
@@ -959,6 +973,7 @@ class PostStreamHandler(BaseHandler):
 
 
 class TargetInfoHandler(BaseHandler):
+    @tornado.gen.coroutine
     def get(self, target_id):
         """
         .. http:get:: /targets/info/:target_id
@@ -988,14 +1003,13 @@ class TargetInfoHandler(BaseHandler):
 
         """
         self.set_status(400)
-        cursor = self.mdb.data.targets
-        info = cursor.find_one({'_id': target_id})
+        cursor = self.motor.data.targets
+        info = yield cursor.find_one({'_id': target_id})
         self.set_status(200)
         self.write(info)
 
 
 class TargetDeleteHandler(BaseHandler):
-    @authenticate_manager
     @tornado.gen.coroutine
     def put(self, target_id):
         """
@@ -1011,9 +1025,12 @@ class TargetDeleteHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        if(yield self.get_current_user()) == None:
+            return self.error('Bad Manager Credentials', 401)
         self.set_status(400)
-        cursor = self.mdb.data.targets
-        result = cursor.remove({'_id': target_id, 'shards': {'$size': 0}})
+        cursor = self.motor.data.targets
+        result = yield cursor.remove({'_id': target_id,
+                                      'shards': {'$size': 0}})
         if result['n'] > 0:
             return self.set_status(200)
         else:
@@ -1022,6 +1039,7 @@ class TargetDeleteHandler(BaseHandler):
 
 
 class TargetsHandler(BaseHandler):
+    @tornado.gen.coroutine
     def get(self):
         """
         .. http:get:: /targets
@@ -1041,22 +1059,24 @@ class TargetsHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        cursor = self.mdb.data.targets
-        manager = self.get_current_user()
+        manager = yield self.get_current_user()
+        cursor = self.motor.data.targets
         if manager:
-            result = cursor.find({'owner': manager}, {'_id': 1})
             targets = []
-            for k in result:
-                targets.append(k['_id'])
+            results = cursor.find({'owner': manager}, {'_id': 1})
+            while (yield results.fetch_next):
+                document = results.next_object()
+                targets.append(document['_id'])
             return self.write({'targets': targets})
         else:
-            result = cursor.find(field={'_id': 1})
             targets = []
-            for k in result:
-                targets.append(k['_id'])
+            results = cursor.find(field={'_id': 1})
+            while (yield results.fetch_next):
+                document = results.next_object()
+                targets.append(document['_id'])
             return self.write({'targets': targets})
 
-    @authenticate_manager
+    @tornado.gen.coroutine
     def post(self):
         """
         .. http:post:: /targets
@@ -1112,8 +1132,10 @@ class TargetsHandler(BaseHandler):
         """
         # TODO: shove target descriptions to mongodb
         self.set_status(400)
+        current_user = yield self.get_current_user()
+        if not current_user:
+            self.error('Bad credentials', code=401)
         content = json.loads(self.request.body.decode())
-
         #----------------#
         # verify request #
         #----------------#
@@ -1138,22 +1160,21 @@ class TargetsHandler(BaseHandler):
         # write data #
         #------------#
         target_id = str(uuid.uuid4())
-        targets = self.mdb.data.targets
+        owner = yield self.get_current_user()
         payload = {
             '_id': target_id,
             'creation_date': time.time(),
             'engines': engines,
-            'owner': self.get_current_user(),
+            'owner': owner,
             'stage': stage,
             'options': options,
             'shards': [],
             'weight': weight,
         }
-
         if 'options' in content:
             payload['options'] = content['options']
-
-        targets.insert(payload)
+        cursor = self.motor.data.targets
+        yield cursor.insert(payload)
         self.set_status(200)
         response = {'target_id': target_id}
 

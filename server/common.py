@@ -54,6 +54,7 @@ def authenticate_manager(method):
     should have access to some resource.
 
     """
+    @tornado.gen.coroutine
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         try:
@@ -61,11 +62,12 @@ def authenticate_manager(method):
         except:
             self.write(json.dumps({'error': 'missing Authorization header'}))
             return self.set_status(401)
-        if self.get_current_user():
+        current_user = yield self.get_current_user()
+        print('CURRENT USER', current_user)
+        if current_user:
             return method(self, *args, **kwargs)
         else:
             return self.set_status(401)
-
     return wrapper
 
 
@@ -157,7 +159,7 @@ class BaseServerMixin():
         logging.getLogger('tornado.access').addHandler(channel)
         logging.getLogger('tornado.application').addHandler(channel)
         #this channel causes unit tests to blow up for some reason...
-        logging.getLogger('tornado.general').addHandler(channel)
+        #logging.getLogger('tornado.general').addHandler(channel)
 
         self._mongo_options = mongo_options
 
