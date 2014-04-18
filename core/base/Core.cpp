@@ -216,7 +216,6 @@ void Core::assign(const string &cc_uri,
         cc_session.sendRequest(request) << body;
         Poco::Net::HTTPResponse response;
         istream &content_stream = cc_session.receiveResponse(response);
-        std::copy(std::istream_iterator<char>(content_stream), std::istream_iterator<char>(), std::ostream_iterator<char>(cout));
         if(response.getStatus() != 200) {
             /*
             cout << "BAD STATUS CODE" << response.getStatus() << endl;
