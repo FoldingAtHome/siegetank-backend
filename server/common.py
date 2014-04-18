@@ -124,7 +124,6 @@ def init_redis(redis_options, cwd=None):
 
 class BaseServerMixin():
     def initialize_motor(self):
-        print('INITIALIZING MOTOR')
         mongo_options = self._mongo_options
         if mongo_options:
             host = mongo_options['host']
@@ -137,7 +136,7 @@ class BaseServerMixin():
                     ssl_kwargs['ssl_ca_certs'] = options.ssl_ca_certs
                 except AttributeError:
                     print('WARNING: SSL not enabled for MongoDB - this is OK\
-                           if this message shows up during unit tests')
+                           if this message shows up during tests')
             self.motor = motor.MotorClient(host, **ssl_kwargs)
 
     def base_init(self, name, redis_options, mongo_options):
@@ -174,7 +173,7 @@ class BaseServerMixin():
                     ssl_kwargs['ssl_ca_certs'] = options.ssl_ca_certs
                 except AttributeError:
                     print('WARNING: SSL not enabled for MongoDB - this is OK\
-                           if this message shows up during unit tests')
+                           if this message shows up during tests')
             self.mdb = pymongo.MongoClient(host, **ssl_kwargs)
             self.mdb.community.donors.ensure_index("token")
 

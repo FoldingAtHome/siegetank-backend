@@ -210,13 +210,13 @@ void Core::assign(const string &cc_uri,
         if(target_id.length() > 0)
             body += "\"target_id\": \""+target_id+"\",";
         body += "\"engine\": \""+engine_+"\"}";
-        cout << "REQUEST BODY:" << endl;
         cout << body << endl;    
         request.set("Authorization", core_key_);
         request.setContentLength(body.length());
         cc_session.sendRequest(request) << body;
         Poco::Net::HTTPResponse response;
         istream &content_stream = cc_session.receiveResponse(response);
+        std::copy(std::istream_iterator<char>(content_stream), std::istream_iterator<char>(), std::ostream_iterator<char>(cout));
         if(response.getStatus() != 200) {
             /*
             cout << "BAD STATUS CODE" << response.getStatus() << endl;

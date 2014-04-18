@@ -35,33 +35,6 @@ from server.common import authenticate_manager
 from server.apollo import Entity
 
 
-def authenticate_core(method):
-    """ Decorator for the assignment handler to ensure the request is coming
-    from a valid core.
-
-    """
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        try:
-            key = self.request.headers['Authorization']
-        except:
-            self.write(json.dumps({'error': 'missing Authorization header'}))
-            return self.set_status(401)
-        else:
-            content = json.loads(self.request.body.decode())
-            core_engine = content['engine']
-            query = {'engine': {'$in': [core_engine]}}
-            cursor = self.mdb.engines.keys
-            results = yield cursor.find(query, {'_id': 1})
-            keys = []
-            for match in results:
-                keys.append(match['_id'])
-            if key not in keys:
-                return self.error('Bad engine key')
-            else:
-                return method(self, *args, **kwargs)
-    return wrapper
-
 class SCV(Entity):
     prefix = 'scv'
     fields = {'host': str,  # http request url (verify based on if IP or not)
@@ -1256,10 +1229,14 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             if isinstance(e, tornado.httpclient.HTTPError):
                 code = e.code
                 body = io.BytesIO(e.response.body)
+                if e.code == 599:
+                    cursor.hincrby('fail_count', 1)
+                else:
+                    cursor.hset('fail_count', 0)
             else:
                 code = 503
                 body = io.BytesIO(json.dumps({'error': 'scv down'}).encode())
-            cursor.hincrby('fail_count', 1)
+                cursor.hincrby('fail_count', 1)
             dummy = tornado.httpclient.HTTPRequest(uri)
             reply = tornado.httpclient.HTTPResponse(dummy, code, buffer=body)
             return reply
