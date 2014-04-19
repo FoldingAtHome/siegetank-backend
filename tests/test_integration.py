@@ -26,6 +26,7 @@ import shutil
 import uuid
 import urllib
 import itertools
+import pymongo
 
 import server.scv as scv
 import server.cc as cc
@@ -73,12 +74,13 @@ class TestSimple(tornado.testing.AsyncTestCase):
                          'keyfile': 'certs/private.pem'})
         self.cc_server.listen(7654)
         self.client = tornado.httpclient.AsyncHTTPClient(io_loop=io_loop)
+        self.mdb = pymongo.MongoClient()
 
     @classmethod
     def tearDownClass(self):
         super(TestSimple, self).tearDownClass()
-        for db_name in self.cc.mdb.database_names():
-            self.cc.mdb.drop_database(db_name)
+        for db_name in self.mdb.database_names():
+            self.mdb.drop_database(db_name)
         self.cc_server.stop()
         self.cc.shutdown(kill=False)
         shutil.rmtree(self.cc.data_folder)
@@ -102,7 +104,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
                    'role': 'admin',
                    'weight': 1
                    }
-        managers = self.cc.mdb.users.managers
+        managers = self.mdb.users.managers
         managers.insert(db_body)
         self.auth_token = token
         self.manager = test_manager
@@ -110,9 +112,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def tearDown(self):
         super(TestSimple, self).tearDown()
         self.cc.db.flushdb()
-        for db_name in self.cc.mdb.database_names():
+        for db_name in self.mdb.database_names():
             if db_name != 'servers':
-                self.cc.mdb.drop_database(db_name)
+                self.mdb.drop_database(db_name)
         for key in self.scvs:
             key['app'].db.flushdb()
             test_folder = key['app'].streams_folder
