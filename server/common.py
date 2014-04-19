@@ -72,16 +72,7 @@ def authenticate_manager(method):
 
 
 def init_redis(redis_options, cwd=None):
-    """ Spawn a redis subprocess port and returns a redis client.
-
-        redis_options - a dictionary of redis options
-
-        Parameters:
-        redis_port - port of the redis server
-        redis_pass - authenticate token. All other cilents must use
-                     this token before they can send messages
-
-    """
+    """ Spawn a redis subprocess port and returns a redis client. """
     redis_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                               '..', 'redis', 'src', 'redis-server')
     redis_path = os.path.abspath(redis_path)
@@ -153,10 +144,10 @@ class BaseServerMixin():
             redis_options['appendonly'] = 'yes'
         self.db = init_redis(redis_options, cwd=self.data_folder)
 
-        channel = logging.handlers.RotatingFileHandler(
-            filename=os.path.join(self.data_folder, 'server.log'))
-        logging.getLogger('tornado.access').addHandler(channel)
-        logging.getLogger('tornado.application').addHandler(channel)
+        #channel = logging.handlers.RotatingFileHandler(
+        #    filename=os.path.join(self.data_folder, 'server.log'))
+        #logging.getLogger('tornado.access').addHandler(channel)
+        #logging.getLogger('tornado.application').addHandler(channel)
         #this channel causes unit tests to blow up for some reason...
         #logging.getLogger('tornado.general').addHandler(channel)
 

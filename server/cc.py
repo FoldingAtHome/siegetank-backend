@@ -39,6 +39,7 @@ class SCV(Entity):
     prefix = 'scv'
     fields = {'host': str,  # http request url (verify based on if IP or not)
               'fail_count': int,  # number of times a request has failed
+              'password': str,
               }
 
 
@@ -760,8 +761,11 @@ class CoreAssignHandler(BaseHandler):
             if donor_id:
                 msg['donor_id'] = donor_id
             try:
+                password = SCV(scv, self.db).hget('password')
+                headers = {'Authorization': password}
                 reply = yield self.fetch(scv, '/streams/activate',
-                                         method='POST', body=json.dumps(msg))
+                                         method='POST', body=json.dumps(msg),
+                                         headers=headers)
                 if reply.code == 200:
                     token = json.loads(reply.body.decode())["token"]
                     host = SCV(scv, self.db).hget('host')
@@ -809,93 +813,93 @@ class SCVStatusHandler(BaseHandler):
         return self.write(body)
 
 
-class SCVConnectHandler(BaseHandler):
-    def put(self):
-        """
-        .. http:put:: /scv/connect
+# class SCVConnectHandler(BaseHandler):
+#     def put(self):
+#         """
+#         .. http:put:: /scv/connect
 
-            Register an SCV as online. SCVs broadcast their state to all CCs
-            available in the MDB.
+#             Register an SCV as online. SCVs broadcast their state to all CCs
+#             available in the MDB.
 
-            :reqheader Authorization: Secret password of the CC
+#             :reqheader Authorization: Secret password of the CC
 
-            **Example request**
+#             **Example request**
 
-            .. sourcecode:: javascript
+#             .. sourcecode:: javascript
 
-                {
-                    "name": "some_workserver",
-                }
+#                 {
+#                     "name": "some_workserver",
+#                 }
 
-            .. note:: ``url`` corresponds to the workserver's url. This should
-                be a fully qualifed domain and *not* an ip address.
+#             .. note:: ``url`` corresponds to the workserver's url. This should
+#                 be a fully qualifed domain and *not* an ip address.
 
-                ``http_port`` is the outward facing port.
+#                 ``http_port`` is the outward facing port.
 
-            **Example response**
+#             **Example response**
 
-            .. sourcecode:: javascript
+#             .. sourcecode:: javascript
 
-                {
-                    // empty
-                }
+#                 {
+#                     // empty
+#                 }
 
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
+#             :status 200: OK
+#             :status 400: Bad request
+#             :status 401: Unauthorized
 
-        """
-        self.set_status(400)
-        content = json.loads(self.request.body.decode())
-        name = content['name']
-        scvs = self.application._load_scvs()
-        host = scvs[name]
-        if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
-            return self.error('remote_ip does not match given host')
-        self.application._cache_scv(name, host)
-        self.set_status(200)
-        return self.write(dict())
+#         """
+#         self.set_status(400)
+#         content = json.loads(self.request.body.decode())
+#         name = content['name']
+#         scvs = self.application._load_scvs()
+#         host = scvs[name]
+#         if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
+#             return self.error('remote_ip does not match given host')
+#         self.application._cache_scv(name, host)
+#         self.set_status(200)
+#         return self.write(dict())
 
 
-class SCVDisconnectHandler(BaseHandler):
-    def put(self):
-        """
-        .. http:put:: /scv/disconnect
+# class SCVDisconnectHandler(BaseHandler):
+#     def put(self):
+#         """
+#         .. http:put:: /scv/disconnect
 
-            Disconnect an SCV, setting its status to offline.
+#             Disconnect an SCV, setting its status to offline.
 
-            **Example request**
+#             **Example request**
 
-            .. sourcecode:: javascript
+#             .. sourcecode:: javascript
 
-                {
-                    "name": "some_workserver"
-                }
+#                 {
+#                     "name": "some_workserver"
+#                 }
 
-            **Example response**
+#             **Example response**
 
-            .. sourcecode:: javascript
+#             .. sourcecode:: javascript
 
-                {
-                    //empty
-                }
+#                 {
+#                     //empty
+#                 }
 
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
+#             :status 200: OK
+#             :status 400: Bad request
+#             :status 401: Unauthorized
 
-        """
-        self.set_status(400)
-        scvs = self.application._load_scvs()
-        content = json.loads(self.request.body.decode())
-        name = content['name']
-        host = scvs[name]
-        if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
-            self.error('remote_ip does not match given host')
-        cursor = SCV(name, self.db)
-        cursor.hset('fail_count', self.application._max_ws_fails)
-        self.set_status(200)
-        return self.write(dict())
+#         """
+#         self.set_status(400)
+#         scvs = self.application._load_scvs()
+#         content = json.loads(self.request.body.decode())
+#         name = content['name']
+#         host = scvs[name]
+#         if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
+#             self.error('remote_ip does not match given host')
+#         cursor = SCV(name, self.db)
+#         cursor.hset('fail_count', self.application._max_ws_fails)
+#         self.set_status(200)
+#         return self.write(dict())
 
 
 class PostStreamHandler(BaseHandler):
@@ -1167,24 +1171,24 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             raise Exception("Could not update CC status in MDB")
 
     def _load_scvs(self):
-        """ Load a list of available SCVs from MDB. """
+        """ Load a list of available SCVs from MDB and cache in redis. """
         cursor = self.mdb.servers.scvs
-        scvs_info = dict()
-        for scv in cursor.find(fields={'_id': 1, 'host': 1}):
-            scvs_info[scv['_id']] = scv['host']
-        return scvs_info
-
-    def _cache_scv(self, scv_name, host):
-        """ Cache a single SCV into redis. """
-        if not SCV.exists(scv_name, self.db):
-            fields = {'host': host, 'fail_count': 0}
-            SCV.create(scv_name, self.db, fields)
-        else:
-            cursor = SCV(scv_name, self.db)
-            pipe = self.db.pipeline()
-            cursor.hset('host', host, pipeline=pipe)
-            cursor.hset('fail_count', 0, pipeline=pipe)
-            pipe.execute()
+        for scv in cursor.find():
+            scv_name = scv['_id']
+            scv_host = scv['host']
+            scv_pass = scv['password']
+            if not SCV.exists(scv_name, self.db):
+                fields = {'host': scv_host,
+                          'fail_count': 0,
+                          'password': scv_pass}
+                SCV.create(scv_name, self.db, fields)
+            else:
+                cursor = SCV(scv_name, self.db)
+                pipe = self.db.pipeline()
+                cursor.hset('host', scv_host, pipeline=pipe)
+                cursor.hset('fail_count', 0, pipeline=pipe)
+                cursor.hset('password', scv_pass, pipeline=pipe)
+                pipe.execute()
 
     def __init__(self, name, external_host, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
@@ -1202,8 +1206,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/delete/(.*)', TargetDeleteHandler),
             (r'/targets/info/(.*)', TargetInfoHandler),
             (r'/targets/update/(.*)', TargetUpdateHandler),
-            (r'/scvs/connect', SCVConnectHandler),
-            (r'/scvs/disconnect', SCVDisconnectHandler),
+            # (r'/scvs/connect', SCVConnectHandler),
+            # (r'/scvs/disconnect', SCVDisconnectHandler),
             (r'/scvs/status', SCVStatusHandler),
             (r'/streams', PostStreamHandler),
             ])
@@ -1245,13 +1249,9 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def _check_scvs(self):
         """ Check all SCVs to see if they are alive or not """
         self._load_scvs()
-        for scv_name in self.scvs.keys():
-            reply = yield self.fetch(scv_name, '/')
-            cursor = SCV(scv_name)
-            if reply.code == 200:
-                cursor.hset('fail_count', 0)
-            else:
-                cursor.hset('fail_count', self.application._max_ws_fails)
+        scvs = SCV.members(self.db)
+        for scv_name in scvs:
+            yield self.fetch(scv_name, '/')
 
 
 def start():

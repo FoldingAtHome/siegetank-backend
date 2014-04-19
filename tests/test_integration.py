@@ -28,18 +28,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
         io_loop = tornado.ioloop.IOLoop.instance()
         mongo_options = {'host': 'localhost'}
         redis_options = {'port': 2733, 'logfile': os.devnull}
-        self.cc_host = '127.0.0.1:7654'
-        self.cc = cc.CommandCenter(name='goliath',
-                                   external_host=self.cc_host,
-                                   redis_options=redis_options,
-                                   mongo_options=mongo_options)
-        self.cc.initialize_motor()
-        self.cc_server = tornado.httpserver.HTTPServer(
-            self.cc,
-            io_loop=io_loop,
-            ssl_options={'certfile': 'certs/public.crt',
-                         'keyfile': 'certs/private.pem'})
-        self.cc_server.listen(7654)
         self.scvs = []
         for i in range(5):
             redis_options = {'port': 2739+i, 'logfile': os.devnull}
@@ -58,12 +46,23 @@ class TestSimple(tornado.testing.AsyncTestCase):
                              'keyfile': 'certs/private.pem'})
             prop['server'].listen(3764+i)
             self.scvs.append(prop)
+        self.cc_host = '127.0.0.1:7654'
+        self.cc = cc.CommandCenter(name='goliath',
+                                   external_host=self.cc_host,
+                                   redis_options=redis_options,
+                                   mongo_options=mongo_options)
+        self.cc.initialize_motor()
+        self.cc_server = tornado.httpserver.HTTPServer(
+            self.cc,
+            io_loop=io_loop,
+            ssl_options={'certfile': 'certs/public.crt',
+                         'keyfile': 'certs/private.pem'})
+        self.cc_server.listen(7654)
         self.client = tornado.httpclient.AsyncHTTPClient(io_loop=io_loop)
 
     @classmethod
     def tearDownClass(self):
         super(TestSimple, self).tearDownClass()
-        self.cc.db.flushdb()
         for db_name in self.cc.mdb.database_names():
             self.cc.mdb.drop_database(db_name)
         self.cc_server.stop()
@@ -71,7 +70,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
         shutil.rmtree(self.cc.data_folder)
         for scv in self.scvs:
             scv['server'].stop()
-            scv['app'].db.flushdb()
             scv['app'].shutdown(kill=False)
             shutil.rmtree(scv['app'].data_folder)
 
@@ -80,8 +78,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(TestSimple, self).setUp()
-        for scv in self.scvs:
-            self.cc._cache_scv(scv['app'].name, scv['host'])
+        self.cc._load_scvs()
         token = str(uuid.uuid4())
         test_manager = "test_ws@gmail.com"
         db_body = {'_id': test_manager,
@@ -98,7 +95,8 @@ class TestSimple(tornado.testing.AsyncTestCase):
         super(TestSimple, self).tearDown()
         self.cc.db.flushdb()
         for db_name in self.cc.mdb.database_names():
-            self.cc.mdb.drop_database(db_name)
+            if db_name != 'servers':
+                self.cc.mdb.drop_database(db_name)
         for scv in self.scvs:
             scv['app'].db.flushdb()
             test_folder = scv['app'].streams_folder
@@ -161,6 +159,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         })
         reply = self.fetch(host, '/streams', method='POST', body=body,
                            headers=headers)
+        print(reply.body)
         self.assertEqual(reply.code, 200)
         return json.loads(reply.body.decode())
 

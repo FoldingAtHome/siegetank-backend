@@ -86,8 +86,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
     def _activate_stream(self, target_id):
         body = {'target_id': target_id}
+        headers = {'Authorization': self.scv.password}
         reply = self.fetch('/streams/activate', method='POST',
-                           body=json.dumps(body))
+                           body=json.dumps(body), headers=headers)
 
         self.assertEqual(reply.code, 200)
         reply_data = json.loads(reply.body.decode())
@@ -176,7 +177,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self._delete_stream(stream_id)
         self._get_streams(target_id, expected_code=400)
         self.assertEqual(target.zscore('queue', stream_id), None)
-        self.assertEqual(self.scv.db.keys('*'), [])
+        self.assertEqual(self.scv.db.keys('*'), ['password'])
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [])
         stream_path = os.path.join(self.scv.streams_folder, stream_id)
@@ -267,7 +268,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         for stream_id in total_streams:
             stream_dir = os.path.join(self.scv.streams_folder, stream_id)
             self.assertFalse(os.path.exists(stream_dir))
-        self.assertEqual(self.scv.db.keys('*'), [])
+        self.assertEqual(self.scv.db.keys('*'), ['password'])
         cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [])
@@ -615,7 +616,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         body = json.dumps({
             'target_id': target_id
         })
-        response = self.fetch('/streams/activate', method='POST', body=body)
+        response = self.fetch('/streams/activate', method='POST', body=body,
+                              headers={'Authorization': self.scv.password})
         self.assertEqual(response.code, 400)
 
         stream = scv.Stream(stream_id, self.scv.db)

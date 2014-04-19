@@ -58,6 +58,7 @@ class ActiveStream(Entity):
               'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
               'frame_hash': str,  # md5sum of the received frame
+              'engine': str,  # which engine is being used
               }
 
 
@@ -278,6 +279,7 @@ class StreamActivateHandler(BaseHandler):
                 {
                     "target_id": "some_uuid4",
                     "donor_id": "jesse_v" // optional
+                    "engine": "engine_name" // optional
                 }
 
             **Example reply**
@@ -292,6 +294,8 @@ class StreamActivateHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        if self.request.headers['Authorization'] != self.application.password:
+            return self.error('Not authorized', code=401)
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content["target_id"]
@@ -309,6 +313,8 @@ class StreamActivateHandler(BaseHandler):
             }
             if 'donor_id' in content:
                 fields['donor'] = content['donor_id']
+            if 'engine' in content:
+                fields['engine'] = content['engine']
             ActiveStream.create(stream_id, self.db, fields)
             increment = tornado.options.options['heartbeat_increment']
             self.db.zadd('heartbeats', stream_id, time.time() + increment)
@@ -1092,52 +1098,55 @@ class SCV(BaseServerMixin, tornado.web.Application):
         scvs = self.mdb.servers.scvs
         scvs.update({'_id': self.name},
                     {'_id': self.name,
+                     'password': self.password,
                      'host': external_host}, upsert=True)
 
-    def _load_ccs(self):
-        """ Load a list of available CCs from MDB """
-        cursor = self.mdb.servers.ccs
-        self.ccs = dict()
-        for cc in cursor.find(fields={'_id': 1, 'host': 1}):
-            self.ccs[cc['_id']] = cc['host']
+    # def _load_ccs(self):
+    #     """ Load a list of available CCs from MDB """
+    #     cursor = self.mdb.servers.ccs
+    #     self.ccs = dict()
+    #     for cc in cursor.find(fields={'_id': 1, 'host': 1}):
+    #         self.ccs[cc['_id']] = cc['host']
 
-    def notify_startup(self):
-        """ Notify each CC that the SCV is starting up """
-        if tornado.process.task_id() == 0:
-            client = tornado.httpclient.HTTPClient()
-            for cc, host in self.ccs.items():
-                uri = 'https://'+host+'/scvs/connect'
-                body = {'name': self.name}
-                print('notifying '+cc+': ', end='')
-                try:
-                    client.fetch(uri, method='PUT', body=json.dumps(body),
-                                 validate_cert=is_domain(host))
-                    print('ok')
-                except tornado.httpclient.HTTPError:
-                    print('failed')
+    # def notify_startup(self):
+    #     """ Notify each CC that the SCV is starting up """
+    #     if tornado.process.task_id() == 0:
+    #         client = tornado.httpclient.HTTPClient()
+    #         for cc, host in self.ccs.items():
+    #             uri = 'https://'+host+'/scvs/connect'
+    #             body = {'name': self.name}
+    #             print('notifying '+cc+': ', end='')
+    #             try:
+    #                 client.fetch(uri, method='PUT', body=json.dumps(body),
+    #                              validate_cert=is_domain(host))
+    #                 print('ok')
+    #             except tornado.httpclient.HTTPError:
+    #                 print('failed')
 
-    def notify_shutdown(self):
-        """ Notify each CC that the SCV is shutting down """
-        if tornado.process.task_id() == 0:
-            client = tornado.httpclient.HTTPClient()
-            for cc, host in self.ccs.items():
-                uri = 'https://'+host+'/scvs/disconnect'
-                body = {'name': self.name}
-                try:
-                    client.fetch(uri, method='PUT', body=json.dumps(body),
-                                 validate_cert=is_domain(host))
-                except tornado.httpclient.HTTPError:
-                    message = '['+str(datetime.datetime.now())+']'
-                    message += 'failed to notify '+cc+' of disconnect'
-                    logging.getLogger('tornado.general').log(40, message)
+    # def notify_shutdown(self):
+    #     """ Notify each CC that the SCV is shutting down """
+    #     if tornado.process.task_id() == 0:
+    #         client = tornado.httpclient.HTTPClient()
+    #         for cc, host in self.ccs.items():
+    #             uri = 'https://'+host+'/scvs/disconnect'
+    #             body = {'name': self.name}
+    #             try:
+    #                 client.fetch(uri, method='PUT', body=json.dumps(body),
+    #                              validate_cert=is_domain(host))
+    #             except tornado.httpclient.HTTPError:
+    #                 message = '['+str(datetime.datetime.now())+']'
+    #                 message += 'failed to notify '+cc+' of disconnect'
+    #                 logging.getLogger('tornado.general').log(40, message)
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
         self.base_init(name, redis_options, mongo_options)
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
         self.ccs = None
+        self.db.setnx('password', str(uuid.uuid4()))
+        self.password = self.db.get('password')
         self._register(external_host)
-        self._load_ccs()
+        # self._load_ccs()
         super(SCV, self).__init__([
             (r'/', AliveHandler),
             (r'/active_streams', ActiveStreamsHandler),
@@ -1158,7 +1167,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         ])
 
     def shutdown(self, *args, **kwargs):
-        self.notify_shutdown()
+        # self.notify_shutdown()
         BaseServerMixin.shutdown(self, *args, **kwargs)
 
     @tornado.gen.coroutine
@@ -1181,10 +1190,12 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 if os.path.exists(buffer_path):
                     os.remove(buffer_path)
             donor = active_stream.hget('donor')
+            engine = active_stream.hget('engine')
             start_time = active_stream.hget('start_time')
             end_time = time.time()
             frames = active_stream.hget('total_frames')
             body = {
+                'engine': engine,
                 'donor': donor,
                 'start_time': start_time,
                 'end_time': end_time,
@@ -1235,7 +1246,7 @@ def start():
     instance.initialize_motor()
 
     if tornado.process.task_id() == 0:
-        tornado.ioloop.IOLoop.instance().add_callback(instance.notify_startup)
+        #tornado.ioloop.IOLoop.instance().add_callback(instance.notify_startup)
         frequency = tornado.options.options['check_heart_frequency_in_ms']
         pulse = tornado.ioloop.PeriodicCallback(instance.check_heartbeats,
                                                 frequency)

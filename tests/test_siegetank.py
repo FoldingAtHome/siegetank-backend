@@ -20,11 +20,12 @@ class TestSiegeTank(unittest.TestCase):
                                '..', 'cc')
         scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                '..', 'scv')
-        self.pid1 = subprocess.Popen(cc_path, #stdout=open(os.devnull),
+
+        self.pid2 = subprocess.Popen(scv_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
         time.sleep(2)
-        self.pid2 = subprocess.Popen(scv_path, #stdout=open(os.devnull),
+        self.pid1 = subprocess.Popen(cc_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
         self.cc_uri = '127.0.0.1:8980'
