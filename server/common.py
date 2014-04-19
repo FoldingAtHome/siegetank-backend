@@ -146,21 +146,6 @@ class BaseServerMixin():
 
         self._mongo_options = mongo_options
 
-        if mongo_options:
-            host = mongo_options['host']
-            ssl_kwargs = {}
-            if is_domain(host):
-                options = tornado.options.options
-                try:
-                    ssl_kwargs['ssl_certfile'] = options.ssl_certfile
-                    ssl_kwargs['ssl_keyfile'] = options.ssl_keyfile
-                    ssl_kwargs['ssl_ca_certs'] = options.ssl_ca_certs
-                except AttributeError:
-                    print('WARNING: SSL not enabled for MongoDB - this is OK\
-                           if this message shows up during tests')
-            self.mdb = pymongo.MongoClient(host, **ssl_kwargs)
-            self.mdb.community.donors.ensure_index("token")
-
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
