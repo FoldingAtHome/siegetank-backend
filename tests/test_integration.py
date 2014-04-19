@@ -82,16 +82,18 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.cc_server.stop()
         self.cc.shutdown(kill=False)
         shutil.rmtree(self.cc.data_folder)
-        for scv in self.scvs:
-            scv['server'].stop()
-            scv['app'].shutdown(kill=False)
-            shutil.rmtree(scv['app'].data_folder)
+        for key in self.scvs:
+            key['server'].stop()
+            key['app'].shutdown(kill=False)
+            shutil.rmtree(key['app'].data_folder)
 
     def get_new_ioloop(self):
         return tornado.ioloop.IOLoop.instance()
 
     def setUp(self):
         super(TestSimple, self).setUp()
+        for key in self.scvs:
+            tornado.ioloop.IOLoop.instance().run_sync(key['app']._register)
         tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
         token = str(uuid.uuid4())
         test_manager = "test_ws@gmail.com"
@@ -111,9 +113,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
         for db_name in self.cc.mdb.database_names():
             if db_name != 'servers':
                 self.cc.mdb.drop_database(db_name)
-        for scv in self.scvs:
-            scv['app'].db.flushdb()
-            test_folder = scv['app'].streams_folder
+        for key in self.scvs:
+            key['app'].db.flushdb()
+            test_folder = key['app'].streams_folder
             if os.path.exists(test_folder):
                 shutil.rmtree(test_folder)
 

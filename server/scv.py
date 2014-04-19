@@ -1093,13 +1093,14 @@ class SCV(BaseServerMixin, tornado.web.Application):
     def _get_command_centers(self):
         """ Return a dict of Command Center names and hosts """
 
-    def _register(self, external_host):
+    @tornado.gen.coroutine
+    def _register(self):
         """ Register the SCV in MDB. """
-        scvs = self.mdb.servers.scvs
-        scvs.update({'_id': self.name},
-                    {'_id': self.name,
-                     'password': self.password,
-                     'host': external_host}, upsert=True)
+        cursor = self.motor.servers.scvs
+        yield cursor.update({'_id': self.name},
+                            {'_id': self.name,
+                             'password': self.password,
+                             'host': self.external_host}, upsert=True)
 
     # def _load_ccs(self):
     #     """ Load a list of available CCs from MDB """
@@ -1141,11 +1142,12 @@ class SCV(BaseServerMixin, tornado.web.Application):
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
         self.base_init(name, redis_options, mongo_options)
+        self.external_host = external_host
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
         self.ccs = None
         self.db.setnx('password', str(uuid.uuid4()))
         self.password = self.db.get('password')
-        self._register(external_host)
+        # self._register(external_host)
         # self._load_ccs()
         super(SCV, self).__init__([
             (r'/', AliveHandler),
@@ -1246,7 +1248,7 @@ def start():
     instance.initialize_motor()
 
     if tornado.process.task_id() == 0:
-        #tornado.ioloop.IOLoop.instance().add_callback(instance.notify_startup)
+        tornado.ioloop.IOLoop.instance().add_callback(instance._register)
         frequency = tornado.options.options['check_heart_frequency_in_ms']
         pulse = tornado.ioloop.PeriodicCallback(instance.check_heartbeats,
                                                 frequency)
