@@ -1002,7 +1002,7 @@ class TargetDeleteHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        if(yield self.get_current_user()) == None:
+        if(yield self.get_current_user()) is None:
             return self.error('Bad Manager Credentials', 401)
         self.set_status(400)
         cursor = self.motor.data.targets
@@ -1171,13 +1171,16 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     #     if not result['ok']:
     #         raise Exception("Could not update CC status in MDB")
 
+    @tornado.gen.coroutine
     def _load_scvs(self):
         """ Load a list of available SCVs from MDB and cache in redis. """
-        cursor = self.mdb.servers.scvs
-        for scv in cursor.find():
-            scv_name = scv['_id']
-            scv_host = scv['host']
-            scv_pass = scv['password']
+        cursor = self.motor.servers.scvs
+        results = cursor.find()
+        while(yield results.fetch_next):
+            document = results.next_object()
+            scv_name = document['_id']
+            scv_host = document['host']
+            scv_pass = document['password']
             if not SCV.exists(scv_name, self.db):
                 fields = {'host': scv_host,
                           'fail_count': 0,
@@ -1249,7 +1252,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def _check_scvs(self):
         """ Check all SCVs to see if they are alive or not """
-        self._load_scvs()
+        yield self._load_scvs()
         scvs = SCV.members(self.db)
         for scv_name in scvs:
             yield self.fetch(scv_name, '/')

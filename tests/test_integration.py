@@ -18,6 +18,7 @@ import tornado.httpclient
 import tornado.httpserver
 import tornado.testing
 import tornado.gen
+import tornado.ioloop
 
 import unittest
 import os
@@ -32,7 +33,6 @@ import server.common as common
 import sys
 import base64
 import json
-import tornado.ioloop
 
 
 class TestSimple(tornado.testing.AsyncTestCase):
@@ -92,7 +92,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(TestSimple, self).setUp()
-        self.cc._load_scvs()
+        tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
         token = str(uuid.uuid4())
         test_manager = "test_ws@gmail.com"
         db_body = {'_id': test_manager,
