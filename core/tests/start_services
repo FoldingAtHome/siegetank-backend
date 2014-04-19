@@ -91,11 +91,12 @@ if __name__ == '__main__':
                            '..', '..', 'cc')
     ws_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', '..', 'scv')
+    pid2 = subprocess.Popen(ws_path, stdout=subprocess.PIPE, shell=True,
+                            preexec_fn=lambda: os.setpgid(0, 0))
+    time.sleep(1)
     pid1 = subprocess.Popen(cc_path, stdout=subprocess.PIPE, shell=True,
                             preexec_fn=lambda: os.setpgid(0, 0))
     time.sleep(1)
-    pid2 = subprocess.Popen(ws_path, stdout=subprocess.PIPE, shell=True,
-                            preexec_fn=lambda: os.setpgid(0, 0))
     with open('pids.log', 'w') as log:
         log.write(str(pid1.pid))
         log.write(' ')

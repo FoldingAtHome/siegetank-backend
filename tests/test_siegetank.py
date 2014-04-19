@@ -29,6 +29,7 @@ class TestSiegeTank(unittest.TestCase):
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
         self.cc_uri = '127.0.0.1:8980'
+        time.sleep(2)
 
         # try adding a user
         requests.post('https://127.0.0.1:8980/managers',
