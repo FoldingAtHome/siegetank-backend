@@ -1,17 +1,13 @@
-Work Server REST API
+SCV REST API
 ================================
 
-.. automodule:: server.ws
+.. automodule:: server.scv
 
 Command Center Methods
 ----------------------
 
 These methods on the workserver can only be issued by IPs matching that of known command centers.
 
-.. autosimple:: TargetStreamsHandler.get
-.. autosimple:: PostStreamHandler.post
-.. autosimple:: ActivateStreamHandler.post
-.. autosimple:: DeleteTargetHandler.put
 
 Core Methods
 ------------

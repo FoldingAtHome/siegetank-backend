@@ -36,7 +36,7 @@ class SimpleDocumenter(autodoc.MethodDocumenter):
 def setup(app):
     app.add_autodocumenter(SimpleDocumenter)
 
-import server.ws
+import server.scv
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the

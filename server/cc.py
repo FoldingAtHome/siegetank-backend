@@ -757,7 +757,8 @@ class CoreAssignHandler(BaseHandler):
         available_scvs = list(filter(lambda x: scv_online(x), shards))
         random.shuffle(available_scvs)
         for scv in available_scvs:
-            msg = {'target_id': target_id}
+            msg = {'target_id': target_id,
+                   'engine': core_engine}
             if donor_id:
                 msg['donor_id'] = donor_id
             try:

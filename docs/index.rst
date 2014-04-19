@@ -12,6 +12,9 @@ Contents:
    :maxdepth: 2
 
    deployment
+   architecture
+   cc
+   scv
 
 Indices and tables
 ==================
