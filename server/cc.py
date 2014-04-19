@@ -1162,14 +1162,14 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     _max_ws_fails = 10
 
-    def _register(self, external_host):
-        """ Register the CC in MDB. """
-        ccs = self.mdb.servers.ccs
-        result = ccs.update({'_id': self.name},
-                            {'_id': self.name, 'host': external_host},
-                            upsert=True)
-        if not result['ok']:
-            raise Exception("Could not update CC status in MDB")
+    # def _register(self, external_host):
+    #     """ Register the CC in MDB. """
+    #     ccs = self.mdb.servers.ccs
+    #     result = ccs.update({'_id': self.name},
+    #                         {'_id': self.name, 'host': external_host},
+    #                         upsert=True)
+    #     if not result['ok']:
+    #         raise Exception("Could not update CC status in MDB")
 
     def _load_scvs(self):
         """ Load a list of available SCVs from MDB and cache in redis. """
@@ -1193,7 +1193,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     def __init__(self, name, external_host, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
-        self._register(external_host)
+        # self._register(external_host)
         super(CommandCenter, self).__init__([
             (r'/engines/keys', EngineKeysHandler),
             (r'/engines/keys/delete/(.*)', EngineKeysDeleteHandler),
