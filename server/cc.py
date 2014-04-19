@@ -27,8 +27,6 @@ import time
 import bcrypt
 import pymongo
 import io
-import socket
-import functools
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import authenticate_manager
@@ -416,87 +414,6 @@ def yates_generator(x):
         yield x[i]
 
 
-# Note: Ability to add custom engine types by a manager is currently disabled
-# until later on. We still need to decide if we will allow managers to schedule
-# arbitrary types of code.
-
-# class EnginesHandler(BaseHandler):
-#     @authenticate_admin
-#     def get(self):
-#         """ http:get:: /engines
-
-#             Get a list of all available engines.
-
-#             :reqheader Authorization: access token of a Manager
-
-#             **Example reply**
-
-#                 {
-#                     "openmm_60_opencl" : {
-#                         "owner": "proteneer@gmail.com",
-#                         "description": "OpenMM 6.0 running OpenCL platform."
-#                     },
-#                     "openmm_55_cuda" : {
-#                         "owner": "proteneer@gmail.com",
-#                         "description": "OpenMM 5.5 running CUDA platform."
-#                     },
-#                     "openmm_61_cpu": {
-#                         "owner": "proteneer@gmail.com",
-#                         "description": "OpenMM 6.1 running CPU platform."
-#                     }
-#                 }
-
-#             :status 200: OK
-#             :status 400: Bad request
-#             :status 401: Unauthorized
-
-#         """
-#         self.set_status(400)
-#         cursor = self.mdb.engines.types
-#         results = cursor.find()
-#         body = dict()
-#         for match in results:
-#             engine = match['_id']
-#             match.pop('_id')
-#             body[engine] = match
-#         self.set_status(200)
-#         self.write(body)
-
-#     @authenticate_admin
-#     def put(self):
-#         """ http:put:: /engines
-
-#             Add a new engine.
-
-#             :reqheader Authorization: access token of a Manager
-
-#             **Example request**
-
-#                 {
-#                     "name": "openmm_60_opencl",
-#                     "description": "OpenMM 6.0 running on OpenCL"
-#                 }
-
-#             :status 200: OK
-#             :status 400: Bad request
-#             :status 401: Unauthorized
-
-#         """
-#         self.set_status(400)
-#         content = json.loads(self.request.body.decode())
-#         engine_type = content['name']
-#         description = content['description']
-#         owner = self.get_current_user()
-#         cursor = self.mdb.engines.types
-#         result = cursor.insert({
-#             '_id': engine_type,
-#             'description': description,
-#             'owner': owner
-#             })
-#         print(result)
-#         self.set_status(200)
-
-
 class EngineKeysHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
@@ -814,95 +731,6 @@ class SCVStatusHandler(BaseHandler):
         return self.write(body)
 
 
-# class SCVConnectHandler(BaseHandler):
-#     def put(self):
-#         """
-#         .. http:put:: /scv/connect
-
-#             Register an SCV as online. SCVs broadcast their state to all CCs
-#             available in the MDB.
-
-#             :reqheader Authorization: Secret password of the CC
-
-#             **Example request**
-
-#             .. sourcecode:: javascript
-
-#                 {
-#                     "name": "some_workserver",
-#                 }
-
-#             .. note:: ``url`` corresponds to the workserver's url. This should
-#                 be a fully qualifed domain and *not* an ip address.
-
-#                 ``http_port`` is the outward facing port.
-
-#             **Example response**
-
-#             .. sourcecode:: javascript
-
-#                 {
-#                     // empty
-#                 }
-
-#             :status 200: OK
-#             :status 400: Bad request
-#             :status 401: Unauthorized
-
-#         """
-#         self.set_status(400)
-#         content = json.loads(self.request.body.decode())
-#         name = content['name']
-#         scvs = self.application._load_scvs()
-#         host = scvs[name]
-#         if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
-#             return self.error('remote_ip does not match given host')
-#         self.application._cache_scv(name, host)
-#         self.set_status(200)
-#         return self.write(dict())
-
-
-# class SCVDisconnectHandler(BaseHandler):
-#     def put(self):
-#         """
-#         .. http:put:: /scv/disconnect
-
-#             Disconnect an SCV, setting its status to offline.
-
-#             **Example request**
-
-#             .. sourcecode:: javascript
-
-#                 {
-#                     "name": "some_workserver"
-#                 }
-
-#             **Example response**
-
-#             .. sourcecode:: javascript
-
-#                 {
-#                     //empty
-#                 }
-
-#             :status 200: OK
-#             :status 400: Bad request
-#             :status 401: Unauthorized
-
-#         """
-#         self.set_status(400)
-#         scvs = self.application._load_scvs()
-#         content = json.loads(self.request.body.decode())
-#         name = content['name']
-#         host = scvs[name]
-#         if(self.request.remote_ip != socket.gethostbyname(host.split(':')[0])):
-#             self.error('remote_ip does not match given host')
-#         cursor = SCV(name, self.db)
-#         cursor.hset('fail_count', self.application._max_ws_fails)
-#         self.set_status(200)
-#         return self.write(dict())
-
-
 class PostStreamHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
@@ -1162,15 +990,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     _max_ws_fails = 10
 
-    # def _register(self, external_host):
-    #     """ Register the CC in MDB. """
-    #     ccs = self.mdb.servers.ccs
-    #     result = ccs.update({'_id': self.name},
-    #                         {'_id': self.name, 'host': external_host},
-    #                         upsert=True)
-    #     if not result['ok']:
-    #         raise Exception("Could not update CC status in MDB")
-
     @tornado.gen.coroutine
     def _load_scvs(self):
         """ Load a list of available SCVs from MDB and cache in redis. """
@@ -1196,7 +1015,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     def __init__(self, name, external_host, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
-        # self._register(external_host)
         super(CommandCenter, self).__init__([
             (r'/engines/keys', EngineKeysHandler),
             (r'/engines/keys/delete/(.*)', EngineKeysDeleteHandler),
@@ -1210,8 +1028,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/delete/(.*)', TargetDeleteHandler),
             (r'/targets/info/(.*)', TargetInfoHandler),
             (r'/targets/update/(.*)', TargetUpdateHandler),
-            # (r'/scvs/connect', SCVConnectHandler),
-            # (r'/scvs/disconnect', SCVDisconnectHandler),
             (r'/scvs/status', SCVStatusHandler),
             (r'/streams', PostStreamHandler),
             ])

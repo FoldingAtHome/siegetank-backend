@@ -18,12 +18,9 @@ import json
 import time
 import shutil
 import hashlib
-import socket
 import base64
-import datetime
 import gzip
 import functools
-import logging
 import glob
 
 import tornado.escape
@@ -36,7 +33,7 @@ import tornado.options
 import tornado.process
 import tornado.gen
 
-from server.common import BaseServerMixin, is_domain, configure_options
+from server.common import BaseServerMixin, configure_options
 from server.common import authenticate_manager
 from server.apollo import Entity, zset, relate
 
@@ -1101,43 +1098,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
                             {'_id': self.name,
                              'password': self.password,
                              'host': self.external_host}, upsert=True)
-
-    # def _load_ccs(self):
-    #     """ Load a list of available CCs from MDB """
-    #     cursor = self.mdb.servers.ccs
-    #     self.ccs = dict()
-    #     for cc in cursor.find(fields={'_id': 1, 'host': 1}):
-    #         self.ccs[cc['_id']] = cc['host']
-
-    # def notify_startup(self):
-    #     """ Notify each CC that the SCV is starting up """
-    #     if tornado.process.task_id() == 0:
-    #         client = tornado.httpclient.HTTPClient()
-    #         for cc, host in self.ccs.items():
-    #             uri = 'https://'+host+'/scvs/connect'
-    #             body = {'name': self.name}
-    #             print('notifying '+cc+': ', end='')
-    #             try:
-    #                 client.fetch(uri, method='PUT', body=json.dumps(body),
-    #                              validate_cert=is_domain(host))
-    #                 print('ok')
-    #             except tornado.httpclient.HTTPError:
-    #                 print('failed')
-
-    # def notify_shutdown(self):
-    #     """ Notify each CC that the SCV is shutting down """
-    #     if tornado.process.task_id() == 0:
-    #         client = tornado.httpclient.HTTPClient()
-    #         for cc, host in self.ccs.items():
-    #             uri = 'https://'+host+'/scvs/disconnect'
-    #             body = {'name': self.name}
-    #             try:
-    #                 client.fetch(uri, method='PUT', body=json.dumps(body),
-    #                              validate_cert=is_domain(host))
-    #             except tornado.httpclient.HTTPError:
-    #                 message = '['+str(datetime.datetime.now())+']'
-    #                 message += 'failed to notify '+cc+' of disconnect'
-    #                 logging.getLogger('tornado.general').log(40, message)
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
