@@ -1090,14 +1090,21 @@ def start():
                              external_host=options.external_host,
                              redis_options=options.redis_options,
                              mongo_options=options.mongo_options)
-    cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                             '..', options.ssl_certfile)
-    key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                            '..', options.ssl_key)
-    ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                           '..', options.ssl_ca_certs)
-    cc_server = tornado.httpserver.HTTPServer(instance, ssl_options={
-        'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
+    ssl_opts = None
+    if options.ssl_certfile or options.ssl_key or options.ssl_ca_certs:
+        cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                 '..', options.ssl_certfile)
+        key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                '..', options.ssl_key)
+        ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                               '..', options.ssl_ca_certs)
+        ssl_opts = {
+            'certfile': cert_path,
+            'keyfile': key_path,
+            'ca_certs': ca_path
+        }
+    print(ssl_opts)
+    cc_server = tornado.httpserver.HTTPServer(instance, ssl_options=ssl_opts)
     cc_server.bind(options.internal_http_port)
     cc_server.start(0)
     instance.initialize_motor()

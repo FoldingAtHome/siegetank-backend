@@ -1,6 +1,5 @@
 Backend Deployment
 ==================
-
 The backend server code tries to be as self contained as possible, and dependencies are generally limited to very well known python packages. Only python 3.3.3 and higher is supported. You can check the version of python by
 
 .. sourcecode:: bash
@@ -24,15 +23,13 @@ Then run the unit tests:
 
 Configuration
 -------------
-
-The ``cc.conf`` and ``ws.conf`` files provide typical setup configurations. Note that this is just a regular python file. One important field in the config file is ``external_host``, which specifies the externally visible url and port that HTTP requests should be made to. The URL specified should correspond to host specified in the signed certificate, eg: *proteneer.stanford.edu*. The servers listen on ``internal_http_port`` and iptables can used to redirect incoming requests from ``external_http_port`` to ``internal_http_port`` (since only root can listen on ports <1024).
+The ``cc.conf`` and ``scv.conf`` files provide typical setup configurations. Note that this is just a regular python file. One important field in the config file is ``external_host``, which specifies the externally visible url and port that HTTP requests should be made to. The URL specified should correspond to host specified in the signed certificate, eg: *proteneer.stanford.edu*. The servers listen on ``internal_http_port`` and iptables can used to redirect incoming requests from ``external_http_port`` to ``internal_http_port`` (since only root can listen on ports <1024).
 
 SSL Certificates
 ----------------
+The new backend requires SSL certificates for security purposes. If you are deploying SCVs on a \*.stanford.edu domain, use `this link <https://itservices.stanford.edu/service/ssl/>`_ to request free SSL certificates for your machine.
 
-The new backend requires SSL for both HTTPS requests as well as MongoDB communication. If you are deploying workservers on a \*.stanford.edu domain, use `this link <https://itservices.stanford.edu/service/ssl/>`_ to request free SSL certificates for your machine. Note that you must own the machine the subdomain points to.
-
-You should have three files that correspond to the options:
+You should have three files that correspond to the following fields in .conf files:
 
 * *ssl_certfile* - a signed, public certificate issued by a CA
 * *ssl_key* - the private key used to generate the initial signing request
@@ -40,10 +37,11 @@ You should have three files that correspond to the options:
 
 These files should be placed under the ``certs`` folder in the root directory.
 
+.. note:: CCs that are deployed behind a load balancer have the option of not serving SSL traffic, provided that the proxy itself is terminating SSL traffic. To disable SSL, ``ssl_certfile``, ``ssl_key``, and ``ssl_ca_certs`` must **all** either be undefined or set to an empty string.
+
 Database Configuration
 ----------------------
-
-The new backend uses MongoDB to store data on donors, stream statistics, authentication, and managers. This information is shared across all Command Center and Work Servers. Generally you won't need to deploy your own MongoDB instances.
+The backend uses MongoDB to store persistent data on donors, stream statistics, authentication, and managers. This information is shared across all CCs and SCVs. Generally you won't need to deploy your own MongoDB instances.
 
 As noted above, all communication to the database must be encrypted using SSL. In particular, you cannot use a vanilla build obtained from package managers such as apt-get. SSL support must be compiled in from source for ``mongod``, ``mongos``, and ``mongo``. However, pymongo python drivers work fine out of the box via pip.
 
