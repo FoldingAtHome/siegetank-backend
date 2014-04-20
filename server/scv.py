@@ -876,11 +876,11 @@ class ActiveStreamsHandler(BaseHandler):
 
                 {
                     "target_id": {
-                            "stream_id_1": {
-                                "donor_id": None,
-                                "start_time": 31875.3,
-                                "active_frames": 23
-                            }
+                        "stream_id_1": {
+                            "donor_id": None,
+                            "start_time": 31875.3,
+                            "active_frames": 23
+                        }
                     }
                 }
 
@@ -1089,8 +1089,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
         self.ccs = None
         self.db.setnx('password', str(uuid.uuid4()))
         self.password = self.db.get('password')
-        # self._register(external_host)
-        # self._load_ccs()
         super(SCV, self).__init__([
             (r'/', AliveHandler),
             (r'/active_streams', ActiveStreamsHandler),
@@ -1111,7 +1109,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
         ])
 
     def shutdown(self, *args, **kwargs):
-        # self.notify_shutdown()
         BaseServerMixin.shutdown(self, *args, **kwargs)
 
     @tornado.gen.coroutine
@@ -1161,7 +1158,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
 #########################
 
 tornado.options.define('heartbeat_increment', default=900, type=int)
-#tornado.options.define('heartbeat_increment', default=5, type=int)
 tornado.options.define('check_heart_frequency_in_ms', default=300, type=int)
 
 
