@@ -108,7 +108,7 @@ class BaseHandler(tornado.web.RequestHandler):
             return dict()
 
 
-class AuthDonorHandler(BaseHandler):
+class DonorAuthHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
         """
@@ -155,7 +155,7 @@ class AuthDonorHandler(BaseHandler):
         self.write({'token': new_token})
 
 
-class AddDonorHandler(BaseHandler):
+class DonorsHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
         """ Add a F@H Donor
@@ -203,7 +203,7 @@ class AddDonorHandler(BaseHandler):
         self.write({'token': token})
 
 
-class VerifyManagerHandler(BaseHandler):
+class ManagerVerifyHandler(BaseHandler):
     @authenticate_manager
     def get(self):
         """
@@ -221,7 +221,7 @@ class VerifyManagerHandler(BaseHandler):
         return
 
 
-class AuthManagerHandler(BaseHandler):
+class ManagerAuthHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
         """
@@ -266,7 +266,7 @@ class AuthManagerHandler(BaseHandler):
         self.write({'token': new_token})
 
 
-class AddManagerHandler(BaseHandler):
+class ManagersHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
         """
@@ -1018,11 +1018,11 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/engines/keys', EngineKeysHandler),
             (r'/engines/keys/delete/(.*)', EngineKeysDeleteHandler),
             (r'/core/assign', CoreAssignHandler),
-            (r'/managers/verify', VerifyManagerHandler),
-            (r'/managers/auth', AuthManagerHandler),
-            (r'/managers', AddManagerHandler),
-            (r'/donors/auth', AuthDonorHandler),
-            (r'/donors', AddDonorHandler),
+            (r'/managers/verify', ManagerVerifyHandler),
+            (r'/managers/auth', ManagerAuthHandler),
+            (r'/managers', ManagersHandler),
+            (r'/donors/auth', DonorAuthHandler),
+            (r'/donors', DonorsHandler),
             (r'/targets', TargetsHandler),
             (r'/targets/delete/(.*)', TargetDeleteHandler),
             (r'/targets/info/(.*)', TargetInfoHandler),
