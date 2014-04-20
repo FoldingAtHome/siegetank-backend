@@ -2,6 +2,10 @@ add_executable(test_core test_core.cpp)
 target_link_libraries(test_core Core ${OPENSSL_LIBRARIES} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 add_test(test_core test_core)
 
+add_executable(test_poco test_poco.cpp)
+target_link_libraries(test_poco Core ${OPENSSL_LIBRARIES} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+add_test(test_poco test_poco)
+
 # link_directories(${Core_BINARY_DIR})
 # 
 # # test using the CPU platform
