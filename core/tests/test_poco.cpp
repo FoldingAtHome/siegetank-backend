@@ -22,11 +22,12 @@ int main() {
         Poco::URI uri("https://www.google.com");
         Poco::Net::HTTPSClientSession session(uri.getHost(),
                                               uri.getPort(), ctxt);
-        Poco::Net::HTTPRequest request("GET", "/scvs/status");
+        Poco::Net::HTTPRequest request("GET", "/");
         session.sendRequest(request);
         Poco::Net::HTTPResponse response;
         istream &content_stream = session.receiveResponse(response);
     } catch(Poco::Exception &e) {
+        cout << "Exception caught" << endl;
         cout << e.message() << endl;
         throw;
     }
