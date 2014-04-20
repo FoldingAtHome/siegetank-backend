@@ -82,11 +82,13 @@ class TestSiegeTank(unittest.TestCase):
 
         weight = 5
         creation_time = time.time()
+        print('adding target')
         target = siegetank.base.add_target(options=options,
                                            engines=engines,
                                            stage='public',
                                            weight=weight,
                                            )
+        print('success')
 
         self.assertEqual(target.options, options)
         self.assertEqual(target.engines, engines)

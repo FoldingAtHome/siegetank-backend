@@ -1103,7 +1103,6 @@ def start():
             'keyfile': key_path,
             'ca_certs': ca_path
         }
-    print(ssl_opts)
     cc_server = tornado.httpserver.HTTPServer(instance, ssl_options=ssl_opts)
     cc_server.bind(options.internal_http_port)
     cc_server.start(0)

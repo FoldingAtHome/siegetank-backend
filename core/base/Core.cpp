@@ -125,7 +125,6 @@ Core::Core(string engine, std::string core_key) :
 }
 
 Core::~Core() {
-    cout << "calling Core destructor" << endl;
     delete session_;
 }
 
@@ -174,7 +173,6 @@ void Core::assign(const string &cc_uri,
         if(target_id.length() > 0)
             body += "\"target_id\": \""+target_id+"\",";
         body += "\"engine\": \""+engine_+"\"}";
-        cout << body << endl;    
         request.set("Authorization", core_key_);
         request.setContentLength(body.length());
         cc_session.sendRequest(request) << body;
