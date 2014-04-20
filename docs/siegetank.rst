@@ -9,10 +9,66 @@ Siegetank Python API
     siegetank.base.Target
 
 .. automodule:: siegetank.base
-    :members:
 
-.. autoclass:: Stream
-    :members:
+    .. automethod:: siegetank.base.login
+    .. automethod:: siegetank.base.generate_token
+    .. automethod:: siegetank.base.refresh_scvs
+    .. automethod:: siegetank.base.add_target
 
-.. autoclass:: Target
-    :members:
+    .. autoclass:: Stream
+
+        .. automethod:: Stream.start
+        .. automethod:: Stream.stop
+        .. automethod:: Stream.delete
+        .. automethod:: Stream.download
+        .. automethod:: Stream.replace
+        .. automethod:: Stream.reload_info
+        .. attribute:: Stream.id
+
+            The id of the stream.
+
+        .. attribute:: Stream.active
+
+            A bool denoting if the stream is active or not.
+
+        .. attribute:: Stream.frames
+
+            Number of frames completed on the stream.
+
+        .. attribute:: Stream.status
+
+            Status of the stream.
+
+        .. attribute:: Stream.error_count
+
+            Number of times the stream has errored.
+
+    .. autoclass:: Target
+
+        .. automethod:: Target.delete
+        .. automethod:: Target.add_stream
+        .. automethod:: Target.reload_streams
+        .. automethod:: Target.reload_info
+        .. attribute:: Target.id
+
+            The id of the target.
+
+        .. attribute:: Target.options
+
+            A dictionary of options defined for the target.
+
+        .. attribute:: Target.creation_date
+
+            Time for when the target was created, defined in seconds since epoch.
+
+        .. attribute:: Target.shards
+
+            The shards used by the target
+
+        .. attribute:: Target.engines
+
+            Engines used by the target
+
+        .. attribute:: Target.weight
+
+            Weight of the target relative to other targets owned by you.

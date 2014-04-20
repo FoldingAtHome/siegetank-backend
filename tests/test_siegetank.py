@@ -42,7 +42,7 @@ class TestSiegeTank(unittest.TestCase):
         self.pid1 = subprocess.Popen(cc_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
-        self.cc_uri = '127.0.0.1:8980'
+        cc_uri = '127.0.0.1:8980'
         time.sleep(2)
 
         # try adding a user
@@ -52,9 +52,9 @@ class TestSiegeTank(unittest.TestCase):
                                        'role': 'manager',
                                        'weight': 1}),
                       verify=False)
-        token = siegetank.generate_token(self.cc_uri, 'test_user@gmail.com',
+        token = siegetank.generate_token(cc_uri, 'test_user@gmail.com',
                                          'test_pass')
-        siegetank.login(self.cc_uri, token)
+        siegetank.login(cc_uri, token)
 
     def tearDown(self):
         try:
@@ -96,8 +96,7 @@ class TestSiegeTank(unittest.TestCase):
                  }
         weight = 5
         creation_time = time.time()
-        target = siegetank.base.add_target(cc_uri=self.cc_uri,
-                                           options=options,
+        target = siegetank.base.add_target(options=options,
                                            engines=engines,
                                            stage='public',
                                            files=files,
@@ -109,7 +108,7 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.weight, weight)
         self.assertAlmostEqual(target.creation_date, creation_time, places=0)
         target_ids = set()
-        for k in siegetank.get_targets(self.cc_uri):
+        for k in siegetank.get_targets():
             target_ids.add(k.id)
         self.assertEqual(target_ids, {target.id})
         for i in range(20):
@@ -137,4 +136,4 @@ class TestSiegeTank(unittest.TestCase):
         for stream in target.streams:
             stream.delete()
         target.delete()
-        self.assertEqual(siegetank.get_targets(self.cc_uri), set())
+        self.assertEqual(siegetank.get_targets(), set())

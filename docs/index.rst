@@ -15,6 +15,7 @@ Contents:
    architecture
    cc
    scv
+   siegetank
 
 Indices and tables
 ==================

@@ -15,6 +15,7 @@
 import requests
 import json
 import base64
+import functools
 from siegetank.util import is_domain, encode_files
 
 auth_token = None
@@ -34,7 +35,7 @@ def login(cc, token):
     global login_cc
     login_cc = cc
     global scvs
-    scvs = refresh_scvs(cc)
+    scvs = refresh_scvs()
 
 
 def generate_token(cc, email, password):
@@ -46,17 +47,31 @@ def generate_token(cc, email, password):
     uri = 'https://'+cc+'/managers/auth'
     reply = requests.post(uri, data=json.dumps(data), verify=is_domain(cc))
     if reply.status_code != 200:
-        raise ValueError("Bad login credentials")
+        raise ValueError('Bad login credentials.')
     token = json.loads(reply.text)['token']
     login(cc, token)
     return token
 
 
-def refresh_scvs(cc):
-    """ Update and return the status of the workservers owned by ``cc`` """
+def require_login(method):
+    """ Decorator for methods that require logging in. """
+    @functools.wraps(method)
+    def wrapper(*args, **kwargs):
+        global login_cc
+        if login_cc is None:
+            raise ValueError('You are not logged in to a cc.')
+        else:
+            return method(*args, **kwargs)
+    return wrapper
+
+
+@require_login
+def refresh_scvs():
+    """ Update and return the status of the SCVs. """
     global scvs
-    url = 'https://'+cc+'/scvs/status'
-    reply = requests.get(url, verify=is_domain(cc))
+    global login_cc
+    url = 'https://'+login_cc+'/scvs/status'
+    reply = requests.get(url, verify=is_domain(login_cc))
     if reply.status_code == 200:
         content = reply.json()
         for scv_name, scv_prop in content.items():
@@ -95,15 +110,16 @@ class Base:
 
 class Stream(Base):
     """ A Stream is a single trajectory residing on a remote server. """
+    @require_login
     def __init__(self, stream_id):
         """ Retrieve an existing stream object """
-
         self._id = stream_id
         self._frames = None
         self._status = None
         self._error_count = None
         self._active = None
         scv_name = stream_id.split(':')[1]
+        refresh_scvs()
         global scvs
         uri = scvs[scv_name]['host']
         super(Stream, self).__init__(uri)
@@ -176,7 +192,6 @@ class Stream(Base):
 
     @property
     def id(self):
-        """ Return the stream's id. """
         return self._id
 
     @property
@@ -210,13 +225,10 @@ class Stream(Base):
 
 class Target(Base):
     """ A Target is a collection of Streams residing on a remote server. """
+    @require_login
     def __init__(self, target_id, cc_uri=None):
         """ Retrieve an existing target object """
         global login_cc
-        if cc_uri is None:
-            cc_uri = login_cc
-        if cc_uri is None:
-            raise Exception("You are not logged in to a cc!")
         self._id = target_id
         self._options = None
         self._creation_date = None
@@ -224,7 +236,7 @@ class Target(Base):
         self._engines = None
         self._streams = None
         self._weight = None
-        super(Target, self).__init__(cc_uri)
+        super(Target, self).__init__(login_cc)
 
     def __repr__(self):
         return '<target '+self.id+'>'
@@ -327,32 +339,21 @@ class Target(Base):
         return self._engines
 
     @property
-    def engine_versions(self):
-        """ Get the list of engine versions allowed. """
-        if not self._engine_versions:
-            self.reload_info()
-        return self._engine_versions
-
-    @property
     def weight(self):
         return self._weight
 
 
-def add_target(options, engines, cc_uri=None, weight=1, stage='private', files=None):
-    """ Add a target to be managed by the CC at ``cc_uri``.
+@require_login
+def add_target(options, engines, weight=1, stage='private', files=None):
+    """ Add a target.
 
     :param options: dict, describing target's options.
     :param engine: list, eg. ["openmm_60_opencl", "openmm_50_cuda"]
-    :param cc_uri: str, which cc to use, do not add http prefixes
     :param stage: str, stage of the target, allowed values are 'disabled',
         'private', 'public'
     :param weight: int, the weight of the target relative to your other targets
     """
-    if cc_uri is None:
-        cc_uri = login_cc
-    if cc_uri is None:
-        raise Exception("You are not logged in to a cc!")
-
+    global login_cc
     body = {}
     if files:
         body['files'] = encode_files(files)
@@ -361,36 +362,32 @@ def add_target(options, engines, cc_uri=None, weight=1, stage='private', files=N
     assert type(engines) == list
     body['stage'] = stage
     body['weight'] = weight
-    url = 'https://'+cc_uri+'/targets'
+    url = 'https://'+login_cc+'/targets'
     global auth_token
     headers = {'Authorization': auth_token}
-    reply = requests.post(url, data=json.dumps(body), verify=is_domain(cc_uri),
-                          headers=headers)
+    reply = requests.post(url, data=json.dumps(body),
+                          verify=is_domain(login_cc), headers=headers)
     if reply.status_code != 200:
         print(reply.status_code, reply.text)
         raise Exception('Cannot add target')
     target_id = reply.json()['target_id']
-    target = Target(target_id, cc_uri)
+    target = Target(target_id, login_cc)
     return target
 
 load_target = Target
 load_stream = Stream
 
 
-def get_targets(cc_uri=None):
-    """ Return your set of targets.
-
-    """
-    if cc_uri is None:
-        cc_uri = login_cc
-    if cc_uri is None:
-        raise Exception("You are not logged in to a cc!")
-    url = 'https://'+cc_uri+'/targets'
-    reply = requests.get(url, verify=is_domain(cc_uri))
+@require_login
+def get_targets():
+    """ Return a list of targets. """
+    global login_cc
+    url = 'https://'+login_cc+'/targets'
+    reply = requests.get(url, verify=is_domain(login_cc))
     if reply.status_code != 200:
         raise Exception('Cannot list targets')
     target_ids = reply.json()['targets']
     targets = set()
     for target_id in target_ids:
-        targets.add(Target(target_id, cc_uri))
+        targets.add(Target(target_id, login_cc))
     return targets
