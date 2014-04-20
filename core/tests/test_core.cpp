@@ -50,9 +50,12 @@ string gen_random(const int len) {
 }
 
 void testStartStream(string donor_token="", string target_id="") { 
-    ifstream core_keys("core_keys.log");
+    ifstream core_keys("../core_keys.log");
     string key;
     core_keys >> key;
+    if(key.length() == 0) {
+        cout << "warning testStartStream has no core_keys" << endl;
+    }
     Core core("openmm", key);
     string uri("127.0.0.1:8980");
     core.startStream(uri, donor_token, target_id);
