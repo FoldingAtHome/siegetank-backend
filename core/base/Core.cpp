@@ -75,31 +75,6 @@ static std::string getHost(const std::string &s, char delim=':') {
     return elems[0];
 }
 
-static void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
-    // Add a stream of PEM formatted certificate strings to the trusted store
-    // of the ctx.
-    string line;
-    string buffer;
-    while(getline(some_stream, line)) {
-        buffer.append(line);
-        buffer.append("\n");
-        if(line == "-----END CERTIFICATE-----") {
-            BIO *bio;
-            X509 *certificate;
-            bio = BIO_new(BIO_s_mem());
-            BIO_puts(bio, buffer.c_str());
-            certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-            if(certificate == NULL)
-                throw std::runtime_error("could not add certificate to trusted\
-                                          CAs");
-            X509_STORE* store = SSL_CTX_get_cert_store(ctx);
-            int result = X509_STORE_add_cert(store, certificate);
-            BIO_free(bio);
-            buffer = "";
-        }
-    }
-}
-
 static string encode_b64(const string &binary) {
     ostringstream binary_ostream(std::ios_base::binary);
     Poco::Base64Encoder b64encoder(binary_ostream);
@@ -146,10 +121,7 @@ Core::Core(string engine, std::string core_key) :
     engine_(engine),
     core_key_(core_key),
     session_(NULL) {
-/*
-    _next_checkpoint_time = _start_time + _checkpoint_send_interval;
-    _next_heartbeat_time = _start_time + _heartbeat_interval;
-*/
+
 }
 
 Core::~Core() {
@@ -180,22 +152,14 @@ void Core::assign(const string &cc_uri,
                   const string &target_id) {
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(getHost(cc_uri))) {
-        cout << "USING SSL:" << " " << cc_uri << endl;
         verify_mode = Poco::Net::Context::VERIFY_RELAXED;
     } else {
         verify_mode = Poco::Net::Context::VERIFY_NONE;
     }
-    // TODO: Do I need to delete this?
+    // Load allowed CA bundles from OpenSSL
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
         Poco::Net::Context::CLIENT_USE, "", 
-        verify_mode, 9, false);
-    SSL_CTX *ctx = context->sslContext();
-    std::string ssl_string;
-    // hacky as hell :)
-    #include "root_certs.h"
-    stringstream ss;
-    ss << ssl_string;
-    read_cert_into_ctx(ss, ctx);
+        verify_mode, 9, true);
     cout << "connecting to cc..." << flush;
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
@@ -233,7 +197,6 @@ void Core::assign(const string &cc_uri,
             throw(std::runtime_error("assign() picojson error"+err));
         if(!json_value.is<picojson::object>())
             throw(std::runtime_error("no JSON object could be read"+err));
-        // find() is too verbose, use c++11's at when we switch later on..
         picojson::value::object &json_object = json_value.get<picojson::object>();
         string ws_url(json_object["url"].get<string>());
         Poco::URI poco_url(ws_url);
