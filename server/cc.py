@@ -350,7 +350,6 @@ class TargetUpdateHandler(BaseHandler):
                     "stage": "disabled", private", "beta", "public"  //optional
                     "engines": ["openmm", "openmm_cluster"]  //optional
                     "weight": 2 // optional
-                    "shards": ["scv1", "sc2"] // optional
                     "options": {
                         "description": "omgwtfbbq", // optional
                         "title": "DHFR",

@@ -77,29 +77,14 @@ class TestSiegeTank(unittest.TestCase):
             mdb.drop_database(db_name)
 
     def test_add_target(self):
-        state_url = 'http://www.stanford.edu/~yutongz/state.xml.gz'
-        system_url = 'http://www.stanford.edu/~yutongz/system.xml.gz'
-        integrator_url = 'http://www.stanford.edu/~yutongz/integrator.xml.gz'
-
-        state_gz = requests.get(state_url).content
-        system_gz = requests.get(system_url).content
-        integrator_gz = requests.get(integrator_url).content
-
-        encoded_state = base64.b64encode(state_gz).decode()
-        encoded_system = base64.b64encode(system_gz).decode()
-        encoded_intg = base64.b64encode(integrator_gz).decode()
-
         options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}
         engines = ['openmm_60_opencl', 'openmm_60_cuda']
-        files = {'system.xml.gz.b64': encoded_system,
-                 'integrator.xml.gz.b64': encoded_intg
-                 }
+
         weight = 5
         creation_time = time.time()
         target = siegetank.base.add_target(options=options,
                                            engines=engines,
                                            stage='public',
-                                           files=files,
                                            weight=weight,
                                            )
 
@@ -111,8 +96,14 @@ class TestSiegeTank(unittest.TestCase):
         for k in siegetank.get_targets():
             target_ids.add(k.id)
         self.assertEqual(target_ids, {target.id})
+        encoded_state = 'some_binary1'
+        encoded_system = 'some_binary2'
+        encoded_intg = 'some_binary3'
+        files = {'system.xml.gz.b64': encoded_system,
+                 'integrator.xml.gz.b64': encoded_intg,
+                 'state.xml.gz.b64': encoded_state}
         for i in range(20):
-            target.add_stream(files={'state.xml.gz.b64': encoded_state})
+            target.add_stream(files=files)
         stream = random.sample(target.streams, 1)[0]
         self.assertEqual(stream.status, 'OK')
         self.assertEqual(stream.frames, 0)
@@ -135,5 +126,18 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(correct_ids, test_ids)
         for stream in target.streams:
             stream.delete()
+        new_engines = ['a', 'b']
+        new_options = {
+            'foo': 'bar'
+        }
+        new_stage = 'private'
+        options.update(new_options)
+        target.update(options=new_options, engines=new_engines,
+                      stage=new_stage)
+        self.assertEqual(target.options, options)
+        self.assertEqual(target.engines, new_engines)
+        self.assertEqual(target.stage, new_stage)
+        self.assertEqual(target.weight, weight)
+
         target.delete()
         self.assertEqual(siegetank.get_targets(), set())

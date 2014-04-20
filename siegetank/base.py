@@ -16,11 +16,13 @@ import requests
 import json
 import base64
 import functools
+import time
 from siegetank.util import is_domain, encode_files
 
 auth_token = None
 login_cc = None
 scvs = dict()
+last_scvs_refresh = 0
 
 
 def login(cc, token):
@@ -34,8 +36,7 @@ def login(cc, token):
     auth_token = token
     global login_cc
     login_cc = cc
-    global scvs
-    scvs = refresh_scvs()
+    refresh_scvs()
 
 
 def generate_token(cc, email, password):
@@ -57,8 +58,8 @@ def require_login(method):
     """ Decorator for methods that require logging in. """
     @functools.wraps(method)
     def wrapper(*args, **kwargs):
-        global login_cc
-        if login_cc is None:
+        global auth_token
+        if auth_token is None:
             raise ValueError('You are not logged in to a cc.')
         else:
             return method(*args, **kwargs)
@@ -67,17 +68,20 @@ def require_login(method):
 
 @require_login
 def refresh_scvs():
-    """ Update and return the status of the SCVs. """
+    """ Update and return the status of the SCVs. This method is rate limited
+        to once every 5 seconds. """
     global scvs
+    global last_scvs_refresh
     global login_cc
-    url = 'https://'+login_cc+'/scvs/status'
-    reply = requests.get(url, verify=is_domain(login_cc))
-    if reply.status_code == 200:
-        content = reply.json()
-        for scv_name, scv_prop in content.items():
-            # sets host and status fields
-            scvs[scv_name] = scv_prop
-    return scvs
+    if time.time() - last_scvs_refresh > 5:
+        url = 'https://'+login_cc+'/scvs/status'
+        reply = requests.get(url, verify=is_domain(login_cc))
+        if reply.status_code == 200:
+            content = reply.json()
+            for scv_name, scv_prop in content.items():
+                # sets host and status fields
+                scvs[scv_name] = scv_prop
+            last_scvs_refresh = time.time()
 
 
 class Base:
@@ -236,6 +240,7 @@ class Target(Base):
         self._engines = None
         self._streams = None
         self._weight = None
+        self._stage = None
         super(Target, self).__init__(login_cc)
 
     def __repr__(self):
@@ -254,6 +259,26 @@ class Target(Base):
             print(reply.text)
             raise Exception('Bad status code')
         self._id = None
+
+    def update(self, options=None, engines=None, weight=None, stage=None):
+        """ Update the target. This method cannot delete properties, only add
+        or modify new properties.
+
+        """
+        message = dict()
+        if options:
+            message['options'] = options
+        if engines:
+            message['engines'] = engines
+        if weight:
+            message['weight'] = weight
+        if stage:
+            message['stage'] = stage
+        message = json.dumps(message)
+        reply = self._put('/targets/update/'+self.id, body=message)
+        if reply.status_code != 200:
+            raise Exception('could not update target. Reason:'+reply.content)
+        self.reload_info()
 
     def add_stream(self, files):
         """ Add a stream to the target.
@@ -298,6 +323,7 @@ class Target(Base):
         self._shards = info['shards']
         self._engines = info['engines']
         self._weight = info['weight']
+        self._stage = info['stage']
 
     @property
     def id(self):
@@ -342,9 +368,13 @@ class Target(Base):
     def weight(self):
         return self._weight
 
+    @property
+    def stage(self):
+        return self._stage
+
 
 @require_login
-def add_target(options, engines, weight=1, stage='private', files=None):
+def add_target(options, engines, weight=1, stage='private'):
     """ Add a target.
 
     :param options: dict, describing target's options.
@@ -355,8 +385,6 @@ def add_target(options, engines, weight=1, stage='private', files=None):
     """
     global login_cc
     body = {}
-    if files:
-        body['files'] = encode_files(files)
     body['options'] = options
     body['engines'] = engines
     assert type(engines) == list
