@@ -34,7 +34,6 @@ import tornado.process
 import tornado.gen
 
 from server.common import BaseServerMixin, configure_options
-from server.common import authenticate_manager
 from server.apollo import Entity, zset, relate
 
 
@@ -229,7 +228,6 @@ class StreamInfoHandler(BaseHandler):
 
 
 class TargetStreamsHandler(BaseHandler):
-    @authenticate_manager
     def get(self, target_id):
         """
         .. http:get:: /targets/streams/:target_id
@@ -1060,22 +1058,6 @@ class CoreHeartbeatHandler(BaseHandler):
             alive.
 
             :reqheader Authorization: core Authorization token
-
-            **Example request**
-
-            .. sourcecode:: javascript
-
-                {
-                    // empty
-                }
-
-            **Example reply**:
-
-            .. sourcecode:: javascript
-
-                {
-                    // empty
-                }
 
             :status 200: OK
             :status 400: Bad request

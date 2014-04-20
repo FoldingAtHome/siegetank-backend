@@ -21,17 +21,10 @@ import time
 import tornado
 import ipaddress
 import os
-import pymongo
 import motor
 import signal
 import tornado.options
-import functools
-import json
 import logging
-
-
-def sum_time(time):
-    return int(time[0])+float(time[1])/10**6
 
 
 def is_domain(url):
@@ -45,30 +38,6 @@ def is_domain(url):
         return False
     except Exception:
         return True
-
-
-def authenticate_manager(method):
-    """ Decorator for handlers that require manager authentication. Based off
-    of tornado's authenticated method. This method only checks to see if the
-    given token corresponds to a manager. It does not check if said manager
-    should have access to some resource.
-
-    """
-    @tornado.gen.coroutine
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        try:
-            self.request.headers['Authorization']
-        except:
-            self.write(json.dumps({'error': 'missing Authorization header'}))
-            return self.set_status(401)
-        current_user = yield self.get_current_user()
-        print('CURRENT USER', current_user)
-        if current_user:
-            return method(self, *args, **kwargs)
-        else:
-            return self.set_status(401)
-    return wrapper
 
 
 def init_redis(redis_options, cwd=None):
@@ -137,10 +106,10 @@ class BaseServerMixin():
             redis_options['appendonly'] = 'yes'
         self.db = init_redis(redis_options, cwd=self.data_folder)
 
-        #channel = logging.handlers.RotatingFileHandler(
-        #    filename=os.path.join(self.data_folder, 'server.log'))
-        #logging.getLogger('tornado.access').addHandler(channel)
-        #logging.getLogger('tornado.application').addHandler(channel)
+        channel = logging.handlers.RotatingFileHandler(
+           filename=os.path.join(self.data_folder, 'server.log'))
+        logging.getLogger('tornado.access').addHandler(channel)
+        logging.getLogger('tornado.application').addHandler(channel)
         #this channel causes unit tests to blow up for some reason...
         #logging.getLogger('tornado.general').addHandler(channel)
 

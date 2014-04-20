@@ -3,15 +3,8 @@ SCV REST API
 
 .. automodule:: server.scv
 
-Command Center Methods
-----------------------
-
-These methods on the workserver can only be issued by IPs matching that of known command centers.
-
-
 Core Methods
 ------------
-
 These methods must be authenticated using a core token
 
 .. autosimple:: CoreStartHandler.get
@@ -28,6 +21,8 @@ Manager Methods
 .. autosimple:: StreamStartHandler.put
 .. autosimple:: StreamStopHandler.put
 .. autosimple:: StreamDeleteHandler.put
+.. autosimple:: StreamsHandler.post
+.. autosimple:: TargetStreamsHandler.get
 
 Misc Methods
 ------------

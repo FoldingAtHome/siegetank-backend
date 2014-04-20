@@ -29,7 +29,6 @@ import pymongo
 import io
 
 from server.common import BaseServerMixin, is_domain, configure_options
-from server.common import authenticate_manager
 from server.apollo import Entity
 
 
@@ -204,7 +203,7 @@ class DonorsHandler(BaseHandler):
 
 
 class ManagerVerifyHandler(BaseHandler):
-    @authenticate_manager
+    @tornado.gen.coroutine
     def get(self):
         """
         .. http:post:: /managers/validate
@@ -217,8 +216,12 @@ class ManagerVerifyHandler(BaseHandler):
             :status 400: Unauthorized
 
         """
-        self.set_status(200)
-        return
+        self.set_status(400)
+        current_user = yield self.get_current_user()
+        if not current_user:
+            return self.error('Bad credentials', code=401)
+        else:
+            return self.set_status(200)
 
 
 class ManagerAuthHandler(BaseHandler):
@@ -435,8 +438,10 @@ class EngineKeysHandler(BaseHandler):
 
             **Example reply**
 
+            .. sourcecode:: javascript
+
                 {
-                    "key": "uuid4",
+                    "key": "uuid4"
                 }
 
             :status 200: OK
@@ -469,23 +474,25 @@ class EngineKeysHandler(BaseHandler):
 
             **Example reply**
 
-            {
-                "core_key_1": {
-                    "engine": "openmm_55_opencl",
-                    "description": "all platforms",
-                    "creation_date": 874389297.4,
-                },
-                "core_key_1": {
-                    "engine": "openmm_60_opencl",
-                    "description": "all platforms",
-                    "creation_date": 874389291.4,
-                },
-                "core_key_2": {
-                    "engine": "openmm_60_cuda",
-                    "description": "all platforms",
-                    "creation_date": 538929304.4,
-                },
-            }
+            .. sourcecode:: javascript
+
+                {
+                    "core_key_1": {
+                        "engine": "openmm_55_opencl",
+                        "description": "all platforms",
+                        "creation_date": 874389297.4,
+                    },
+                    "core_key_1": {
+                        "engine": "openmm_60_opencl",
+                        "description": "all platforms",
+                        "creation_date": 874389291.4,
+                    },
+                    "core_key_2": {
+                        "engine": "openmm_60_cuda",
+                        "description": "all platforms",
+                        "creation_date": 538929304.4,
+                    },
+                }
 
             :status 200: OK
             :status 400: Bad request
@@ -610,9 +617,9 @@ class CoreAssignHandler(BaseHandler):
         if 'target_id' in content:
             target_id = content['target_id']
             result = yield cursor.find_one({'_id': target_id},
-                                     {'engines': 1,
-                                      'shards': 1,
-                                      })
+                                           {'engines': 1,
+                                            'shards': 1,
+                                            })
             if core_engine not in result['engines']:
                 return self.error('core engine not allowed for this target')
             if not result['shards']:
@@ -730,7 +737,7 @@ class SCVStatusHandler(BaseHandler):
         return self.write(body)
 
 
-class PostStreamHandler(BaseHandler):
+class StreamsHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
         """
@@ -1028,7 +1035,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/info/(.*)', TargetInfoHandler),
             (r'/targets/update/(.*)', TargetUpdateHandler),
             (r'/scvs/status', SCVStatusHandler),
-            (r'/streams', PostStreamHandler),
+            (r'/streams', StreamsHandler),
             ])
 
     @tornado.gen.coroutine
