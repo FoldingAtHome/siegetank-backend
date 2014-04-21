@@ -402,7 +402,6 @@ def add_target(options, engines, weight=1, stage='private'):
         'private', 'public'
     :param weight: int, the weight of the target relative to your other targets
     """
-    global login_cc
     body = {}
     body['options'] = options
     body['engines'] = engines
@@ -418,7 +417,7 @@ def add_target(options, engines, weight=1, stage='private'):
         print(reply.status_code, reply.text)
         raise Exception('Cannot add target')
     target_id = reply.json()['target_id']
-    target = Target(target_id, login_cc)
+    target = Target(target_id)
     return target
 
 load_target = Target
@@ -436,5 +435,5 @@ def get_targets():
     target_ids = reply.json()['targets']
     targets = set()
     for target_id in target_ids:
-        targets.add(Target(target_id, login_cc))
+        targets.add(Target(target_id))
     return targets
