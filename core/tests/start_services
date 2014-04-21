@@ -53,7 +53,8 @@ def auth_manager():
 def post_target(auth_token, stage='private'):
     message = json.dumps({'engines': ['openmm'],
                           'options': {
-                              'description': 'foo',
+                              'title': 'DHFR',
+                              'description': 'This is a simulation of the DHFR protein and serves as a good benchmark.',
                               'steps_per_frame': 10000
                           },
                           'stage': stage,

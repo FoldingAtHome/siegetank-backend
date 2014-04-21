@@ -11,8 +11,9 @@ Next, install pip, the required packages, and build redis.
 
 .. sourcecode:: bash
 
-    easy_install pip
-    pip install -r requirements.txt
+    sudo apt-get install libffi-dev
+    sudo apt-get install python3 python3-pip
+    pip3 install -r requirements.txt
     cd redis; make -j4; cd ..
 
 Then run the unit tests:

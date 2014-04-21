@@ -20,7 +20,7 @@ Core Assignments
 2. The request gets routed by the ELB to a particular CC depending on load.
 3. The CC picks a target via an assignment algorithm. Once a target has been chosen, the CC picks an SCV the target is sharded over.
 4. The CC then returns a token and URI back to the core. 
-5. The core starts the stream  and submits frames, checkpoints, and heatbeats.
+5. The core starts the stream  and submits frames, checkpoints, and heartbeats.
 
 Adding New Targets
 ------------------
