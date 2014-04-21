@@ -82,14 +82,11 @@ class TestSiegeTank(unittest.TestCase):
 
         weight = 5
         creation_time = time.time()
-        print('adding target')
         target = siegetank.base.add_target(options=options,
                                            engines=engines,
                                            stage='public',
                                            weight=weight,
                                            )
-        print('success')
-
         self.assertEqual(target.options, options)
         self.assertEqual(target.engines, engines)
         self.assertEqual(target.weight, weight)
@@ -104,8 +101,11 @@ class TestSiegeTank(unittest.TestCase):
         files = {'system.xml.gz.b64': encoded_system,
                  'integrator.xml.gz.b64': encoded_intg,
                  'state.xml.gz.b64': encoded_state}
+        siegetank.base.refresh_scvs()
         for i in range(20):
-            target.add_stream(files=files)
+            target.add_stream(files)
+        random_scv = random.choice(list(siegetank.base.scvs.keys()))
+        target.add_stream(files, random_scv)
         stream = random.sample(target.streams, 1)[0]
         self.assertEqual(stream.status, 'OK')
         self.assertEqual(stream.frames, 0)

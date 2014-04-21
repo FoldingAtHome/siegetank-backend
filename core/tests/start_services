@@ -9,6 +9,7 @@ import json
 import base64
 import gzip
 import pymongo
+import sys
 
 
 def add_manager():
@@ -90,21 +91,21 @@ if __name__ == '__main__':
         os.system(stop_path)
     cc_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', '..', 'cc')
-    ws_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                           '..', '..', 'scv')
-    pid2 = subprocess.Popen(ws_path, stdout=subprocess.PIPE, shell=True,
-                            preexec_fn=lambda: os.setpgid(0, 0))
-    time.sleep(1)
+    log = open('pids.log', 'w')
+    if '--noscv' not in sys.argv:
+        scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                '..', '..', 'scv')
+        pid2 = subprocess.Popen(scv_path, stdout=subprocess.PIPE, shell=True,
+                                preexec_fn=lambda: os.setpgid(0, 0))
+        time.sleep(1)
+        log.write(str(pid2.pid))
+        log.write(' ')
     pid1 = subprocess.Popen(cc_path, stdout=subprocess.PIPE, shell=True,
                             preexec_fn=lambda: os.setpgid(0, 0))
     time.sleep(1)
-    with open('pids.log', 'w') as log:
-        log.write(str(pid1.pid))
-        log.write(' ')
-        log.write(str(pid2.pid))
-
+    log.write(str(pid1.pid))
+    log.close()
     add_manager()
-
     token = auth_manager()
     core_key = add_engine_token(token)
     # post a public target

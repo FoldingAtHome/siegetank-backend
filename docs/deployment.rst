@@ -1,13 +1,6 @@
 Backend Deployment
 ==================
-The backend server code tries to be as self contained as possible, and dependencies are generally limited to very well known python packages. Only python 3.3.3 and higher is supported. You can check the version of python by
-
-.. sourcecode:: bash
-
-    $ python --version
-    Python 3.3.3
-
-Next, install pip, the required packages, and build redis. 
+The backend server code tries to be as self contained as possible, and dependencies are generally limited to very well known python packages. Only python 3.3 and higher is supported. Install pip, the required packages, and build redis. 
 
 .. sourcecode:: bash
 
@@ -15,6 +8,13 @@ Next, install pip, the required packages, and build redis.
     sudo apt-get install python3 python3-pip
     pip3 install -r requirements.txt
     cd redis; make -j4; cd ..
+
+You can check the version of python by:
+
+.. sourcecode:: bash
+
+    $ python3 --version
+    Python 3.3.3
 
 Then run the unit tests:
 

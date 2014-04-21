@@ -7,6 +7,10 @@ Siegetank Python API
     siegetank.base.login
     siegetank.base.Stream
     siegetank.base.Target
+    siegetank.base.generate_token
+    siegetank.base.refresh_scvs
+    siegetank.base.add_target
+    siegetank.base.get_targets
 
 .. automodule:: siegetank.base
 
@@ -14,6 +18,7 @@ Siegetank Python API
     .. automethod:: siegetank.base.generate_token
     .. automethod:: siegetank.base.refresh_scvs
     .. automethod:: siegetank.base.add_target
+    .. automethod:: siegetank.base.get_targets
 
     .. autoclass:: Stream
 

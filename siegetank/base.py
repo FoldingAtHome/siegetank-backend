@@ -116,7 +116,11 @@ class Stream(Base):
     """ A Stream is a single trajectory residing on a remote server. """
     @require_login
     def __init__(self, stream_id):
-        """ Retrieve an existing stream object """
+        """ Retrieve an existing stream object.
+
+        :param stream_id: str, id of the stream.
+
+        """
         self._id = stream_id
         self._frames = None
         self._status = None
@@ -230,8 +234,12 @@ class Stream(Base):
 class Target(Base):
     """ A Target is a collection of Streams residing on a remote server. """
     @require_login
-    def __init__(self, target_id, cc_uri=None):
-        """ Retrieve an existing target object """
+    def __init__(self, target_id):
+        """ Retrieve an existing target object.
+
+        :param target_id: str, id of the target.
+
+        """
         global login_cc
         self._id = target_id
         self._options = None
@@ -280,11 +288,13 @@ class Target(Base):
             raise Exception('could not update target. Reason:'+reply.content)
         self.reload_info()
 
-    def add_stream(self, files):
+    def add_stream(self, files, scv=None):
         """ Add a stream to the target.
 
-        :param files: a dictionary of filenames to binaries matching the core's
-            requirements
+        :param files: dict, filenames and binaries matching the core's
+            requirements.
+        :param scv: str, which particular SCV you want to add the stream to.
+            If None, then the cc will pick a random SCV for you.
 
         """
         assert isinstance(files, dict)
@@ -292,7 +302,16 @@ class Target(Base):
             "target_id": self.id,
             "files": encode_files(files),
         }
-        reply = self._post('/streams', json.dumps(body))
+        if scv:
+            global scvs
+            global auth_token
+            refresh_scvs()
+            url = 'https://'+scvs[scv]['host']+'/streams'
+            headers = {'Authorization': auth_token}
+            reply = requests.post(url, headers=headers, data=json.dumps(body),
+                                  verify=is_domain(self.uri))
+        else:
+            reply = self._post('/streams', json.dumps(body))
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
