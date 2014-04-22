@@ -57,7 +57,6 @@ OpenMMCore::OpenMMCore(string engine, string core_key) :
     heartbeat_interval_(60),
     ref_context_(NULL),
     core_context_(NULL) {
-
     registerSerializationProxies();
 #ifdef OPENMM_CPU
     registerCpuPlatform();
@@ -264,6 +263,7 @@ void OpenMMCore::startStream(const string &cc_uri,
 
 
 void OpenMMCore::stopStream(string error_msg) {
+    flushCheckpoint();
     Core::stopStream(error_msg);
     delete ref_context_;
     ref_context_ = NULL;

@@ -186,6 +186,7 @@ void Core::assign(const string &cc_uri,
             error << "Could not get an assignment from CC, reason: ";
             error << reason << endl;
             */
+            cout << response.getStatus() << endl;
             throw std::runtime_error("Bad assignment");
         }
         picojson::value json_value;

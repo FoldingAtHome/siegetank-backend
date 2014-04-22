@@ -136,10 +136,10 @@ int main(int argc, const char * argv[]) {
     opt.get("--cc")->getString(cc_uri);
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
-
+    cc_uri = "54.193.17.215:443";
     try {
         const string engine = "openmm";
-        OpenMMCore core(engine, "7fbb7868-471c-419a-b6c8-8ef2e731a879");
+        OpenMMCore core(engine, "0a14f5cc-3457-4933-8daa-c7905d976188");
         string donor_token;
         if(opt.isSet("--donor_token")) {
             opt.get("--donor_token")->getString(donor_token);
