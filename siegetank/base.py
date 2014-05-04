@@ -327,7 +327,6 @@ class Target(Base):
             reply = self._get('/targets/streams/'+self.id, host=host)
             if reply.status_code != 200:
                 raise Exception('Failed to load streams from SCV: '+scvs)
-            print(reply.json())
             for stream_id in reply.json()['streams']:
                 self._streams.add(Stream(stream_id))
 
