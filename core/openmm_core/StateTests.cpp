@@ -150,10 +150,10 @@ void StateTests::compareForces(const State& first, const State& b, double tolera
     int nAtoms = forcesA.size();
     double mse = 0;
     for(int i=0; i<nAtoms; i++) {
-        double magnitudeA = sqrt(forcesA[i][0]*forcesA[i][0]+forcesA[i][1]*forcesA[i][1]+forcesA[i][2]*forcesA[i][2]);
-        double magnitudeB = sqrt(forcesB[i][0]*forcesB[i][0]+forcesB[i][1]*forcesB[i][1]+forcesB[i][2]*forcesB[i][2]);
-        double error = magnitudeA - magnitudeB;
-        mse += error*error;
+        double ex = forcesA[i][0] - forcesB[i][0];
+        double ey = forcesA[i][1] - forcesB[i][1];
+        double ez = forcesA[i][2] - forcesB[i][2];
+        mse += ex*ex+ey*ey+ez*ez;
     }
     mse = sqrt(mse/nAtoms);
     //cout << "Force Error Reporter, MSE: " << mse << endl;
