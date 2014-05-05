@@ -254,10 +254,6 @@ void OpenMMCore::startStream(const string &cc_uri,
     ref_context_ = new OpenMM::Context(*shared_system, *ref_intg,
         OpenMM::Platform::getPlatformByName("Reference"));
     cout << "core..." << flush;
-    for(map<string, string>::iterator it=properties_.begin();
-        it != properties_.end(); it++) {
-        cout << it->first << " " << it->second << endl;
-    }
     core_context_ = new OpenMM::Context(*shared_system, *core_intg,
         OpenMM::Platform::getPlatformByName(platform_name_), properties_);
     cout << "ok";
