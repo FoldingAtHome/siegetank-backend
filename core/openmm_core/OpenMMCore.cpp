@@ -51,12 +51,13 @@ static void exit_signal_handler(int param) {
     global_exit = true;
 }
 
-OpenMMCore::OpenMMCore(string engine, string core_key) :
+OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> properties) :
     Core(engine, core_key),
     checkpoint_send_interval_(6000),
     heartbeat_interval_(60),
     ref_context_(NULL),
-    core_context_(NULL) {
+    core_context_(NULL),
+    properties_(properties) {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
     registerCpuPlatform();
@@ -73,11 +74,9 @@ OpenMMCore::OpenMMCore(string engine, string core_key) :
 #else
     BAD DEFINE
 #endif
-
     global_exit = false;
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
-
 }
 
 OpenMMCore::~OpenMMCore() {
@@ -118,26 +117,31 @@ static vector<string> setupForceGroups(OpenMM::System *sys) {
 
 
 void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
+    /*
     vector<string> forceGroupNames;
-    cout << "setup system" << endl;
     forceGroupNames = setupForceGroups(sys);
     for(int i=0;i<forceGroupNames.size();i++) {
         cout << "    Group " << i << ": " << forceGroupNames[i] << endl;
     }
+    */
     for(int i=0; i<sys->getNumForces(); i++) {
         OpenMM::Force &force = sys->getForce(i);
         try {
             OpenMM::AndersenThermostat &ATForce = dynamic_cast<OpenMM::AndersenThermostat &>(force);
             ATForce.setRandomNumberSeed(randomSeed);
-            cout << "  Found AndersenThermostat @ " << ATForce.getDefaultTemperature() << " (default) Kelvin, " 
+            /*
+            cout << "Found AndersenThermostat @ " << ATForce.getDefaultTemperature() << " (default) Kelvin, " 
                        << ATForce.getDefaultCollisionFrequency() << " (default) collision frequency. " << endl; 
+            */
             continue;
         } catch(const std::bad_cast &bc) {}
         try {
             OpenMM::MonteCarloBarostat &MCBForce = dynamic_cast<OpenMM::MonteCarloBarostat &>(force);
             MCBForce.setRandomNumberSeed(randomSeed);
-            cout << "  Found MonteCarloBarostat @ " << MCBForce.getDefaultPressure() << " (default) Bar, " << MCBForce.getTemperature() 
-                       << " Kelvin, " << MCBForce.getFrequency() << " pressure change frequency." << endl;     
+            /*
+            cout << "Found MonteCarloBarostat @ " << MCBForce.getDefaultPressure() << " (default) Bar, " << MCBForce.getTemperature() 
+                       << " Kelvin, " << MCBForce.getFrequency() << " pressure change frequency." << endl; 
+            */    
             continue;
         } catch(const std::bad_cast &bc) {}
         try {
@@ -145,7 +149,7 @@ void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
         } catch(const std::bad_cast &bc) {}
     }
     int numAtoms = sys->getNumParticles();
-    cout << "    Found: " << numAtoms << " atoms, " << sys->getNumForces() << " forces." << std::endl;
+    cout << "System size: " << numAtoms << " atoms, " << sys->getNumForces() << " types of forces." << std::endl;
 }
 
 
@@ -213,18 +217,12 @@ static void status_header(ostream &out) {
     out << "\n";
 }
 
-map<string, string>& OpenMMCore::getProperties() {
-    return properties_;
-}
-
 void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
                              const string &target_id) {
     start_time_ = time(NULL);
-    properties_.clear();
     Core::startStream(cc_uri, donor_token, target_id);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
-    cout << steps_per_frame_ << endl;
     OpenMM::System *shared_system;
     OpenMM::State *initial_state;
     OpenMM::Integrator *ref_intg;
@@ -244,7 +242,7 @@ void OpenMMCore::startStream(const string &cc_uri,
     if(files_.find("integrator.xml") != files_.end()) {
         istringstream core_integrator_stream(files_["integrator.xml"]);
         core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
-        istringstream ref_integrator_stream(files_["integrator.xml"]);
+        istringstream ref_integrator_stream(files_["integrator.xml"]); 
         ref_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(ref_integrator_stream);
     } else {
         throw std::runtime_error("Cannot find integrator.xml");
@@ -256,8 +254,12 @@ void OpenMMCore::startStream(const string &cc_uri,
     ref_context_ = new OpenMM::Context(*shared_system, *ref_intg,
         OpenMM::Platform::getPlatformByName("Reference"));
     cout << "core..." << flush;
+    for(map<string, string>::iterator it=properties_.begin();
+        it != properties_.end(); it++) {
+        cout << it->first << " " << it->second << endl;
+    }
     core_context_ = new OpenMM::Context(*shared_system, *core_intg,
-        OpenMM::Platform::getPlatformByName(platform_name_));
+        OpenMM::Platform::getPlatformByName(platform_name_), properties_);
     cout << "ok";
     ref_context_->setState(*initial_state);
     core_context_->setState(*initial_state);

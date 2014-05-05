@@ -22,7 +22,9 @@
 
 class OpenMMCore : public Core {
 public:
-    OpenMMCore(std::string engine, std::string core_key);
+    OpenMMCore(std::string engine,
+               std::string core_key,
+               std::map<std::string, std::string> properties = std::map<std::string, std::string>());
     ~OpenMMCore();
 
     virtual void main();
@@ -32,10 +34,6 @@ public:
                              const std::string &target_id = "");
 
     virtual void stopStream(std::string error_msg="");
-
-    /* get the platform properties, used when we need to specify platformIds
-       and what-not */
-    std::map<std::string, std::string>& getProperties();
 
 protected:
     /* check the step and determine if we need to 1) write frame/send frame, 

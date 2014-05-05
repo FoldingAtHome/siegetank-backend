@@ -8,7 +8,7 @@ using namespace std;
 #ifdef OPENMM_OPENCL
 #ifdef __APPLE__
 #include <OpenCL/cl.h>
-#elif
+#else
 #include <CL/cl.h>
 #endif
 void Util::listOpenCLDevices() {
@@ -19,6 +19,7 @@ void Util::listOpenCLDevices() {
         cout << "No OpenCL Compatible Devices Found" << endl;
         return;
     }
+    cout << "OpenCL compatible devices: " << endl;
     for(int j=0; j<platforms_n; j++) {
         cl_device_id devices[100];
         cl_uint devices_n = 0;

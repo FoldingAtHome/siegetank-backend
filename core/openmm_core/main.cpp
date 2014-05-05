@@ -126,32 +126,31 @@ int main(int argc, const char * argv[]) {
 
 #ifdef OPENMM_OPENCL
     opt.add(
-    "",
-    0,
-    1,
-    0,
-    "Which OpenCL platform to use",
-    "--platformId");
+        "",
+        0,
+        1,
+        0,
+        "Which OpenCL platform to use",
+        "--platformId");
 
     opt.add(
-    "",
-    0,
-    1,
-    0,
-    "Which OpenCL device to use. Multiple devices can be specified by delimiting with a comma ",
-    "--deviceId");
+        "",
+        0,
+        1,
+        0,
+        "Which OpenCL device(s) to use. Multiple devices are allowed per platform. ",
+        "--deviceId");
 
     opt.add(
-    "",
-    0,
-    1,
-    0,
-    "List all OpenCL platforms and devices",
-    "--devices");
+        "",
+        0,
+        0,
+        0,
+        "List all OpenCL platforms and devices",
+        "--devices");
 #elif OPENMM_CUDA
     // not implemented
 #endif 
-
     opt.parse(argc, argv);
     if(opt.isSet("-h")) {
         std::string usage;
@@ -166,9 +165,26 @@ int main(int argc, const char * argv[]) {
     if(!opt.isSet("--nospoiler")) {
         write_spoiler(cout);
     }
+    map<string, string> properties;
 #ifdef OPENMM_OPENCL
     if(opt.isSet("--devices")) {
+        cout << endl;
         Util::listOpenCLDevices();
+        return 0;
+    }
+    if(opt.isSet("--platformId") != opt.isSet("--deviceId")) {
+        cout << "You must either specify both platformId and deviceId, or specify neither." << endl;
+        return 0;
+    }
+    if(opt.isSet("--platformId")) {
+        string pid;
+        opt.get("--platformId")->getString(pid);
+        properties["OpenCLPlatformIndex"] = pid;
+    }
+    if(opt.isSet("--deviceId")) {
+        string did;
+        opt.get("--deviceId")->getString(did);
+        properties["OpenCLDeviceIndex"] = did;
     }
 #endif
     string cc_uri;
@@ -176,12 +192,9 @@ int main(int argc, const char * argv[]) {
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
     cc_uri = "54.193.17.215:443";
-
-
-
     try {
         const string engine = "openmm";
-        OpenMMCore core(engine, "0a14f5cc-3457-4933-8daa-c7905d976188");
+        OpenMMCore core(engine, "0a14f5cc-3457-4933-8daa-c7905d976188", properties);
         string donor_token;
         if(opt.isSet("--donor_token")) {
             opt.get("--donor_token")->getString(donor_token);
@@ -197,16 +210,6 @@ int main(int argc, const char * argv[]) {
             }
         }
         core.startStream(cc_uri, donor_token, target_id);
-#ifdef OPENMM_OPENCL
-    map<string, string> &properties = core.getProperties();
-    if(opt.isSet("--platformId")) {
-
-    }
-    if(opt.isSet("--deviceId")) {
-
-    }
-
-#endif
         core.main();
     } catch(const exception &e) {
         cout << e.what() << endl;
