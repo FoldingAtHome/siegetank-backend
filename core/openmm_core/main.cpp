@@ -18,6 +18,12 @@
 #include <string>
 #include <iostream>
 
+#ifdef OPENMM_OPENCL 
+#include "gpuinfo.h"
+#elif OPENMM_CUDA
+#include "gpuinfo.h"
+#endif
+
 using namespace std;
 
 
@@ -118,6 +124,34 @@ int main(int argc, const char * argv[]) {
         "Donor's access token",
         "--donor_token");
 
+#ifdef OPENMM_OPENCL
+    opt.add(
+    "",
+    0,
+    1,
+    0,
+    "Which OpenCL platform to use",
+    "--platformId");
+
+    opt.add(
+    "",
+    0,
+    1,
+    0,
+    "Which OpenCL device to use. Multiple devices can be specified by delimiting with a comma ",
+    "--deviceId");
+
+    opt.add(
+    "",
+    0,
+    1,
+    0,
+    "List all OpenCL platforms and devices",
+    "--devices");
+#elif OPENMM_CUDA
+    // not implemented
+#endif 
+
     opt.parse(argc, argv);
     if(opt.isSet("-h")) {
         std::string usage;
@@ -132,11 +166,19 @@ int main(int argc, const char * argv[]) {
     if(!opt.isSet("--nospoiler")) {
         write_spoiler(cout);
     }
+#ifdef OPENMM_OPENCL
+    if(opt.isSet("--devices")) {
+        Util::listOpenCLDevices();
+    }
+#endif
     string cc_uri;
     opt.get("--cc")->getString(cc_uri);
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
     cc_uri = "54.193.17.215:443";
+
+
+
     try {
         const string engine = "openmm";
         OpenMMCore core(engine, "0a14f5cc-3457-4933-8daa-c7905d976188");
@@ -155,6 +197,16 @@ int main(int argc, const char * argv[]) {
             }
         }
         core.startStream(cc_uri, donor_token, target_id);
+#ifdef OPENMM_OPENCL
+    map<string, string> &properties = core.getProperties();
+    if(opt.isSet("--platformId")) {
+
+    }
+    if(opt.isSet("--deviceId")) {
+
+    }
+
+#endif
         core.main();
     } catch(const exception &e) {
         cout << e.what() << endl;

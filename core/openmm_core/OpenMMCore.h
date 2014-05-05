@@ -18,6 +18,7 @@
 #include "Core.h"
 #include <OpenMM.h>
 #include <sstream>
+#include <map>
 
 class OpenMMCore : public Core {
 public:
@@ -31,6 +32,10 @@ public:
                              const std::string &target_id = "");
 
     virtual void stopStream(std::string error_msg="");
+
+    /* get the platform properties, used when we need to specify platformIds
+       and what-not */
+    std::map<std::string, std::string>& getProperties();
 
 protected:
     /* check the step and determine if we need to 1) write frame/send frame, 
@@ -58,6 +63,7 @@ protected:
 private:
     void setupSystem(OpenMM::System *system, int randomSeed) const;
 
+    std::map<std::string, std::string> properties_;
     int steps_per_frame_;
     int checkpoint_send_interval_;
     int heartbeat_interval_;

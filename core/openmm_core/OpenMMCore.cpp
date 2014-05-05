@@ -213,11 +213,15 @@ static void status_header(ostream &out) {
     out << "\n";
 }
 
+map<string, string>& OpenMMCore::getProperties() {
+    return properties_;
+}
 
 void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
                              const string &target_id) {
     start_time_ = time(NULL);
+    properties_.clear();
     Core::startStream(cc_uri, donor_token, target_id);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
     cout << steps_per_frame_ << endl;
