@@ -259,6 +259,13 @@ void OpenMMCore::startStream(const string &cc_uri,
     cout << "ok";
     ref_context_->setState(*initial_state);
     core_context_->setState(*initial_state);
+    checkState(*initial_state);
+    checkState(core_context_->getState((
+        OpenMM::State::Positions | 
+        OpenMM::State::Velocities | 
+        OpenMM::State::Parameters | 
+        OpenMM::State::Energy | 
+        OpenMM::State::Forces)));
     delete(initial_state);
     changemode(0);
 }
