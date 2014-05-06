@@ -138,7 +138,7 @@ int main(int argc, const char * argv[]) {
         0,
         1,
         0,
-        "Which OpenCL device(s) to use. Multiple devices are allowed per platform. ",
+        "Which OpenCL device(s) to use",
         "--deviceId");
 
     opt.add(
@@ -173,7 +173,7 @@ int main(int argc, const char * argv[]) {
         return 0;
     }
     if(opt.isSet("--platformId") != opt.isSet("--deviceId")) {
-        cout << "You must either specify both platformId and deviceId, or specify neither." << endl;
+        cout << "You must either specify both platformId and deviceId, or specify neither" << endl;
         return 0;
     }
     if(opt.isSet("--platformId")) {
@@ -184,6 +184,10 @@ int main(int argc, const char * argv[]) {
     if(opt.isSet("--deviceId")) {
         string did;
         opt.get("--deviceId")->getString(did);
+        if(did.find(",") != string::npos) {
+            cout << "Using multiple GPUs to run the same simulation is not currently supported" << endl;
+            return 0;
+        };
         properties["OpenCLDeviceIndex"] = did;
     }
 #endif
