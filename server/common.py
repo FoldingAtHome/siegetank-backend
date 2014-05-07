@@ -106,12 +106,17 @@ class BaseServerMixin():
             redis_options['appendonly'] = 'yes'
         self.db = init_redis(redis_options, cwd=self.data_folder)
 
-        channel = logging.FileHandler(os.path.join(self.data_folder,
-                                      'server.log'))
-        logging.getLogger('tornado.access').addHandler(channel)
-        logging.getLogger('tornado.application').addHandler(channel)
-        #this channel causes unit tests to blow up for some reason...
-        logging.getLogger('tornado.general').addHandler(channel)
+        access_channel = logging.FileHandler(os.path.join(self.data_folder,
+            'access.log'))
+        logging.getLogger('tornado.access').addHandler(access_channel)
+
+        app_channel = logging.FileHandler(os.path.join(self.data_folder,
+            'application.log'))
+        logging.getLogger('tornado.application').addHandler(app_channel)
+
+        general_channel = logging.FileHandler(os.path.join(self.data_folder,
+            'general.log'))
+        logging.getLogger('tornado.general').addHandler(general_channel)
 
         self._mongo_options = mongo_options
 
