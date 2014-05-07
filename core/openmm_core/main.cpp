@@ -138,7 +138,7 @@ int main(int argc, const char * argv[]) {
         0,
         1,
         0,
-        "Which OpenCL device(s) to use",
+        "Which OpenCL device to use",
         "--deviceId");
 
     opt.add(

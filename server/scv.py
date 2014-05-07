@@ -602,10 +602,19 @@ class CoreStartHandler(BaseHandler):
         reply['files'] = dict()
         files_dir = os.path.join(self.application.streams_folder,
                                  stream_id, 'files')
+        frames = stream.hget('frames')
+        if frames > 0:
+            checkpoint_files = os.path.join(files_dir, frames,
+                                            'checkpoint_files')
+            for filename in os.listdir(checkpoint_files):
+                file_path = os.path.join(checkpoint_files, filename)
+                with open(file_path, 'r') as handle:
+                    reply['files'][filename] = handle.read()
         for filename in os.listdir(files_dir):
             file_path = os.path.join(files_dir, filename)
             with open(file_path, 'r') as handle:
-                reply['files'][filename] = handle.read()
+                if filename not in reply['files']:
+                    reply['files'][filename] = handle.read()
         reply['stream_id'] = stream_id
         reply['target_id'] = target_id
         cursor = self.motor.data.targets
@@ -693,8 +702,10 @@ class CoreFrameHandler(BaseHandler):
             frame_count = 1
         files = content['files']
         streams_folder = self.application.streams_folder
-
-        # empty the set
+        buffers_folder = os.path.join(streams_folder, stream_id,
+                                      'buffer_files')
+        if not os.path.exists(buffers_folder):
+            os.makedirs(buffers_folder)
         for filename, filedata in files.items():
             filedata = filedata.encode()
             f_root, f_ext = os.path.splitext(filename)
@@ -705,8 +716,7 @@ class CoreFrameHandler(BaseHandler):
                 if f_ext == '.gz':
                     filename = f_root
                     filedata = gzip.decompress(filedata)
-            buffer_filename = os.path.join(streams_folder, stream_id,
-                                           'buffer_'+filename)
+            buffer_filename = os.path.join(buffers_folder, filename)
             with open(buffer_filename, 'ab') as buffer_handle:
                 buffer_handle.write(filedata)
         active_stream.hincrby('buffer_frames', frame_count)
@@ -741,35 +751,27 @@ class CoreCheckpointHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        # Naming scheme:
 
-        # active_stream.hset('buffer_frames', 0)
+        # New Algorithm:
 
-        # total_frames = stream.hget('frames') +
-        #                active_stream.hget('buffer_frames')
-        #              = 9
+        # All buffered frame files are stored in the buffer_files folder:
 
-        # ACID Compliance:
+        # buffer_files/frames.xtc
+        # buffer_files/misc.txt
 
-        # 1) rename state.xml.gz.b64 -> chkpt_5_state.xml.gz.b64
-        # 2) rename buffered files: buffer_frames.xtc -> 9_frames.xtc
-        # 3) write checkpoint as state.xml.gz.b64
-        # 4) delete chkpt_5_state.xml.gz.b64
+        # When a checkpoint is submitted, the checkpoint files are written to
+        # the folder buffer_files/checkpoint_files/
 
-        # If the WS crashes, and a file chkpt_* is present, then that means
-        # this process has been interrupted and we need to recover.
+        # When the checkpoints are written successfully, buffer_files is renamed
+        # to the frame count. This also marks the successful completion of an
+        # atomic transaction.
 
-        # On a restart, we can revert to a safe state by doing:
+        # When streams are started, checkpoint_files U initial_files are
+        # combined, with filenames in checkpoint_files taking precedence. 
 
-        # 1) Identify the checkpoint files and their frame number:
-        #    eg. a file called chkpt_5_something is a checkpoint file, with a
-        #        frame number of 5, and a filename of something
-        # 2) Identify the frame files and their frame number:
-        #    eg. a file called 5_something is a frame file, with a frame number
-        #        of 5, and a filename of something
-        # 3) Remove all frame files with a frame number greater than # of the
-        #    checkpoint, as well as all buffer files
-        # 4) Rename checkpoint files to their proper names.
+        # When a stream deactivates, buffer_files folder is completedly blown
+        # away. Note that when the server starts, all streams are deactivated.
+
         self.set_status(400)
         stream_id = self.authenticate_core()
         if not stream_id:
@@ -780,41 +782,30 @@ class CoreCheckpointHandler(BaseHandler):
         stream_frames = stream.hget('frames')
         buffer_frames = active_stream.hget('buffer_frames')
         total_frames = stream_frames + buffer_frames
-
-        # Important to check for idempotency
+        # Important check for idempotency
         if buffer_frames == 0:
             return self.set_status(200)
         streams_folder = self.application.streams_folder
-        files_folder = os.path.join(streams_folder, stream_id, 'files')
+        buffer_folder = os.path.join(streams_folder, stream_id, 'buffer_files')
+        checkpoint_folder = os.path.join(buffer_folder, 'checkpoint_files')
+        if not os.path.exists(checkpoint_folder):
+            os.makedirs(checkpoint_folder)
 
-        # 1) rename old checkpoint file
-        for filename, bytes in content['files'].items():
-            src = os.path.join(files_folder, filename)
-            dst = os.path.join(files_folder,
-                               'chkpt_'+str(stream_frames)+'_'+filename)
-            os.rename(src, dst)
+        # 1) Extract checkpoint files
 
-        # 2) rename buffered files
-        buffers_dir = os.path.join(streams_folder, stream_id)
-        for buffer_file in glob.glob(buffers_dir+'/buffer_*'):
-            filename = os.path.split(buffer_file)[1]
-            new_filename = filename.split('buffer_')[1]
-            dst = os.path.join(buffers_dir, str(total_frames)+'_'+new_filename)
-            src = os.path.join(buffer_file)
-            os.rename(src, dst)
-
-        # 3) write checkpoint
         for filename, bytes in content['files'].items():
             checkpoint_bytes = content['files'][filename].encode()
-            checkpoint_path = os.path.join(files_folder, filename)
+            checkpoint_path = os.path.join(checkpoint_folder, filename)
             with open(checkpoint_path, 'wb') as handle:
                 handle.write(checkpoint_bytes)
 
-        # 4) delete old checkpoint safely
-        for filename, bytes in content['files'].items():
-            dst = os.path.join(files_folder,
-                               'chkpt_'+str(stream_frames)+'_'+filename)
-            os.remove(dst)
+        # 2) Rename buffer folder
+        frame_folder = os.path.join(streams_folder, stream_id,
+                                    str(total_frames))
+        os.rename(buffer_folder, frame_folder)
+
+        # TODO: If the server crashes here, we need a check to make sure that
+        # extraneous buffer frames are cleaned up properly.
 
         stream.hincrby('frames', buffer_frames)
         active_stream.hincrby('total_frames', buffer_frames)
@@ -1025,15 +1016,17 @@ class StreamDownloadHandler(BaseHandler):
             return
         # assume file is a frame file that needs concatenation
         elif stream.hget('frames') > 0:
-            files = [f for f in os.listdir(stream_dir)
-                     if (filename in f and 'buffer_' not in f)]
-            files = sorted(files, key=lambda k: int(k.split('_')[0]))
+            file_dirs = sorted([int(f) for f in os.listdir(stream_dir)
+                                if f.isdigit()])
             self.set_header('Content-Type', 'application/octet-stream')
             self.set_header('Content-Disposition',
                             'attachment; filename='+filename)
             self.set_status(200)
-            for sorted_file in files:
-                filepath = os.path.join(stream_dir, sorted_file)
+            for file_dir in file_dirs:
+                filepath = os.path.join(stream_dir, str(file_dir), filename)
+                if not os.path.exists(filepath):
+                    self.write('')
+                    return
                 with open(filepath, 'rb') as f:
                     while True:
                         data = f.read(buf_size)
@@ -1127,9 +1120,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
         else:
             self.db.zrem('heartbeats', stream_id)
             stream_path = os.path.join(self.streams_folder, stream_id)
-            for buffer_path in glob.glob(stream_path+'/buffer_*'):
-                if os.path.exists(buffer_path):
-                    os.remove(buffer_path)
+            buffer_path = os.path.join(stream_path, 'buffer_files')
+            if os.path.exists(buffer_path):
+                shutil.rmtree(buffer_path)
             donor = active_stream.hget('donor')
             engine = active_stream.hget('engine')
             start_time = active_stream.hget('start_time')
@@ -1186,6 +1179,7 @@ def start():
     instance.initialize_motor()
 
     if tornado.process.task_id() == 0:
+        tornado.ioloop.IOLoop.instance().add_callback(instance.check_heartbeats)
         tornado.ioloop.IOLoop.instance().add_callback(instance._register)
         frequency = tornado.options.options['check_heart_frequency_in_ms']
         pulse = tornado.ioloop.PeriodicCallback(instance.check_heartbeats,
