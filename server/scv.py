@@ -1090,6 +1090,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
             else:
                 stream.hset('frames', li[-1])
 
+
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
         self.base_init(name, redis_options, mongo_options)
