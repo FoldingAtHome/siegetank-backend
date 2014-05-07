@@ -1074,11 +1074,30 @@ class SCV(BaseServerMixin, tornado.web.Application):
                              'password': self.password,
                              'host': self.external_host}, upsert=True)
 
+    def maintain_integrity(self):
+        """ Maintain integrity of the streams by ensuring that redis entries are
+            consistent with stream file data.
+        """
+        stream_dirs = os.listdir(self.streams_folder)
+        print("Maintaining integrity of", len(stream_dirs), "streams...")
+        assert set(stream_dirs) == Stream.members(self.db)
+        for stream_id in stream_dirs:
+            stream_dir = os.path.join(self.streams_folder, stream_id)
+            li = sorted([int(f) for f in os.listdir(stream_dir) if f.isdigit()])
+            stream = Stream(stream_id, self.db)
+            if len(li) == 0:
+                stream.hset('frames', 0)
+            else:
+                stream.hset('frames', li[-1])
+
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
         self.base_init(name, redis_options, mongo_options)
         self.external_host = external_host
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
+        if not os.path.exists(self.streams_folder):
+            os.makedirs(self.streams_folder)
+        self.maintain_integrity()
         self.ccs = None
         self.db.setnx('password', str(uuid.uuid4()))
         self.password = self.db.get('password')

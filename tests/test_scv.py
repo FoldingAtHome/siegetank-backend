@@ -340,7 +340,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         streams_dir = self.scv.streams_folder
         buffer_folder = os.path.join(streams_dir, stream_id, 'buffer_files')
-        print(os.listdir(buffer_folder))
         buffer_path = os.path.join(buffer_folder, 'frames.xtc')
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
@@ -404,6 +403,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
+        self.scv.maintain_integrity()
+
     def test_core_frame_variadic(self):
         result = self._post_and_activate_stream()
         stream_id = result['stream_id']
@@ -457,6 +458,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                               headers=manager_headers)
         self.assertEqual(response.code, 200)
         self.assertEqual(response.body, frame_buffer)
+
+        self.scv.maintain_integrity()
 
     def test_core_stop(self):
         result = self._post_and_activate_stream()
