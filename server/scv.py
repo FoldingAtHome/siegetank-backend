@@ -1126,19 +1126,23 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def check_heartbeats(self):
+        print('A')
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
+            print(dead_stream)
             yield self.deactivate_stream(dead_stream)
 
     @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
+        print('B')
         # activation happens atomically so we can deactivate without too much
         # worrying about atomicity
-        try:
-            active_stream = ActiveStream(stream_id, self.db)
-        except KeyError:
-            pass
-        else:
+        active_stream = ActiveStream(stream_id, self.db, verify=False)
+        print('B2')
+        removed = active_stream.delete()[-1]
+        print('B3', removed)
+        if removed > 0:
             self.db.zrem('heartbeats', stream_id)
+            print('B4', removed)
             stream_path = os.path.join(self.streams_folder, stream_id)
             buffer_path = os.path.join(stream_path, 'buffer_files')
             if os.path.exists(buffer_path):
@@ -1156,7 +1160,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 'frames': frames
             }
             cursor = self.motor.stats.fragments
+            print('B5', removed)
             yield cursor.insert(body)
+            print('B6', removed)
             active_stream.delete()
             # push this stream back into queue
             stream = Stream(stream_id, self.db)

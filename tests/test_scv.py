@@ -34,9 +34,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
     def get_app(self):
         redis_options = {'port': 3828, 'logfile': os.devnull}
         self.scv = scv.SCV(name='test_scv',
-                   external_host='127.0.0.1',
-                   mongo_options=self.mongo_options,
-                   redis_options=redis_options)
+                           external_host='127.0.0.1',
+                           mongo_options=self.mongo_options,
+                           redis_options=redis_options)
         self.scv.initialize_motor()
         return self.scv
 
@@ -690,7 +690,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             self.assertEqual(response.code, 200)
         self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
         streams_dir = self.scv.streams_folder
-        buffer_path = os.path.join(streams_dir, stream_id, 'buffer_files', 
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer_files',
                                    'frames.xtc')
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
@@ -710,41 +710,35 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         new_stream_id, token = self._activate_stream(target_id)
         self.assertEqual(stream_id, new_stream_id)
 
-    # this is bit hard to test asynchronously
-    # @tornado.testing.gen_test
-    # def test_heartbeat(self):
-    #     tornado.options.options.heartbeat_increment = 5
-    #     result = self._post_and_activate_stream()
-    #     target_id = result['target_id']
-    #     stream_id = result['stream_id']
-    #     token = result['token']
-    #     test_set = set([stream_id])
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     increment_time = tornado.options.options['heartbeat_increment']
-    #     time.sleep(increment_time+0.5)
-    #     print('ASDJKFASKFJASKDFASDKJFASKLDF')
-    #     #yield self.scv.check_heartbeats()
-    #     yield self.scv.deactivate_stream(stream_id)
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
-    #     stream_id, token = self._activate_stream(target_id)
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(3)
-    #     headers = {'Authorization': token}
-    #     response = self.fetch('/core/heartbeat', method='POST',
-    #                           headers=headers, body='')
-    #     self.assertEqual(response.code, 200)
-    #     self.scv.check_heartbeats()
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(3)
-    #     self.scv.check_heartbeats()
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(5)
-    #     self.scv.check_heartbeats()
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
+    def test_heartbeat(self):
+        tornado.options.options.heartbeat_increment = 5
+        result = self._post_and_activate_stream()
+        target_id = result['target_id']
+        stream_id = result['stream_id']
+        token = result['token']
+        test_set = set([stream_id])
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        increment_time = tornado.options.options['heartbeat_increment']
+        time.sleep(increment_time+0.5)
+        self.io_loop.run_sync(self.scv.check_heartbeats)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
+        stream_id, token = self._activate_stream(target_id)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(3)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/heartbeat', method='POST',
+                              headers=headers, body='')
+        self.assertEqual(response.code, 200)
+        self.scv.check_heartbeats()
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(3)
+        self.scv.check_heartbeats()
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(5)
+        self.scv.check_heartbeats()
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
 
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
-    #suite = unittest.TestLoader().loadTestsFromTestCase(WSHandlerTestCase)
-    #suite.addTest(WSInitTestCase())
     unittest.TextTestRunner(verbosity=3).run(suite)
