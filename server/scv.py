@@ -1133,10 +1133,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
     def deactivate_stream(self, stream_id):
         active_stream = ActiveStream(stream_id, self.db, verify=False)
         removed = active_stream.delete()[-1]
-        print('B3', removed)
         if removed > 0:
             self.db.zrem('heartbeats', stream_id)
-            print('B4', removed)
             stream_path = os.path.join(self.streams_folder, stream_id)
             buffer_path = os.path.join(stream_path, 'buffer_files')
             if os.path.exists(buffer_path):
@@ -1146,17 +1144,16 @@ class SCV(BaseServerMixin, tornado.web.Application):
             start_time = active_stream.hget('start_time')
             end_time = time.time()
             frames = active_stream.hget('total_frames')
-            body = {
-                'engine': engine,
-                'donor': donor,
-                'start_time': start_time,
-                'end_time': end_time,
-                'frames': frames
-            }
-            cursor = self.motor.stats.fragments
-            print('B5', removed)
-            yield cursor.insert(body)
-            print('B6', removed)
+            if frames:
+                body = {
+                    'engine': engine,
+                    'donor': donor,
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'frames': frames
+                }
+                cursor = self.motor.stats.fragments
+                yield cursor.insert(body)
             active_stream.delete()
             # push this stream back into queue
             stream = Stream(stream_id, self.db)
