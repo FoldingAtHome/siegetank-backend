@@ -1126,18 +1126,12 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def check_heartbeats(self):
-        print('A')
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
-            print(dead_stream)
             yield self.deactivate_stream(dead_stream)
 
     @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
-        print('B')
-        # activation happens atomically so we can deactivate without too much
-        # worrying about atomicity
         active_stream = ActiveStream(stream_id, self.db, verify=False)
-        print('B2')
         removed = active_stream.delete()[-1]
         print('B3', removed)
         if removed > 0:

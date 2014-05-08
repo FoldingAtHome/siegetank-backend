@@ -729,15 +729,38 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/core/heartbeat', method='POST',
                               headers=headers, body='')
         self.assertEqual(response.code, 200)
-        self.scv.check_heartbeats()
+        self.io_loop.run_sync(self.scv.check_heartbeats)
         self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
         time.sleep(3)
-        self.scv.check_heartbeats()
+        self.io_loop.run_sync(self.scv.check_heartbeats)
         self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
         time.sleep(5)
-        self.scv.check_heartbeats()
+        self.io_loop.run_sync(self.scv.check_heartbeats)
         self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
 
+    def test_expiration(self):
+        # test posting a bunch of streams, make random heartbeats to make sure
+        # they expire, assert that active_streams U queue = total streams
+        tornado.options.options.heartbeat_increment = 5
+        result = self._post_stream()
+        target_id = result['target_id']
+        stream_ids = [result['stream_id']]
+        n_streams = 50
+        rounds = 2
+        timers = {}
+        for i in range(n_streams-1):
+            stream_ids.append(self._post_stream(target_id)['stream_id'])
+        for stream_id in stream_ids:
+            for i in range(rounds):
+                activation_delay = random.uniform(0, 4)
+                heartbeat_delay = random.uniform(0, 2.5)
+                timers[activation_delay] = {}
+                timers[activation_delay]['type'] = 'a'
+                timers[activation_delay]['stream_id'] = stream_id
+                timers[heartbeat_delay] = {}
+                timers[heartbeat_delay]['type'] = 'h'
+                timers[heartbeat_delay]['stream_id'] = stream_id
+        print(sorted(timers))
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])
