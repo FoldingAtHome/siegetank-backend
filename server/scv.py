@@ -21,7 +21,6 @@ import hashlib
 import base64
 import gzip
 import functools
-import glob
 
 import tornado.escape
 import tornado.ioloop
@@ -41,7 +40,8 @@ class Stream(Entity):
     prefix = 'stream'
     fields = {'frames': int,  # total number of frames completed
               'status': str,  # 'OK', 'STOPPED'
-              'error_count': int,  # number of consecutive errors
+              'error_count': int,  # number of consecutive errors,
+              'creation_date': int,  # when the stream was created
               }
 
 
@@ -956,6 +956,38 @@ class StreamReplaceHandler(BaseHandler):
         self.set_status(200)
 
 
+class StreamFilesHandler(BaseHandler):
+    @tornado.gen.coroutine
+    def get(self, stream_id):
+        """
+        .. http:get:: /streams/files/:stream_id
+
+            Retrieve a list of files for this particular stream.
+
+            :reqheader Authorization: manager authorization token
+
+            **Example reply**:
+
+            .. sourcecode:: javascript
+
+                {
+                    "files": ['3/frames.xtc',
+                             '389/frames.xtc',
+                             '201/frames.xtc']
+                }
+
+        """
+        self.set_status(400)
+        streams_folder = self.application.streams_folder
+        stream_dir = os.path.join(streams_folder, stream_id)
+        reply = []
+        for root, dirs, files in os.walk(stream_dir):
+            for f in files:
+                reply.append((root+'/'+f)[len(stream_dir)+1:])
+        self.set_status(200)
+        self.write({"files": reply})
+
+
 class StreamDownloadHandler(BaseHandler):
     @tornado.gen.coroutine
     def get(self, stream_id, filename):
@@ -980,65 +1012,38 @@ class StreamDownloadHandler(BaseHandler):
 
             :resheader Content-Type: application/octet-stream
             :resheader Content-Disposition: attachment; filename=filename
+            :resheader Content-Length: size of file
 
             :status 200: OK
             :status 400: Bad request
 
         """
         self.set_status(400)
-        # prevent files from leaking outside of the dir
         streams_folder = self.application.streams_folder
-        stream_dir = os.path.join(streams_folder, stream_id)
-        file_dir = os.path.dirname(os.path.abspath(os.path.join(
-                                                   stream_dir, filename)))
-        if(file_dir != os.path.abspath(stream_dir)):
+        stream_dir = os.path.abspath(os.path.join(streams_folder, stream_id))
+        requested_file = os.path.abspath(os.path.join(stream_dir, filename))
+        # prevent files from leaking out
+        if len(requested_file) < len(stream_dir):
             return
-        stream = Stream(stream_id, self.db)
-        current_user = yield self.get_current_user()
-        stream_owner = yield self.get_stream_owner(stream_id)
-        if stream_owner != current_user:
-            self.set_status(401)
+        if requested_file[0:len(stream_dir)] != stream_dir:
+            return
+        if not os.path.exists(requested_file):
+            return self.error('Requested file does not exist')
 
-        buf_size = 4096
-        # check if filename is a stream file
-        stream_files_path = os.path.join(stream_dir, 'files')
-        if filename in os.listdir(stream_files_path):
-            filepath = os.path.join(stream_dir, 'files', filename)
-            self.set_status(200)
-            with open(filepath, 'rb') as f:
-                while True:
-                    data = f.read(buf_size)
-                    if not data:
-                        break
-                    self.write(data)
-                    yield tornado.gen.Task(self.flush)
-            self.finish()
-            return
-        # assume file is a frame file that needs concatenation
-        elif stream.hget('frames') > 0:
-            file_dirs = sorted([int(f) for f in os.listdir(stream_dir)
-                                if f.isdigit()])
-            self.set_header('Content-Type', 'application/octet-stream')
-            self.set_header('Content-Disposition',
-                            'attachment; filename='+filename)
-            self.set_status(200)
-            for file_dir in file_dirs:
-                filepath = os.path.join(stream_dir, str(file_dir), filename)
-                if not os.path.exists(filepath):
-                    self.write('')
-                    return
-                with open(filepath, 'rb') as f:
-                    while True:
-                        data = f.read(buf_size)
-                        if not data:
-                            break
-                        self.write(data)
-                        yield tornado.gen.Task(self.flush)
-            self.finish()
-            return
-        else:
-            self.write('')
-            return self.set_status(200)
+        self.set_header('Content-Type', 'application/octet-stream')
+        self.set_header('Content-Length', os.path.getsize(requested_file))
+        self.set_header('Content-Disposition',
+                        'attachment; filename='+filename)
+        self.set_status(200)
+        buf_size = 2048
+        with open(requested_file, 'rb') as f:
+            while True:
+                data = f.read(buf_size)
+                if not data:
+                    break
+                self.write(data)
+                yield tornado.gen.Task(self.flush)
+        self.finish()
 
 
 class CoreHeartbeatHandler(BaseHandler):
@@ -1111,6 +1116,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
             (r'/streams/start/(.*)', StreamStartHandler),
             (r'/streams/stop/(.*)', StreamStopHandler),
             (r'/streams/delete/(.*)', StreamDeleteHandler),
+            (r'/streams/files/(.*)', StreamFilesHandler),
             (r'/streams/download/(.*)/(.*)', StreamDownloadHandler),
             (r'/streams/replace/(.*)', StreamReplaceHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
@@ -1168,7 +1174,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
 #########################
 
 tornado.options.define('heartbeat_increment', default=900, type=int)
-tornado.options.define('check_heart_frequency_in_ms', default=300, type=int)
+tornado.options.define('check_heart_frequency_in_ms', default=1000, type=int)
 
 
 def start():
