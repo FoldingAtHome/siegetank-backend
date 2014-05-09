@@ -26,7 +26,7 @@ Siegetank Python API
         .. automethod:: Stream.stop
         .. automethod:: Stream.delete
         .. automethod:: Stream.download
-        .. automethod:: Stream.replace
+        .. automethod:: Stream.upload
         .. automethod:: Stream.reload_info
         .. attribute:: Stream.id
 

@@ -195,7 +195,7 @@ int main(int argc, const char * argv[]) {
     opt.get("--cc")->getString(cc_uri);
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
-    cc_uri = "54.193.17.215:443";
+    cc_uri = "cc.proteneer.com";
     try {
         const string engine = "openmm";
         OpenMMCore core(engine, "0a14f5cc-3457-4933-8daa-c7905d976188", properties);
