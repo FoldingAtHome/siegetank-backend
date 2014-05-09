@@ -905,57 +905,6 @@ class ActiveStreamsHandler(BaseHandler):
         self.write(reply)
 
 
-class StreamReplaceHandler(BaseHandler):
-    @tornado.gen.coroutine
-    def put(self, stream_id):
-        """
-        .. http:put:: /streams/replace/:stream_id
-
-            Replace files in ``files`` with other files.
-
-            :reqheader Authorization: manager authorization token
-
-            **Example request**
-
-            .. sourcecode:: javascript
-
-                {
-                    "files": {"state.xml.gz.b64": "newstate_3.b64"}
-                }
-
-            **Example reply**:
-
-            .. sourcecode:: javascript
-
-                {
-                    // empty
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-
-        """
-        self.set_status(400)
-        stream = Stream(stream_id, self.db)
-        current_user = yield self.get_current_user()
-        stream_owner = yield self.get_stream_owner(stream_id)
-        if stream_owner != current_user:
-            self.set_status(401)
-        if stream.hget('status') != 'STOPPED':
-            return self.error('stream must be stopped first')
-        content = json.loads(self.request.body.decode())
-        files = content['files']
-        stream_dir = os.path.join(self.application.streams_folder, stream_id,
-                                  'files')
-        for filename, binary in files.items():
-            if not filename in os.listdir(stream_dir):
-                return self.error(filename+' is not in files directory')
-        for filename, binary in files.items():
-            with open(os.path.join(stream_dir, filename), 'w') as handle:
-                handle.write(binary)
-        self.set_status(200)
-
-
 class StreamFilesHandler(BaseHandler):
     @tornado.gen.coroutine
     def get(self, stream_id):
@@ -988,6 +937,51 @@ class StreamFilesHandler(BaseHandler):
         self.write({"files": reply})
 
 
+class StreamUploadHandler(BaseHandler):
+    @tornado.gen.coroutine
+    def put(self, stream_id, filename):
+        """
+        .. http:put:: /streams/upload/:stream_id/:filename
+
+            Upload a new file. This file must exist.
+
+            .. note:: Uploads do not support streaming, so you must take care
+                that the data sent does not exceed 10MB.
+
+            **Example Request**
+
+            :reqheader Authorization: manager authorization token
+            :reqheader Content-MD5: MD5 hash of the file
+
+            .. sourcecode:: javascript
+
+                [binary_data]
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        self.set_status(400)
+        streams_folder = self.application.streams_folder
+        stream_dir = os.path.abspath(os.path.join(streams_folder, stream_id))
+        requested_file = os.path.abspath(os.path.join(stream_dir, filename))
+        # prevent files from leaking out
+        if len(requested_file) < len(stream_dir):
+            return
+        if requested_file[0:len(stream_dir)] != stream_dir:
+            return
+        if not os.path.exists(requested_file):
+            return self.error('Requested file does not exist')
+        md5 = self.request.headers.get('Content-MD5')
+        print('RECEIVED RANDOM BINARY', self.request.body)
+        print(md5, hashlib.md5(self.request.body).hexdigest())
+        if md5 != hashlib.md5(self.request.body).hexdigest():
+            return self.error('MD5 mismatch')
+        with open(requested_file, 'wb') as f:
+            f.write(self.request.body)
+        self.set_status(200)
+
+
 class StreamDownloadHandler(BaseHandler):
     @tornado.gen.coroutine
     def get(self, stream_id, filename):
@@ -1003,10 +997,6 @@ class StreamDownloadHandler(BaseHandler):
                 return an empty file with the status code set to 200. This is
                 because we cannot distinguish between a frame file that has not
                 been received from that of a non-existent file.
-
-            .. note:: This is so far the only method that is not in JSON format
-                because the additional 33 percent overhead is far too much for
-                large trajectory files.
 
             :reqheader Authorization: manager authorization token
 
@@ -1117,8 +1107,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
             (r'/streams/stop/(.*)', StreamStopHandler),
             (r'/streams/delete/(.*)', StreamDeleteHandler),
             (r'/streams/files/(.*)', StreamFilesHandler),
+            (r'/streams/upload/(.*)/(.*)', StreamUploadHandler),
             (r'/streams/download/(.*)/(.*)', StreamDownloadHandler),
-            (r'/streams/replace/(.*)', StreamReplaceHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),

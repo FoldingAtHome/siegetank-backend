@@ -65,6 +65,13 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             self.mdb.drop_database(db_name)
         shutil.rmtree(self.scv.data_folder)
 
+    def _download(self, stream_id, filename):
+        headers = {'Authorization': self.auth_token}
+        reply = self.fetch('/streams/download/'+stream_id+'/'+filename,
+                           headers=headers)
+        self.assertEqual(reply.code, 200)
+        return reply.body
+
     def _post_stream(self, target_id=None):
         if target_id is None:
             target_id = str(uuid.uuid4())
@@ -160,12 +167,10 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         stream_id = result['stream_id']
         target_id = result['target_id']
         files = result['files']
-        headers = {'Authorization': self.auth_token}
 
         for filename, filebin in files.items():
-            reply = self.fetch('/streams/download/'+stream_id+'/'+
-                               filename, headers=headers)
-            self.assertEqual(filebin.encode(), reply.body)
+            data = self._download(stream_id, 'files/'+filename)
+            self.assertEqual(filebin.encode(), data)
 
         target = scv.Target(target_id, self.scv.db)
         self.assertFalse(target.zscore('queue', stream_id) is None)
@@ -287,35 +292,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [])
-
-    def test_stream_replace(self):
-        result = self._post_and_activate_stream()
-        stream_id = result['stream_id']
-        files = result['files']
-        m_headers = {'Authorization': self.auth_token}
-        new_bin = str(uuid.uuid4())
-        filename = random.choice(list(files.keys()))
-        body = json.dumps({
-            "files": {filename: new_bin}
-            })
-        # make sure stream must be stopped first
-        response = self.fetch('/streams/replace/'+stream_id, body=body,
-                              headers=m_headers, method='PUT')
-        self.assertEqual(response.code, 400)
-        response = self.fetch('/streams/stop/'+stream_id, body='',
-                              headers=m_headers, method='PUT')
-        self.assertEqual(response.code, 200)
-        response = self.fetch('/streams/download/'+stream_id+'/'+filename,
-                              headers=m_headers)
-        self.assertEqual(response.code, 200)
-        self.assertEqual(response.body.decode(), files[filename])
-        response = self.fetch('/streams/replace/'+stream_id, body=body,
-                              headers=m_headers, method='PUT')
-        self.assertEqual(response.code, 200)
-        response = self.fetch('/streams/download/'+stream_id+'/'+filename,
-                              headers=m_headers)
-        self.assertEqual(response.code, 200)
-        self.assertEqual(response.body.decode(), new_bin)
 
     def test_core_start(self):
         self._core_start()
@@ -451,12 +427,15 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stream.hget('frames'), sum(n_counts))
         self.assertFalse(os.path.exists(buffer_path))
 
-        # test downloading the frames again
-        manager_headers = {'Authorization': self.auth_token}
-        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
-                              headers=manager_headers)
-        self.assertEqual(response.code, 200)
-        self.assertEqual(response.body, frame_buffer)
+        # test listing the files
+        reply = self.fetch('/streams/files/'+stream_id,
+                           headers={'Authorization': self.auth_token})
+        self.assertEqual(reply.code, 200)
+        available_files = json.loads(reply.body.decode())
+        for filename in available_files:
+            if 'frames.xtc' in filename:
+                data = self._download(stream_id, filename)
+                self.assertEqual(data, frame_buffer)
 
     def test_core_stop(self):
         result = self._post_and_activate_stream()
@@ -517,8 +496,27 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                                    stream_id, 'buffer_frames.xtc')
         self.assertFalse(os.path.exists(buffer_path))
 
+    def test_stream_upload(self):
+        result = self._post_stream()
+        stream_id = result['stream_id']
+        files = result['files']
 
-    def test_download_stream(self):
+        random_file = random.choice(list(files.keys()))
+        data = self._download(stream_id, 'files/'+random_file)
+        self.assertEqual(data.decode(), files[random_file])
+
+        random_binary = os.urandom(32)
+        headers = {
+            'Content-MD5': hashlib.md5(random_binary).hexdigest()
+        }
+        reply = self.fetch('/streams/upload/'+stream_id+'/files/'+random_file,
+                           method='PUT', body=random_binary, headers=headers)
+        self.assertEqual(reply.code, 200)
+
+        data = self._download(stream_id, 'files/'+random_file)
+        self.assertEqual(data, random_binary)
+
+    def test_stream_cycle(self):
         result = self._post_and_activate_stream()
         stream_id = result['stream_id']
         target_id = result['target_id']
@@ -533,12 +531,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         active_stream = scv.ActiveStream(stream_id, self.scv.db)
 
         random_file = random.choice(list(files.keys()))
-        # download a non-frame file that has not been replaced yet
-        response = self.fetch('/streams/download/'+stream_id+'/'+random_file,
-                              headers=manager_headers)
-
-        self.assertEqual(response.code, 200)
-        self.assertEqual(response.body.decode(), files[random_file])
+        # download a frame file that has not been replaced yet
+        data = self._download(stream_id, 'files/'+random_file)
+        self.assertEqual(data.decode(), files[random_file])
 
         # PUT 25 frames
         for count in range(n_frames):
@@ -567,10 +562,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(True, content['active'])
 
         # download the frames
-        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
-                              headers=manager_headers)
-        self.assertEqual(response.code, 200)
-        self.assertEqual(response.body, frame_buffer)
+        data = self._download(stream_id, '25/frames.xtc')
+        first_stack = data
+        self.assertEqual(first_stack, frame_buffer)
 
         old_buffer = frame_buffer
         # PUT 25 more frames
@@ -581,10 +575,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         buffer_path = os.path.join(streams_dir, stream_id, 'buffer_frames.xtc')
 
         # download the frames
-        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
-                              headers=manager_headers)
-        self.assertEqual(response.code, 200)
-        self.assertEqual(response.body, old_buffer)
+        data = self._download(stream_id, '25/frames.xtc')
+        self.assertEqual(data, old_buffer)
 
         # PUT a checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
@@ -594,16 +586,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
         # download the frames
-        response = self.fetch('/streams/download/'+stream_id+'/frames.xtc',
-                              headers=manager_headers)
-        self.assertEqual(response.code, 200)
-        self.assertEqual(response.body, frame_buffer)
-
-        # # download a non-frame file that has been replaced by checkpoint
-        # response = self.fetch('/streams/download/'+stream_id+'/'+
-        #                       replacement_filename, headers=manager_headers)
-        # self.assertEqual(response.code, 200)
-        # self.assertEqual(response.body, checkpoint_bin)
+        data = self._download(stream_id, '50/frames.xtc')
+        second_stack = first_stack + data
+        self.assertEqual(second_stack, frame_buffer)
 
         # Get info about the stream
         response = self.fetch('/streams/info/'+stream_id)
@@ -624,8 +609,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(False, content['active'])
 
         # test listing the files
-        reply = self.fetch('/streams/files/'+stream_id, headers=manager_headers)
-        print(reply.body.decode())
+        reply = self.fetch('/streams/files/'+stream_id,
+                           headers=manager_headers)
+        self.assertEqual(reply.code, 200)
 
     def test_stream_start_stop(self):
         result = self._post_and_activate_stream()
