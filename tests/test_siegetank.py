@@ -109,14 +109,16 @@ class TestSiegeTank(unittest.TestCase):
         stream = random.sample(target.streams, 1)[0]
         self.assertEqual(stream.status, 'OK')
         self.assertEqual(stream.frames, 0)
-        self.assertEqual(stream.download('state.xml.gz.b64'),
+        self.assertEqual(set(stream.files), {'files/state.xml.gz.b64',
+            'files/integrator.xml.gz.b64', 'files/system.xml.gz.b64'})
+        self.assertEqual(stream.download('files/state.xml.gz.b64'),
                          encoded_state.encode())
         self.assertEqual(stream.active, False)
-        new_binary = base64.b64encode(b'hehehe').decode()
+        new_binary = base64.b64encode(b'hehehe')
         stream.stop()
-        stream.replace('state.xml.gz.b64', new_binary)
-        self.assertEqual(stream.download('state.xml.gz.b64'),
-                         new_binary.encode())
+        stream.upload('files/state.xml.gz.b64', new_binary)
+        self.assertEqual(stream.download('files/state.xml.gz.b64'),
+                         new_binary)
         correct_ids = set()
         for s in target.streams:
             correct_ids.add(s.id)

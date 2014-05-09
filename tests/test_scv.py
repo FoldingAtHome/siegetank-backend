@@ -536,8 +536,17 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         random_binary = os.urandom(32)
         headers = {
+            'Authorization': self.auth_token,
             'Content-MD5': hashlib.md5(random_binary).hexdigest()
         }
+        reply = self.fetch('/streams/upload/'+stream_id+'/files/'+random_file,
+                           method='PUT', body=random_binary, headers=headers)
+        self.assertEqual(reply.code, 400)
+
+        reply = self.fetch('/streams/stop/'+stream_id, method='PUT', body='',
+                           headers=headers)
+        self.assertEqual(reply.code, 200)
+
         reply = self.fetch('/streams/upload/'+stream_id+'/files/'+random_file,
                            method='PUT', body=random_binary, headers=headers)
         self.assertEqual(reply.code, 200)

@@ -95,6 +95,7 @@ class BaseHandler(tornado.web.RequestHandler):
             header_token = self.request.headers['Authorization']
         except KeyError:
             return None
+        # TODO: Add a caching mechanism of tokens to user ids
         managers = self.motor.users.managers
         query = yield managers.find_one({'token': header_token},
                                         fields=['_id'])
@@ -428,7 +429,7 @@ class StreamStartHandler(BaseHandler):
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
-            self.set_status(401)
+            return self.set_status(401)
 
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
@@ -472,7 +473,7 @@ class StreamStopHandler(BaseHandler):
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
-            self.set_status(401)
+            return self.set_status(401)
 
         yield self.deactivate_stream(stream_id)
         stream = Stream(stream_id, self.db)
@@ -517,7 +518,7 @@ class StreamDeleteHandler(BaseHandler):
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
-            self.set_status(401)
+            return self.set_status(401)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -928,6 +929,12 @@ class StreamFilesHandler(BaseHandler):
 
         """
         self.set_status(400)
+        if not Stream.exists(stream_id, self.db):
+            return self.error('Stream does not exist')
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
+            return self.set_status(401)
         streams_folder = self.application.streams_folder
         stream_dir = os.path.join(streams_folder, stream_id)
         reply = []
@@ -963,10 +970,19 @@ class StreamUploadHandler(BaseHandler):
 
         """
         self.set_status(400)
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
+            return self.set_status(401)
+        stream = Stream(stream_id, self.db)
+        if stream.hget('status') != 'STOPPED':
+            return self.error('Stream must be stopped before upload')
+        if not Stream.exists(stream_id, self.db):
+            return self.error('Stream does not exist')
+        # prevent files from leaking out
         streams_folder = self.application.streams_folder
         stream_dir = os.path.abspath(os.path.join(streams_folder, stream_id))
         requested_file = os.path.abspath(os.path.join(stream_dir, filename))
-        # prevent files from leaking out
         if len(requested_file) < len(stream_dir):
             return
         if requested_file[0:len(stream_dir)] != stream_dir:
@@ -1016,6 +1032,12 @@ class StreamDownloadHandler(BaseHandler):
             return
         if requested_file[0:len(stream_dir)] != stream_dir:
             return
+        if not Stream.exists(stream_id, self.db):
+            return self.error('Stream does not exist')
+        current_user = yield self.get_current_user()
+        stream_owner = yield self.get_stream_owner(stream_id)
+        if stream_owner != current_user:
+            return self.set_status(401)
         if not os.path.exists(requested_file):
             return self.error('Requested file does not exist')
 
@@ -1084,7 +1106,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
             else:
                 stream.hset('frames', li[-1])
 
-
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
         self.base_init(name, redis_options, mongo_options)
@@ -1106,8 +1127,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
             (r'/streams/stop/(.*)', StreamStopHandler),
             (r'/streams/delete/(.*)', StreamDeleteHandler),
             (r'/streams/files/(.*)', StreamFilesHandler),
-            (r'/streams/upload/(.*)/(.*)', StreamUploadHandler),
-            (r'/streams/download/(.*)/(.*)', StreamDownloadHandler),
+            (r'/streams/upload/([^/]+)/(.+)', StreamUploadHandler),
+            (r'/streams/download/([^/]+)/(.+)', StreamDownloadHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),
             (r'/core/start', CoreStartHandler),
             (r'/core/frame', CoreFrameHandler),

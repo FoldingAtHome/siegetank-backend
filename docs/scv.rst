@@ -18,6 +18,7 @@ Manager Methods
 
 .. autosimple:: StreamInfoHandler.get
 .. autosimple:: StreamDownloadHandler.get
+.. autosimple:: StreamUploadHandler.get
 .. autosimple:: StreamStartHandler.put
 .. autosimple:: StreamStopHandler.put
 .. autosimple:: StreamDeleteHandler.put

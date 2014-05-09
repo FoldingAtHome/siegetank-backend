@@ -15,6 +15,7 @@
 import requests
 import json
 import base64
+import hashlib
 import functools
 import time
 from siegetank.util import is_domain, encode_files
@@ -88,23 +89,29 @@ class Base:
     def __init__(self, uri):
         self.uri = uri
 
-    def _get(self, path, host=None):
-        headers = {'Authorization': auth_token}
+    def _get(self, path, host=None, headers=None):
+        if headers is None:
+            headers = {}
+        headers['Authorization'] = auth_token
         if host is None:
             host = self.uri
         url = 'https://'+host+path
         return requests.get(url, headers=headers, verify=is_domain(self.uri))
 
-    def _put(self, path, body=None):
-        headers = {'Authorization': auth_token}
+    def _put(self, path, body=None, headers=None):
+        if headers is None:
+            headers = {}
+        headers['Authorization'] = auth_token
         url = 'https://'+self.uri+path
         if body is None:
             body = '{}'
         return requests.put(url, headers=headers, data=body,
                             verify=is_domain(self.uri))
 
-    def _post(self, path, body=None):
-        headers = {'Authorization': auth_token}
+    def _post(self, path, body=None, headers=None):
+        if headers is None:
+            headers = {}
+        headers['Authorization'] = auth_token
         url = 'https://'+self.uri+path
         if body is None:
             body = '{}'
@@ -173,19 +180,18 @@ class Stream(Base):
         reply = self._get('/streams/download/'+self.id+'/'+filename)
         return reply.content
 
-    def replace(self, filename, filedata):
-        """ Replace a file on the stream.
+    def upload(self, filename, filedata):
+        """ Upload a file on the stream. The stream must be in the STOPPED
+        state and the file must exist already.
 
         :param filename: name of the file, eg. state.xml.gz.b64
-        :param filedata: base64 encoded data
+        :param filedata: binary data (do not b64 encode).
 
         """
-        # make sure filedata is encoded in b64 format
-        base64.b64decode(filedata)
-        body = json.dumps({
-            "files": {filename: filedata}
-        })
-        reply = self._put('/streams/replace/'+self.id, body=body)
+        md5 = hashlib.md5(filedata).hexdigest()
+        headers = {'Content-MD5': md5}
+        reply = self._put('/streams/upload/'+self.id+'/'+filename,
+                          body=filedata, headers=headers)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -197,6 +203,12 @@ class Stream(Base):
         self._status = content['status']
         self._error_count = content['error_count']
         self._active = content['active']
+
+    @property
+    def files(self):
+        """ Return a list of available files for stream. """
+        reply = self._get('/streams/files/'+self.id)
+        return reply.json()['files']
 
     @property
     def id(self):
