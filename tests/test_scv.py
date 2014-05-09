@@ -280,7 +280,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             self.assertTrue(os.path.exists(stream_dir))
         for stream_id in total_streams:
             reply = self.fetch('/streams/delete/'+stream_id,
-                              method='PUT', body='', headers=headers)
+                               method='PUT', body='', headers=headers)
             self.assertEqual(reply.code, 200)
         self.assertEqual(scv.Target.members(self.scv.db), set())
         self.assertEqual(scv.Stream.members(self.scv.db), set())
@@ -294,7 +294,36 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(result['shards'], [])
 
     def test_core_start(self):
-        self._core_start()
+        result = self._core_start()
+        files = result['files']
+        target_id = result['target_id']
+        stream_id = result['stream_id']
+        token = result['token']
+        headers = {'Authorization': token}
+        core_files = result['core_files']
+
+        self.assertEqual(core_files, files)
+        # post a frame and a checkpoint
+        self._add_frames(token)
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        replacement_filename = random.choice(list(files.keys()))
+        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
+        response = self.fetch('/core/checkpoint', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        # stop the stream
+        headers = {'Authorization': token}
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+        # retrieve the same stream again
+        stream_id, token = self._activate_stream(target_id)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        core_files = json.loads(response.body.decode())['files']
+        files[replacement_filename] = checkpoint_bin.decode()
+        self.assertEqual(core_files, files)
 
     def test_core_frame(self):
         result = self._post_and_activate_stream()

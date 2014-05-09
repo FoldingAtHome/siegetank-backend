@@ -127,9 +127,9 @@ class BaseHandler(tornado.web.RequestHandler):
         query = yield cursor.find_one({'_id': target_id}, fields=['owner'])
         return query['owner']
 
-    def error(self, message):
-        """ Write a message to the output buffer. """
-        self.set_status(400)
+    def error(self, message, code=400):
+        """ Write a message to the output buffer """
+        self.set_status(code)
         self.write({'error': message})
 
     def authenticate_core(self):
@@ -600,18 +600,19 @@ class CoreStartHandler(BaseHandler):
         assert stream.hget('status') == 'OK'
         reply = dict()
         reply['files'] = dict()
-        files_dir = os.path.join(self.application.streams_folder,
-                                 stream_id, 'files')
+        initial_files_dir = os.path.join(self.application.streams_folder,
+                                         stream_id, 'files')
         frames = stream.hget('frames')
         if frames > 0:
-            checkpoint_files = os.path.join(files_dir, frames,
+            checkpoint_files = os.path.join(self.application.streams_folder,
+                                            stream_id, str(frames),
                                             'checkpoint_files')
             for filename in os.listdir(checkpoint_files):
                 file_path = os.path.join(checkpoint_files, filename)
                 with open(file_path, 'r') as handle:
                     reply['files'][filename] = handle.read()
-        for filename in os.listdir(files_dir):
-            file_path = os.path.join(files_dir, filename)
+        for filename in os.listdir(initial_files_dir):
+            file_path = os.path.join(initial_files_dir, filename)
             with open(file_path, 'r') as handle:
                 if filename not in reply['files']:
                     reply['files'][filename] = handle.read()
@@ -973,8 +974,6 @@ class StreamUploadHandler(BaseHandler):
         if not os.path.exists(requested_file):
             return self.error('Requested file does not exist')
         md5 = self.request.headers.get('Content-MD5')
-        print('RECEIVED RANDOM BINARY', self.request.body)
-        print(md5, hashlib.md5(self.request.body).hexdigest())
         if md5 != hashlib.md5(self.request.body).hexdigest():
             return self.error('MD5 mismatch')
         with open(requested_file, 'wb') as f:
@@ -1070,8 +1069,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
                              'host': self.external_host}, upsert=True)
 
     def maintain_integrity(self):
-        """ Maintain integrity of the streams by ensuring that redis entries are
-            consistent with stream file data.
+        """ Maintain integrity of the streams by ensuring that redis entries
+            are consistent with stream file data.
         """
         stream_dirs = os.listdir(self.streams_folder)
         print("Maintaining integrity of", len(stream_dirs), "streams...")
