@@ -736,96 +736,96 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         new_stream_id, token = self._activate_stream(target_id)
         self.assertEqual(stream_id, new_stream_id)
 
-    # def test_heartbeat(self):
-    #     tornado.options.options.heartbeat_increment = 5
-    #     result = self._post_and_activate_stream()
-    #     target_id = result['target_id']
-    #     stream_id = result['stream_id']
-    #     token = result['token']
-    #     test_set = set([stream_id])
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     increment_time = tornado.options.options['heartbeat_increment']
-    #     time.sleep(increment_time+0.5)
-    #     self.io_loop.run_sync(self.scv.check_heartbeats)
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
-    #     stream_id, token = self._activate_stream(target_id)
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(3)
-    #     headers = {'Authorization': token}
-    #     response = self.fetch('/core/heartbeat', method='POST',
-    #                           headers=headers, body='')
-    #     self.assertEqual(response.code, 200)
-    #     self.io_loop.run_sync(self.scv.check_heartbeats)
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(3)
-    #     self.io_loop.run_sync(self.scv.check_heartbeats)
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
-    #     time.sleep(5)
-    #     self.io_loop.run_sync(self.scv.check_heartbeats)
-    #     self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
+    def test_heartbeat(self):
+        tornado.options.options.heartbeat_increment = 5
+        result = self._post_and_activate_stream()
+        target_id = result['target_id']
+        stream_id = result['stream_id']
+        token = result['token']
+        test_set = set([stream_id])
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        increment_time = tornado.options.options['heartbeat_increment']
+        time.sleep(increment_time+0.5)
+        self.io_loop.run_sync(self.scv.check_heartbeats)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
+        stream_id, token = self._activate_stream(target_id)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(3)
+        headers = {'Authorization': token}
+        response = self.fetch('/core/heartbeat', method='POST',
+                              headers=headers, body='')
+        self.assertEqual(response.code, 200)
+        self.io_loop.run_sync(self.scv.check_heartbeats)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(3)
+        self.io_loop.run_sync(self.scv.check_heartbeats)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), test_set)
+        time.sleep(5)
+        self.io_loop.run_sync(self.scv.check_heartbeats)
+        self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
 
-    # def test_expiration(self):
-    #     # test posting a bunch of streams, make random heartbeats to make sure
-    #     # they expire, assert that active_streams U queue = total streams
-    #     tornado.options.options.heartbeat_increment = 10
-    #     result = self._post_stream()
-    #     target_id = result['target_id']
-    #     stream_ids = [result['stream_id']]
-    #     n_streams = 100
-    #     for i in range(n_streams-1):
-    #         stream_ids.append(self._post_stream(target_id)['stream_id'])
+    def test_expiration(self):
+        # test posting a bunch of streams, make random heartbeats to make sure
+        # they expire, assert that active_streams U queue = total streams
+        tornado.options.options.heartbeat_increment = 10
+        result = self._post_stream()
+        target_id = result['target_id']
+        stream_ids = [result['stream_id']]
+        n_streams = 100
+        for i in range(n_streams-1):
+            stream_ids.append(self._post_stream(target_id)['stream_id'])
 
-    #     for i in range(5):
-    #         activation_times = []
-    #         action_times = []
-    #         # activate all the streams randomly
-    #         for stream_id in stream_ids:
-    #             activation_times.append(random.uniform(0, 5))
-    #             action_times.append(random.uniform(0, 7))
+        for i in range(5):
+            activation_times = []
+            action_times = []
+            # activate all the streams randomly
+            for stream_id in stream_ids:
+                activation_times.append(random.uniform(0, 5))
+                action_times.append(random.uniform(0, 7))
 
-    #         action_times = sorted(action_times)
-    #         activation_times = sorted(activation_times)
-    #         tokens = []
-    #         for index, unused in enumerate(activation_times):
-    #             if index == 0:
-    #                 sleep_time = activation_times[index]
-    #             else:
-    #                 sleep_time = activation_times[index] - activation_times[index-1]
-    #             time.sleep(sleep_time)
-    #             active_stream, token = self._activate_stream(target_id)
-    #             tokens.append(token)
-    #         for index, unused in enumerate(action_times):
-    #             if index == 0:
-    #                 sleep_time = action_times[index]
-    #             else:
-    #                 sleep_time = action_times[index] - action_times[index-1]
-    #             time.sleep(sleep_time)
-    #             headers = {'Authorization': tokens[index]}
-    #             if bool(random.getrandbits(1)):
-    #                 print('/core/stop')
-    #                 response = self.fetch('/core/stop', method='PUT',
-    #                                       headers=headers, body='{}')
-    #             else:
-    #                 print('/core/heartbeat')
-    #                 response = self.fetch('/core/heartbeat', method='POST',
-    #                                       headers=headers, body='')
-    #             self.assertEqual(response.code, 200)
-    #             self.io_loop.run_sync(self.scv.check_heartbeats)
+            action_times = sorted(action_times)
+            activation_times = sorted(activation_times)
+            tokens = []
+            for index, unused in enumerate(activation_times):
+                if index == 0:
+                    sleep_time = activation_times[index]
+                else:
+                    sleep_time = activation_times[index] - activation_times[index-1]
+                time.sleep(sleep_time)
+                active_stream, token = self._activate_stream(target_id)
+                tokens.append(token)
+            for index, unused in enumerate(action_times):
+                if index == 0:
+                    sleep_time = action_times[index]
+                else:
+                    sleep_time = action_times[index] - action_times[index-1]
+                time.sleep(sleep_time)
+                headers = {'Authorization': tokens[index]}
+                if bool(random.getrandbits(1)):
+                    print('/core/stop')
+                    response = self.fetch('/core/stop', method='PUT',
+                                          headers=headers, body='{}')
+                else:
+                    print('/core/heartbeat')
+                    response = self.fetch('/core/heartbeat', method='POST',
+                                          headers=headers, body='')
+                self.assertEqual(response.code, 200)
+                self.io_loop.run_sync(self.scv.check_heartbeats)
            
-    #          # queue U active_streams should equal to total streams
-    #         target = scv.Target(target_id, self.scv.db)
-    #         total_streams = target.smembers('streams')
-    #         target_queue = set(target.zrange('queue', 0, -1))
-    #         active_streams = scv.ActiveStream.members(self.scv.db)
-    #         self.assertEqual(target_queue.union(active_streams), total_streams)
-    #         time.sleep(20)
+             # queue U active_streams should equal to total streams
+            target = scv.Target(target_id, self.scv.db)
+            total_streams = target.smembers('streams')
+            target_queue = set(target.zrange('queue', 0, -1))
+            active_streams = scv.ActiveStream.members(self.scv.db)
+            self.assertEqual(target_queue.union(active_streams), total_streams)
+            time.sleep(20)
 
-    #         self.io_loop.run_sync(self.scv.check_heartbeats)
-    #         target_queue = set(target.zrange('queue', 0, -1))
-    #         self.assertEqual(target_queue, total_streams)
-    #         active_streams = scv.ActiveStream.members(self.scv.db)
-    #         self.assertEqual(active_streams, set())
-    #         # queue U active_streams should equal to total streams
+            self.io_loop.run_sync(self.scv.check_heartbeats)
+            target_queue = set(target.zrange('queue', 0, -1))
+            self.assertEqual(target_queue, total_streams)
+            active_streams = scv.ActiveStream.members(self.scv.db)
+            self.assertEqual(active_streams, set())
+            # queue U active_streams should equal to total streams
 
 
 if __name__ == '__main__':
