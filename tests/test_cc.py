@@ -136,7 +136,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(stored_token, reply_token)
 
         # test auth
-        for i in range(5):
+        for i in range(10):
+            print(i)
             body = {
                 'username': username,
                 'password': password

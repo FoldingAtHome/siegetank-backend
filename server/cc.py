@@ -135,8 +135,8 @@ class DonorAuthHandler(BaseHandler):
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
-            donors.update({'_id': username},
-                          {'$set': {'token': new_token}})
+            yield donors.update({'_id': username},
+                                {'$set': {'token': new_token}})
         else:
             return self.status(401)
         self.set_status(200)
@@ -251,7 +251,7 @@ class ManagerAuthHandler(BaseHandler):
         stored_hash = query['password_hash']
         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
             new_token = str(uuid.uuid4())
-            cursor.update({'_id': email}, {'$set': {'token': new_token}})
+            yield cursor.update({'_id': email}, {'$set': {'token': new_token}})
         else:
             return self.status(401)
         self.set_status(200)
