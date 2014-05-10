@@ -198,7 +198,7 @@ int main(int argc, const char * argv[]) {
     cc_uri = "cc.proteneer.com";
     try {
         const string engine = "openmm";
-        OpenMMCore core(engine, "0a14f5cc-3457-4933-8daa-c7905d976188", properties);
+        OpenMMCore core(engine, "70ac3a36-6921-4ddb-997d-6b76f2fa7341", properties);
         string donor_token;
         if(opt.isSet("--donor_token")) {
             opt.get("--donor_token")->getString(donor_token);

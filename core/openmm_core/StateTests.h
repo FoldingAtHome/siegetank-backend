@@ -15,7 +15,7 @@
 #ifndef STATE_TESTS_H_
 #define STATE_TESTS_H_
 
-class OpenMM::State;
+#include <OpenMM.h>
 
 // Single Precision Tolerances
 static double const DEFAULT_FORCE_TOL_KJ_PER_MOL_PER_NM = 5;

@@ -155,11 +155,11 @@ void Core::assign(const string &cc_uri,
     } else {
         verify_mode = Poco::Net::Context::VERIFY_NONE;
     }
-    // Load allowed CA bundles from OpenSSL
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
         Poco::Net::Context::CLIENT_USE, "", 
         verify_mode, 9, true);
     cout << "connecting to cc..." << flush;
+    cout << getHost(cc_uri) << " " << getPort(cc_uri) << endl;
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
                                              context);
@@ -198,6 +198,7 @@ void Core::assign(const string &cc_uri,
             throw(std::runtime_error("no JSON object could be read"+err));
         picojson::value::object &json_object = json_value.get<picojson::object>();
         string ws_url(json_object["url"].get<string>());
+        cout << "assigned to " << ws_url << endl;
         Poco::URI poco_url(ws_url);
         core_token_ = json_object["token"].get<string>();
         session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
@@ -215,7 +216,7 @@ void Core::startStream(const string &cc_uri,
         assign(cc_uri, donor_token, target_id);
     else
         throw std::runtime_error("session_ is not NULL");
-    cout << "assignment complete" << endl;
+    cout << "Preparing to start stream..." << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");
     request.set("Authorization", core_token_);
     session_->sendRequest(request);

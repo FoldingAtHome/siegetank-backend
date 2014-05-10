@@ -19,6 +19,7 @@
 #include <OpenMM.h>
 #include <sstream>
 #include <map>
+#include <string>
 
 class OpenMMCore : public Core {
 public:
