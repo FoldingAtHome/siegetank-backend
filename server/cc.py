@@ -95,17 +95,6 @@ class BaseHandler(tornado.web.RequestHandler):
         except:
             return None
 
-    def load_target_options(self, target_id):
-        options_path = os.path.join(self.application.targets_folder,
-                                    target_id, 'options')
-
-        if os.path.exists(options_path):
-            with open(options_path, 'r') as handle:
-                options = json.loads(handle.read())
-                return options
-        else:
-            return dict()
-
 
 class DonorAuthHandler(BaseHandler):
     @tornado.gen.coroutine
@@ -1058,7 +1047,10 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         except (tornado.httpclient.HTTPError, IOError) as e:
             if isinstance(e, tornado.httpclient.HTTPError):
                 code = e.code
-                body = io.BytesIO(e.response.body)
+                if e.response:
+                    body = io.BytesIO(e.response.body)
+                else:
+                    body = io.BytesIO('scv disabled')
                 if e.code == 599:
                     cursor.hincrby('fail_count', 1)
                 else:
