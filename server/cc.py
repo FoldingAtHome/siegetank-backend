@@ -375,7 +375,7 @@ class TargetUpdateHandler(BaseHandler):
         self.set_status(400)
         current_user = yield self.get_current_user()
         if not current_user:
-            self.error('Bad credentials', code=401)
+            return self.error('Bad credentials', code=401)
         content = json.loads(self.request.body.decode())
         payload = {}
         if 'engines' in content:
@@ -395,7 +395,7 @@ class TargetUpdateHandler(BaseHandler):
         if result['updatedExisting']:
             self.set_status(200)
         else:
-            self.error('invalid '+target_id)
+            return self.error('invalid '+target_id)
 
 
 def yates_generator(x):
@@ -934,7 +934,7 @@ class TargetsHandler(BaseHandler):
         self.set_status(400)
         current_user = yield self.get_current_user()
         if not current_user:
-            self.error('Bad credentials', code=401)
+            return self.error('Bad credentials', code=401)
         content = json.loads(self.request.body.decode())
         #----------------#
         # verify request #
