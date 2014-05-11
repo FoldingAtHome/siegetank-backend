@@ -815,8 +815,8 @@ class TargetDeleteHandler(BaseHandler):
         """
         .. http:put:: /targets/delete/:target_id
 
-            Delete a target from the Command Center. The target must not have
-            any shards in order for this method to succeed.
+            Delete a target from the Command Center. You must delete all the
+            streams for the target to succeed.
 
             This will not affect mongo's community database in order to
             preserve statistics.
@@ -834,8 +834,7 @@ class TargetDeleteHandler(BaseHandler):
         if result['n'] > 0:
             return self.set_status(200)
         else:
-            return self.error('Could not remove target, make sure it has no\
-                               shards and that target_id is correct')
+            return self.error('Cannot remove target all streams are removed')
 
 
 class TargetsHandler(BaseHandler):

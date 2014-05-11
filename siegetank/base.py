@@ -96,7 +96,8 @@ class Base:
         if host is None:
             host = self.uri
         url = 'https://'+host+path
-        return requests.get(url, headers=headers, verify=is_domain(self.uri))
+        return requests.get(url, headers=headers, verify=is_domain(self.uri),
+                            timeout=2)
 
     def _put(self, path, body=None, headers=None):
         if headers is None:
@@ -106,7 +107,7 @@ class Base:
         if body is None:
             body = '{}'
         return requests.put(url, headers=headers, data=body,
-                            verify=is_domain(self.uri))
+                            verify=is_domain(self.uri), timeout=2)
 
     def _post(self, path, body=None, headers=None):
         if headers is None:
@@ -116,7 +117,7 @@ class Base:
         if body is None:
             body = '{}'
         return requests.post(url, headers=headers, data=body,
-                             verify=is_domain(self.uri))
+                             verify=is_domain(self.uri), timeout=2)
 
 
 class Stream(Base):
@@ -338,7 +339,8 @@ class Target(Base):
             host = scvs[scv]['host']
             reply = self._get('/targets/streams/'+self.id, host=host)
             if reply.status_code != 200:
-                raise Exception('Failed to load streams from SCV: '+scvs)
+                print(reply.status_code, reply.content)
+                raise Exception('Failed to load streams from SCV: '+scv)
             for stream_id in reply.json()['streams']:
                 self._streams.add(Stream(stream_id))
 
@@ -382,7 +384,7 @@ class Target(Base):
 
     @property
     def shards(self):
-        """ Return a list of SCVs the streams are sharded across. """
+        """ Return a list of SCVs that the streams are sharded across. """
         if not self._shards:
             self.reload_info()
         return self._shards
