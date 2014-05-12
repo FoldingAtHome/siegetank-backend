@@ -14,9 +14,16 @@
 
 #include "OpenMMCore.h"
 #include "ezOptionParser.h"
+#include "ExitSignal.h"
 
 #include <string>
 #include <iostream>
+
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <unistd.h>
+#endif
 
 #ifdef OPENMM_OPENCL 
 #include "gpuinfo.h"
@@ -196,26 +203,33 @@ int main(int argc, const char * argv[]) {
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
     cc_uri = "cc.proteneer.com";
-    try {
-        const string engine = "openmm";
-        OpenMMCore core(engine, "70ac3a36-6921-4ddb-997d-6b76f2fa7341", properties);
-        string donor_token;
-        if(opt.isSet("--donor_token")) {
-            opt.get("--donor_token")->getString(donor_token);
-            if(donor_token.length() != 36) {
-                throw std::runtime_error("donor_token must be 36 characters");
+    double delay_in_sec = 1;
+    ExitSignal::init();
+    const string engine = "openmm";
+    OpenMMCore core(engine, "70ac3a36-6921-4ddb-997d-6b76f2fa7341", properties);
+    while(!ExitSignal::shouldExit()) {
+        try {
+            sleep(delay_in_sec);
+            delay_in_sec = delay_in_sec * 2;
+            string donor_token;
+            if(opt.isSet("--donor_token")) {
+                opt.get("--donor_token")->getString(donor_token);
+                if(donor_token.length() != 36) {
+                    throw std::runtime_error("donor_token must be 36 characters");
+                }
             }
-        }
-        string target_id;
-        if(opt.isSet("--target_id")) {
-            opt.get("--target_id")->getString(target_id);
-            if(target_id.length() != 36) {
-                throw std::runtime_error("target_id must be 36 characters");
+            string target_id;
+            if(opt.isSet("--target_id")) {
+                opt.get("--target_id")->getString(target_id);
+                if(target_id.length() != 36) {
+                    throw std::runtime_error("target_id must be 36 characters");
+                }
             }
+            core.startStream(cc_uri, donor_token, target_id);
+            delay_in_sec = 1;
+            core.main();
+        } catch(const exception &e) {
+            cout << e.what() << endl;
         }
-        core.startStream(cc_uri, donor_token, target_id);
-        core.main();
-    } catch(const exception &e) {
-        cout << e.what() << endl;
     }
 }

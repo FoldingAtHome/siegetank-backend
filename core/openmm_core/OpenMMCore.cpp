@@ -28,12 +28,12 @@
 #include <ctime>
 #include <sstream>
 #include <OpenMM.h>
-#include <signal.h>
 
 #include "XTCWriter.h"
 #include "OpenMMCore.h"
 #include "kbhit.h"
 #include "StateTests.h"
+#include "ExitSignal.h"
 
 using namespace std;
 
@@ -45,18 +45,15 @@ extern "C" void registerCudaPlatform();
     extern "C" void registerCpuPmeKernelFactories();
 #endif
 
-static sig_atomic_t global_exit = false;
-
-static void exit_signal_handler(int param) {
-    global_exit = true;
-}
-
 OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> properties) :
     Core(engine, core_key),
     checkpoint_send_interval_(6000),
     heartbeat_interval_(60),
     ref_context_(NULL),
     core_context_(NULL),
+    ref_intg_(NULL),
+    core_intg_(NULL),
+    shared_system_(NULL),
     properties_(properties) {
     registerSerializationProxies();
 #ifdef OPENMM_CPU
@@ -74,15 +71,12 @@ OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> prope
 #else
     BAD DEFINE
 #endif
-    global_exit = false;
-    signal(SIGINT, exit_signal_handler);
-    signal(SIGTERM, exit_signal_handler);
 }
 
 OpenMMCore::~OpenMMCore() {
-    cout << "calling OpenMMCore destructor" << endl;
     delete ref_context_;
     delete core_context_;
+    delete shared_system_;
     // renable proper keyboard input
     changemode(0);
 }
@@ -223,13 +217,10 @@ void OpenMMCore::startStream(const string &cc_uri,
     start_time_ = time(NULL);
     Core::startStream(cc_uri, donor_token, target_id);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
-    OpenMM::System *shared_system;
     OpenMM::State *initial_state;
-    OpenMM::Integrator *ref_intg;
-    OpenMM::Integrator *core_intg;
     if(files_.find("system.xml") != files_.end()) {
         istringstream system_stream(files_["system.xml"]);
-        shared_system = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
+        shared_system_ = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
     } else {
         throw std::runtime_error("Cannot find system.xml");
     }
@@ -241,20 +232,20 @@ void OpenMMCore::startStream(const string &cc_uri,
     }
     if(files_.find("integrator.xml") != files_.end()) {
         istringstream core_integrator_stream(files_["integrator.xml"]);
-        core_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
+        core_intg_ = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
         istringstream ref_integrator_stream(files_["integrator.xml"]); 
-        ref_intg = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(ref_integrator_stream);
+        ref_intg_ = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(ref_integrator_stream);
     } else {
         throw std::runtime_error("Cannot find integrator.xml");
     }
     int random_seed = time(NULL);
-    setupSystem(shared_system, random_seed);
+    setupSystem(shared_system_, random_seed);
     cout << "\r                                                             " << flush;
     cout << "\rcreating contexts: reference... " << flush;
-    ref_context_ = new OpenMM::Context(*shared_system, *ref_intg,
+    ref_context_ = new OpenMM::Context(*shared_system_, *ref_intg_,
         OpenMM::Platform::getPlatformByName("Reference"));
     cout << "core..." << flush;
-    core_context_ = new OpenMM::Context(*shared_system, *core_intg,
+    core_context_ = new OpenMM::Context(*shared_system_, *core_intg_,
         OpenMM::Platform::getPlatformByName(platform_name_), properties_);
     cout << "ok";
     ref_context_->setState(*initial_state);
@@ -271,13 +262,23 @@ void OpenMMCore::startStream(const string &cc_uri,
 }
 
 
-void OpenMMCore::stopStream(string error_msg) {
-    flushCheckpoint();
-    Core::stopStream(error_msg);
+void OpenMMCore::cleanUp() {
     delete ref_context_;
     ref_context_ = NULL;
     delete core_context_;
     core_context_ = NULL;
+    delete ref_intg_;
+    ref_intg_ = NULL;
+    delete core_intg_;
+    core_intg_ = NULL;
+    delete shared_system_;
+    shared_system_ = NULL;
+}
+
+void OpenMMCore::stopStream(string error_msg) {
+    flushCheckpoint();
+    Core::stopStream(error_msg);
+    cleanUp();
 }
 
 void OpenMMCore::flushCheckpoint() {
@@ -378,7 +379,7 @@ void OpenMMCore::main() {
                               current_step/steps_per_frame_,
                               current_step);
             }
-            if(global_exit) {
+            if(ExitSignal::shouldExit()) {
                 changemode(0);
                 break;
             }

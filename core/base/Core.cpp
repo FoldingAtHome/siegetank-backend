@@ -212,10 +212,10 @@ void Core::assign(const string &cc_uri,
 void Core::startStream(const string &cc_uri,
                        const string &donor_token,
                        const string &target_id) {
-    if(session_ == NULL)
-        assign(cc_uri, donor_token, target_id);
-    else
-        throw std::runtime_error("session_ is not NULL");
+    if(session_ != NULL) {
+        delete session_;
+    } 
+    assign(cc_uri, donor_token, target_id);
     cout << "Preparing to start stream..." << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");
     request.set("Authorization", core_token_);

@@ -62,6 +62,8 @@ protected:
 private:
     void setupSystem(OpenMM::System *system, int randomSeed) const;
 
+    void cleanUp();
+
     std::map<std::string, std::string> properties_;
     int steps_per_frame_;
     int checkpoint_send_interval_;
@@ -71,6 +73,9 @@ private:
     std::string last_checkpoint_;
     OpenMM::Context* ref_context_;
     OpenMM::Context* core_context_;
+    OpenMM::Integrator* ref_intg_;
+    OpenMM::Integrator* core_intg_;
+    OpenMM::System* shared_system_;
 
 };
 
