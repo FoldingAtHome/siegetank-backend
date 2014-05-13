@@ -1147,13 +1147,18 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
         active_stream = ActiveStream(stream_id, self.db, verify=False)
-        donor = active_stream.hget('donor')
-        engine = active_stream.hget('engine')
-        start_time = active_stream.hget('start_time')
-        frames = active_stream.hget('total_frames')
-        end_time = time.time()
-        removed = active_stream.delete()[-1]
+        pipeline = self.db.pipeline()
+        active_stream.hget_pipe('donor', pipeline=pipeline)
+        active_stream.hget_pipe('engine', pipeline=pipeline)
+        active_stream.hget_pipe('start_time', pipeline=pipeline)
+        active_stream.hget_pipe('total_frames', pipeline=pipeline)
+        active_stream.delete(pipeline=pipeline)
+        result = pipeline.execute()
+        removed = result[-1]
         if removed > 0:
+            donor, engine = result[0], result[1]
+            start_time, frames = float(result[2]), int(result[3])
+            end_time = time.time()
             self.db.zrem('heartbeats', stream_id)
             stream_path = os.path.join(self.streams_folder, stream_id)
             buffer_path = os.path.join(stream_path, 'buffer_files')

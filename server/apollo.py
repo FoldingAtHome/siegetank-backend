@@ -410,7 +410,7 @@ class Entity(metaclass=_entity_metaclass):
         """ Get a hash field """
         field_type = self.fields[field]
         if (field_type in (str, int, bool, float)):
-            val = self._db.hget(self.prefix + ':' + self._id, field)
+            val = self._db.hget(self.prefix+':' + self._id, field)
             if val:
                 return field_type(val)
             else:
@@ -420,6 +420,10 @@ class Entity(metaclass=_entity_metaclass):
         else:
             raise TypeError('Unknown type')
 
+    @check_field
+    def hget_pipe(self, field, pipeline):
+        pipeline.hget(self.prefix + ':' + self._id, field)
+        
     @check_field
     def smembers(self, field):
         """ Return members of a set """
