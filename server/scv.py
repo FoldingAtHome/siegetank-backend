@@ -274,8 +274,8 @@ class StreamActivateHandler(BaseHandler):
 
                 {
                     "target_id": "some_uuid4",
+                    "engine": "engine_name",
                     "donor_id": "jesse_v" // optional
-                    "engine": "engine_name" // optional
                 }
 
             **Example reply**
@@ -305,12 +305,11 @@ class StreamActivateHandler(BaseHandler):
                 'total_frames': 0,
                 'auth_token': token,
                 'steps': 0,
-                'start_time': time.time()
+                'start_time': time.time(),
+                'engine': content['engine'],
             }
             if 'donor_id' in content:
                 fields['donor'] = content['donor_id']
-            if 'engine' in content:
-                fields['engine'] = content['engine']
             ActiveStream.create(stream_id, self.db, fields)
             increment = tornado.options.options['heartbeat_increment']
             self.db.zadd('heartbeats', stream_id, time.time() + increment)
@@ -1148,6 +1147,11 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
         active_stream = ActiveStream(stream_id, self.db, verify=False)
+        donor = active_stream.hget('donor')
+        engine = active_stream.hget('engine')
+        start_time = active_stream.hget('start_time')
+        frames = active_stream.hget('total_frames')
+        end_time = time.time()
         removed = active_stream.delete()[-1]
         if removed > 0:
             self.db.zrem('heartbeats', stream_id)
@@ -1155,22 +1159,17 @@ class SCV(BaseServerMixin, tornado.web.Application):
             buffer_path = os.path.join(stream_path, 'buffer_files')
             if os.path.exists(buffer_path):
                 shutil.rmtree(buffer_path)
-            donor = active_stream.hget('donor')
-            engine = active_stream.hget('engine')
-            start_time = active_stream.hget('start_time')
-            end_time = time.time()
-            frames = active_stream.hget('total_frames')
             if frames:
                 body = {
                     'engine': engine,
                     'donor': donor,
                     'start_time': start_time,
                     'end_time': end_time,
-                    'frames': frames
+                    'frames': frames,
+                    'stream': stream_id
                 }
                 cursor = self.motor.stats.fragments
                 yield cursor.insert(body)
-            active_stream.delete()
             # push this stream back into queue
             stream = Stream(stream_id, self.db)
             frames_completed = stream.hget('frames')

@@ -27,6 +27,7 @@ import random
 import hashlib
 import time
 import pymongo
+import functools
 
 from os.path import isfile
 
@@ -107,7 +108,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
     def _activate_stream(self, target_id):
-        body = {'target_id': target_id}
+        body = {'target_id': target_id,
+                'engine': 'test_engine'}
         headers = {'Authorization': self.scv.password}
         reply = self.fetch('/streams/activate', method='POST',
                            body=json.dumps(body), headers=headers)
@@ -408,6 +410,14 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # deactivate the stream
+        self.io_loop.run_sync(functools.partial(self.scv.deactivate_stream, stream_id))
+
+        # see if fragment information has been recorded
+        result = self.mdb.stats.fragments.find_one({'stream': stream_id})
+        self.assertEqual(result['frames'], n_frames+more_frames)
+        self.assertEqual(result['stream'], stream_id)
 
     def test_core_frame_variadic(self):
         result = self._post_and_activate_stream()

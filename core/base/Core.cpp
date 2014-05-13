@@ -198,7 +198,6 @@ void Core::assign(const string &cc_uri,
             throw(std::runtime_error("no JSON object could be read"+err));
         picojson::value::object &json_object = json_value.get<picojson::object>();
         string ws_url(json_object["url"].get<string>());
-        cout << "assigned to " << ws_url << endl;
         Poco::URI poco_url(ws_url);
         core_token_ = json_object["token"].get<string>();
         session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
