@@ -210,6 +210,7 @@ void Core::startStream(const string &cc_uri,
     cout << "b-startStream" << endl;
     if(session_ != NULL) {
         delete session_;
+        session_ = NULL;
     }
     assign(cc_uri, donor_token, target_id);
     cout << "Preparing to start stream..." << endl;
