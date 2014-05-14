@@ -24,6 +24,7 @@ import os
 import motor
 import signal
 import tornado.options
+import tornado.web
 import logging
 
 
@@ -82,7 +83,71 @@ def init_redis(redis_options, cwd=None):
     return redis_client
 
 
+class CommonHandler(tornado.web.RequestHandler):
+
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+
+    @property
+    def db(self):
+        return self.application.db
+
+    @property
+    def motor(self):
+        return self.application.motor
+
+    @property
+    def deactivate_stream(self):
+        return self.application.deactivate_stream
+
+    @tornado.gen.coroutine
+    def get_current_user(self, token=None):
+        """" Get the user making the request. If token is None, then this
+        method will use the request's Authorization header. """
+        if token is None:
+            try:
+                header_token = self.request.headers['Authorization']
+            except KeyError:
+                return None
+        # TODO: Add a caching mechanism of tokens to user ids
+        cursor = self.motor.users.all
+        query = yield cursor.find_one({'token': header_token}, fields=['_id'])
+        if query:
+            return query['_id']
+        else:
+            return None
+
+    @tornado.gen.coroutine
+    def is_admin(self, user):
+        if user is None:
+            return False
+        cursor = self.motor.users.admins
+        query = yield cursor.find_one({'_id': user})
+        if query:
+            return True
+        else:
+            return False
+
+    @tornado.gen.coroutine
+    def is_manager(self, user):
+        if user is None:
+            return False
+        cursor = self.motor.users.managers
+        query = yield cursor.find_one({'_id': user})
+        print('DEBUG', query)
+        if query:
+            return True
+        else:
+            return False
+
+    def error(self, message, code=400):
+        """ Write a message to the output buffer """
+        self.set_status(code)
+        self.write({'error': message})
+
+
 class BaseServerMixin():
+
     def initialize_motor(self):
         mongo_options = self._mongo_options
         if mongo_options:

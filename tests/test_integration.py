@@ -37,6 +37,7 @@ import json
 
 
 class TestSimple(tornado.testing.AsyncTestCase):
+
     @classmethod
     def setUpClass(self):
         super(TestSimple, self).setUpClass()
@@ -98,14 +99,16 @@ class TestSimple(tornado.testing.AsyncTestCase):
             tornado.ioloop.IOLoop.instance().run_sync(key['app']._register)
         tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
         token = str(uuid.uuid4())
-        test_manager = "test_ws@gmail.com"
+        test_manager = 'foo_bar'
         db_body = {'_id': test_manager,
-                   'token': token,
-                   'role': 'admin',
-                   'weight': 1
-                   }
-        managers = self.mdb.users.managers
-        managers.insert(db_body)
+                   'email': 'test_ws@gmail.com',
+                   'token': token}
+        self.mdb.users.all.insert(db_body)
+        db_body = {'_id': test_manager,
+                   'weight': 1}
+        self.mdb.users.managers.insert(db_body)
+        db_body = {'_id': test_manager}
+        self.mdb.users.admins.insert(db_body)
         self.auth_token = token
         self.manager = test_manager
 
@@ -127,15 +130,18 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.client.fetch(uri, self.stop, **kwargs)
         return self.wait()
 
-    def _add_donor(self):
+    def _add_user(self):
         username = 'jesse_v'
         email = 'jv@jv.com'
         password = 'test_pw'
+        token = str(uuid.uuid4())
         body = {
-            'username': username,
+            '_id': username,
             'email': email,
-            'password': password
+            'password': password,
+            'token': token
         }
+        self
         reply = self.fetch(self.cc_host, '/donors', method='POST',
                            body=json.dumps(body))
         self.assertEqual(reply.code, 200)
@@ -290,8 +296,8 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self._assign(self.cc_host, core_key='garbage', expected_code=400)
 
     def test_assign_donor(self):
-        content = self._add_donor()
-        token = content['token']
+        #content = self._add_user()
+        token = self.auth_token
         target_id = self._post_target(self.cc_host)['target_id']
         self._post_stream(self.cc_host, target_id)
         self._assign(self.cc_host, donor_token=token)

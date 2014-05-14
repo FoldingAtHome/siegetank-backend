@@ -32,7 +32,7 @@ import tornado.options
 import tornado.process
 import tornado.gen
 
-from server.common import BaseServerMixin, configure_options
+from server.common import BaseServerMixin, configure_options, CommonHandler
 from server.apollo import Entity, zset, relate
 
 
@@ -50,7 +50,7 @@ class ActiveStream(Entity):
     fields = {'total_frames': int,  # total frames completed.
               'buffer_frames': int,  # number of frames in buffer.xtc
               'auth_token': str,  # core Authorization token
-              'donor': str,  # the donor assigned ? support lookup?
+              'user': str,  # the user assigned to the stream
               'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
               'frame_hash': str,  # md5sum of the received frame
@@ -64,61 +64,16 @@ class Target(Entity):
 
 
 ActiveStream.add_lookup('auth_token')
-ActiveStream.add_lookup('donor', injective=False)
+ActiveStream.add_lookup('user', injective=False)
 relate(Target, 'streams', {Stream}, 'target')
 relate(Target, 'active_streams', {ActiveStream})
 
 
-class BaseHandler(tornado.web.RequestHandler):
-    def set_default_headers(self):
-        self.set_header("Access-Control-Allow-Origin", "*")
-
-    @property
-    def db(self):
-        return self.application.db
-
-    @property
-    def mdb(self):
-        return self.application.mdb
-
-    @property
-    def motor(self):
-        return self.application.motor
+class BaseHandler(CommonHandler):
 
     @property
     def deactivate_stream(self):
         return self.application.deactivate_stream
-
-    @tornado.gen.coroutine
-    def get_current_user(self):
-        try:
-            header_token = self.request.headers['Authorization']
-        except KeyError:
-            return None
-        # TODO: Add a caching mechanism of tokens to user ids
-        managers = self.motor.users.managers
-        query = yield managers.find_one({'token': header_token},
-                                        fields=['_id'])
-        if query:
-            return query['_id']
-        else:
-            return None
-
-    @tornado.gen.coroutine
-    def get_user_role(self):
-        try:
-            token = self.request.headers['Authorization']
-        except KeyError:
-            if self.request.remote_ip == '127.0.0.1':
-                return 'admin'
-            else:
-                return None
-        cursor = self.motor.users.managers
-        query = yield cursor.find_one({'token': token}, fields=['role'])
-        try:
-            return query['role']
-        except:
-            return None
 
     @tornado.gen.coroutine
     def get_stream_owner(self, stream_id):
@@ -127,11 +82,6 @@ class BaseHandler(tornado.web.RequestHandler):
         cursor = self.motor.data.targets
         query = yield cursor.find_one({'_id': target_id}, fields=['owner'])
         return query['owner']
-
-    def error(self, message, code=400):
-        """ Write a message to the output buffer """
-        self.set_status(code)
-        self.write({'error': message})
 
     def authenticate_core(self):
         """ Returns a stream_id if token is valid, None otherwise """
@@ -182,6 +132,7 @@ def authenticate_core(method):
 
 
 class AliveHandler(BaseHandler):
+
     def get(self):
         """
         .. http:get:: /
@@ -195,6 +146,7 @@ class AliveHandler(BaseHandler):
 
 
 class StreamInfoHandler(BaseHandler):
+
     def get(self, stream_id):
         """
         .. http:get:: /streams/info/[:stream_id]
@@ -229,6 +181,7 @@ class StreamInfoHandler(BaseHandler):
 
 
 class TargetStreamsHandler(BaseHandler):
+
     def get(self, target_id):
         """
         .. http:get:: /targets/streams/:target_id
@@ -259,6 +212,7 @@ class TargetStreamsHandler(BaseHandler):
 
 
 class StreamActivateHandler(BaseHandler):
+
     def post(self):
         """
         .. http:post:: /streams/activate
@@ -275,7 +229,7 @@ class StreamActivateHandler(BaseHandler):
                 {
                     "target_id": "some_uuid4",
                     "engine": "engine_name",
-                    "donor_id": "jesse_v" // optional
+                    "user": "jesse_v" // optional
                 }
 
             **Example reply**
@@ -308,8 +262,8 @@ class StreamActivateHandler(BaseHandler):
                 'start_time': time.time(),
                 'engine': content['engine'],
             }
-            if 'donor_id' in content:
-                fields['donor'] = content['donor_id']
+            if 'user' in content:
+                fields['user'] = content['user']
             ActiveStream.create(stream_id, self.db, fields)
             increment = tornado.options.options['heartbeat_increment']
             self.db.zadd('heartbeats', stream_id, time.time() + increment)
@@ -323,6 +277,7 @@ class StreamActivateHandler(BaseHandler):
 
 
 class StreamsHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def post(self):
         """
@@ -359,7 +314,9 @@ class StreamsHandler(BaseHandler):
         self.set_status(400)
         current_user = yield self.get_current_user()
         if current_user is None:
-            return self.error('Bad credentials', 401)
+            return self.error('Invalid user', 401)
+        if not self.is_manager():
+            return self.error('User is not a manager', 401)
 
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
@@ -402,6 +359,7 @@ class StreamsHandler(BaseHandler):
 
 
 class StreamStartHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self, stream_id):
         """
@@ -446,6 +404,7 @@ class StreamStartHandler(BaseHandler):
 
 
 class StreamStopHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self, stream_id):
         """
@@ -487,6 +446,7 @@ class StreamStopHandler(BaseHandler):
 
 
 class StreamDeleteHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self, stream_id):
         """
@@ -626,6 +586,7 @@ class CoreStartHandler(BaseHandler):
 
 
 class CoreFrameHandler(BaseHandler):
+
     def put(self):
         """
         ..  http:put:: /core/frame
@@ -666,7 +627,7 @@ class CoreFrameHandler(BaseHandler):
         # fwi = frame_write_interval (PG Controlled)
         # fsi = frame_send_interval (Core Controlled)
         # cwi = checkpoint_write_interval (Core Controlled)
-        # csi = checkpoint_send_interval (Donor Controlled)
+        # csi = checkpoint_send_interval (User Controlled)
         #
         # Where: fwi < fsi = cwi < csi
         #
@@ -726,6 +687,7 @@ class CoreFrameHandler(BaseHandler):
 
 
 class CoreCheckpointHandler(BaseHandler):
+
     def put(self):
         """
         .. http:put:: /core/checkpoint
@@ -815,6 +777,7 @@ class CoreCheckpointHandler(BaseHandler):
 
 
 class CoreStopHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self):
         """
@@ -856,6 +819,7 @@ class CoreStopHandler(BaseHandler):
 
 
 class ActiveStreamsHandler(BaseHandler):
+
     def get(self):
         """
         .. http:get:: /active_streams
@@ -869,7 +833,7 @@ class ActiveStreamsHandler(BaseHandler):
                 {
                     "target_id": {
                         "stream_id_1": {
-                            "donor_id": None,
+                            "user": None,
                             "start_time": 31875.3,
                             "active_frames": 23
                         }
@@ -895,11 +859,11 @@ class ActiveStreamsHandler(BaseHandler):
             for stream_id in good_streams:
                 reply[target][stream_id] = dict()
                 active_stream = ActiveStream(stream_id, self.db)
-                donor = active_stream.hget('donor')
+                user = active_stream.hget('user')
                 start_time = active_stream.hget('start_time')
                 active_frames = active_stream.hget('total_frames')
                 buffer_frames = active_stream.hget('buffer_frames')
-                reply[target][stream_id]['donor'] = donor
+                reply[target][stream_id]['user'] = user
                 reply[target][stream_id]['start_time'] = start_time
                 reply[target][stream_id]['active_frames'] = active_frames
                 reply[target][stream_id]['buffer_frames'] = buffer_frames
@@ -1148,7 +1112,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
     def deactivate_stream(self, stream_id):
         active_stream = ActiveStream(stream_id, self.db, verify=False)
         pipeline = self.db.pipeline()
-        active_stream.hget_pipe('donor', pipeline=pipeline)
+        active_stream.hget_pipe('user', pipeline=pipeline)
         active_stream.hget_pipe('engine', pipeline=pipeline)
         active_stream.hget_pipe('start_time', pipeline=pipeline)
         active_stream.hget_pipe('total_frames', pipeline=pipeline)
@@ -1156,7 +1120,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         result = pipeline.execute()
         removed = result[-1]
         if removed > 0:
-            donor, engine = result[0], result[1]
+            user, engine = result[0], result[1]
             start_time, frames = float(result[2]), int(result[3])
             end_time = time.time()
             self.db.zrem('heartbeats', stream_id)
@@ -1167,7 +1131,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
             if frames:
                 body = {
                     'engine': engine,
-                    'donor': donor,
+                    'user': user,
                     'start_time': start_time,
                     'end_time': end_time,
                     'frames': frames,

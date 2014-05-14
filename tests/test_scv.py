@@ -25,14 +25,13 @@ import time
 import base64
 import random
 import hashlib
-import time
 import pymongo
-import functools
 
 from os.path import isfile
 
 
 class TestSCV(tornado.testing.AsyncHTTPTestCase):
+
     def get_app(self):
         redis_options = {'port': 3828, 'logfile': os.devnull}
         self.scv = scv.SCV(name='test_scv',
@@ -46,14 +45,16 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.mongo_options = {'host': 'localhost', 'port': 27017}
         self.mdb = pymongo.MongoClient('localhost', 27017)
         token = str(uuid.uuid4())
-        test_manager = "test_ws@gmail.com"
+        test_manager = 'foo_bar'
         db_body = {'_id': test_manager,
-                   'token': token,
-                   'role': 'manager',
-                   'weight': 1,
-                   }
-        managers = self.mdb.users.managers
-        managers.insert(db_body)
+                   'email': 'test_ws@gmail.com',
+                   'token': token}
+        cursor = self.mdb.users.all
+        cursor.insert(db_body)
+        db_body = {'_id': test_manager,
+                   'weight': 1}
+        cursor = self.mdb.users.managers
+        cursor.insert(db_body)
         self.auth_token = token
         self.test_manager = test_manager
         super(TestSCV, self).setUp()
@@ -108,8 +109,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
 
     def _activate_stream(self, target_id):
-        body = {'target_id': target_id,
-                'engine': 'test_engine'}
+        body = {'target_id': target_id, 'engine': 'test_engine'}
         headers = {'Authorization': self.scv.password}
         reply = self.fetch('/streams/activate', method='POST',
                            body=json.dumps(body), headers=headers)
@@ -410,14 +410,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
-
-        # deactivate the stream
-        self.io_loop.run_sync(functools.partial(self.scv.deactivate_stream, stream_id))
-
-        # see if fragment information has been recorded
-        result = self.mdb.stats.fragments.find_one({'stream': stream_id})
-        self.assertEqual(result['frames'], n_frames+more_frames)
-        self.assertEqual(result['stream'], stream_id)
 
     def test_core_frame_variadic(self):
         result = self._post_and_activate_stream()

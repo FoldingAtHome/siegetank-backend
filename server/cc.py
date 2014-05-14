@@ -25,10 +25,10 @@ import uuid
 import random
 import time
 import bcrypt
-import pymongo
 import io
 
 from server.common import BaseServerMixin, is_domain, configure_options
+from server.common import CommonHandler
 from server.apollo import Entity
 
 
@@ -40,166 +40,129 @@ class SCV(Entity):
               }
 
 
-class BaseHandler(tornado.web.RequestHandler):
-    def set_default_headers(self):
-        self.set_header("Access-Control-Allow-Origin", "*")
+class BaseHandler(CommonHandler):
 
     def initialize(self):
         self.fetch = self.application.fetch
 
-    def error(self, message, code=400):
-        """ Write a message to the output buffer """
-        self.set_status(code)
-        self.write({'error': message})
-
-    @property
-    def db(self):
-        return self.application.db
-
-    @property
-    def mdb(self):
-        return self.application.mdb
-
-    @property
-    def motor(self):
-        return self.application.motor
-
     @tornado.gen.coroutine
-    def get_current_user(self):
-        try:
-            header_token = self.request.headers['Authorization']
-        except KeyError:
-            return None
-        managers = self.motor.users.managers
-        query = yield managers.find_one({'token': header_token},
-                                        fields=['_id'])
-        if query:
-            return query['_id']
+    def get_target_owner(self, target_id):
+        cursor = self.motor.data.targets
+        info = yield cursor.find_one({'_id': target_id}, {'owner': 1})
+        if info:
+            return info['owner']
         else:
-            return None
-
-    # TODO: refactor to common
-    @tornado.gen.coroutine
-    def get_user_role(self):
-        try:
-            token = self.request.headers['Authorization']
-        except KeyError:
-            if self.request.remote_ip == '127.0.0.1':
-                return 'admin'
-            else:
-                return None
-        cursor = self.motor.users.managers
-        query = yield cursor.find_one({'token': token}, fields=['role'])
-        try:
-            return query['role']
-        except:
+            # the target does not exist
             return None
 
 
-class DonorAuthHandler(BaseHandler):
-    @tornado.gen.coroutine
-    def post(self):
-        """
-        .. http:post:: /managers/auth
+# class UserAuthHandler(BaseHandler):
 
-            Generate a new authorization token for the donor
+#     @tornado.gen.coroutine
+#     def post(self):
+#         """
+#         .. http:post:: /users/auth
 
-            **Example request**
+#             Generate a new authorization token for the user
 
-            .. sourcecode:: javascript
+#             **Example request**
 
-                {
-                    "username": "JesseV",
-                    "password": "some_password"
-                }
+#             .. sourcecode:: javascript
 
-            **Example reply**
+#                 {
+#                     "username": "JesseV",
+#                     "password": "some_password"
+#                 }
 
-            .. sourcecode:: javascript
+#             **Example reply**
 
-                {
-                    "token": "uuid_token"
-                }
+#             .. sourcecode:: javascript
 
-            :status 200: OK
-            :status 400: Bad request
+#                 {
+#                     "token": "uuid_token"
+#                 }
 
-        """
-        self.set_status(400)
-        content = json.loads(self.request.body.decode())
-        username = content['username']
-        password = content['password']
-        donors = self.motor.community.donors
-        query = yield donors.find_one({'_id': username},
-                                      fields=['password_hash'])
-        stored_hash = query['password_hash']
-        if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
-            new_token = str(uuid.uuid4())
-            yield donors.update({'_id': username},
-                                {'$set': {'token': new_token}})
-        else:
-            return self.status(401)
-        self.set_status(200)
-        self.write({'token': new_token})
+#             :status 200: OK
+#             :status 400: Bad request
 
-
-class DonorsHandler(BaseHandler):
-    @tornado.gen.coroutine
-    def post(self):
-        """ Add a F@H Donor
-
-        Request: {
-            "username": "jesse_v",
-            "password": "jesse's password"
-            "email": 'jv@gmail.com'
-        }
-
-        reply: {
-            "token": token;
-        }
-
-        The donor can optionally choose to use token as a commandline arg to
-        when starting the cores. This way, all work is then associated with
-        the donor.
-
-        """
-        self.set_status(400)
-        if self.request.remote_ip != '127.0.0.1':
-            return self.set_status(401)
-        content = json.loads(self.request.body.decode())
-        username = content['username']
-        password = content['password']
-        email = content['email']
-        cursor = self.motor.community.donors
-        # see if email exists:
-        query = yield cursor.find_one({'email': email})
-        if query:
-            return self.error('email exists in db!')
-        hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-        token = str(uuid.uuid4())
-        db_body = {'_id': username,
-                   'password_hash': hash_password,
-                   'token': token,
-                   'email': email}
-
-        try:
-            yield cursor.insert(db_body)
-        except:
-            return self.error(username+' exists')
-
-        self.set_status(200)
-        self.write({'token': token})
+#         """
+#         self.set_status(400)
+#         content = json.loads(self.request.body.decode())
+#         username = content['username']
+#         password = content['password']
+#         cursor = self.motor.users.all
+#         query = yield cursor.find_one({'_id': username},
+#                                       fields=['password_hash'])
+#         stored_hash = query['password_hash']
+#         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
+#             new_token = str(uuid.uuid4())
+#             yield cursor.update({'_id': username},
+#                                 {'$set': {'token': new_token}})
+#         else:
+#             return self.status(401)
+#         self.set_status(200)
+#         self.write({'token': new_token})
 
 
-class ManagerVerifyHandler(BaseHandler):
+# class UsersHandler(BaseHandler):
+
+#     @tornado.gen.coroutine
+#     def post(self):
+#         """ Add a F@H Donor
+
+#         Request: {
+#             "username": "jesse_v",
+#             "password": "jesse's password"
+#             "email": "jv@gmail.com"
+#         }
+
+#         reply: {
+#             "token": token;
+#         }
+
+#         The donor can optionally choose to use token as a commandline arg to
+#         when starting the cores. This way, all work is then associated with
+#         the donor.
+
+#         """
+#         self.set_status(400)
+#         if self.request.remote_ip != '127.0.0.1':
+#             return self.set_status(401)
+#         content = json.loads(self.request.body.decode())
+#         username = content['username']
+#         password = content['password']
+#         email = content['email']
+#         cursor = self.motor.users.all
+#         # see if email exists:
+#         query = yield cursor.find_one({'_id': email})
+#         if query:
+#             return self.error('email exists in db!')
+#         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+#         token = str(uuid.uuid4())
+#         db_body = {'_id': username,
+#                    'password_hash': hash_password,
+#                    'token': token,
+#                    'email': email}
+
+#         try:
+#             yield cursor.insert(db_body)
+#         except:
+#             return self.error(username+' exists')
+
+#         self.set_status(200)
+#         self.write({'token': token})
+
+
+class UserVerifyHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def get(self):
         """
-        .. http:post:: /managers/validate
+        .. http:post:: /users/verify
 
-            Validate an authentication token.
+            Validate an user's Authorization token.
 
-            :reqheader Authorization: access token of a manager
+            :reqheader Authorization: token
 
             :status 200: OK
             :status 400: Unauthorized
@@ -213,118 +176,8 @@ class ManagerVerifyHandler(BaseHandler):
             return self.set_status(200)
 
 
-class ManagerAuthHandler(BaseHandler):
-    @tornado.gen.coroutine
-    def post(self):
-        """
-        .. http:post:: /managers/auth
-
-            Generate a new authorization token for the manager
-
-            **Example request**
-
-            .. sourcecode:: javascript
-
-                {
-                    "email": "proteneer@gmail.com",
-                    "password": "my_password"
-                }
-
-            **Example reply**
-
-            .. sourcecode:: javascript
-
-                {
-                    "token": "uuid token"
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-
-        """
-        self.set_status(400)
-        content = json.loads(self.request.body.decode())
-        password = content['password']
-        email = content['email']
-        cursor = self.motor.users.managers
-        query = yield cursor.find_one({'_id': email}, fields=['password_hash'])
-        stored_hash = query['password_hash']
-        if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
-            new_token = str(uuid.uuid4())
-            yield cursor.update({'_id': email}, {'$set': {'token': new_token}})
-        else:
-            return self.status(401)
-        self.set_status(200)
-        self.write({'token': new_token})
-
-
-class ManagersHandler(BaseHandler):
-    @tornado.gen.coroutine
-    def post(self):
-        """
-        .. http:post:: /managers
-
-            Add a manager.
-
-            :reqheader Authorization: access token of an administrator
-
-            **Example request**
-
-            .. sourcecode:: javascript
-
-                {
-                    "email": "proteneer@gmail.com",
-                    "password": "password",
-                    "role": "admin" or "manager",
-                    "weight": 1
-                }
-
-            **Example reply**
-
-            .. sourcecode:: javascript
-
-                {
-                    "token": "token"
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
-
-        """
-        self.set_status(400)
-        if(yield self.get_user_role()) != 'admin':
-            return self.set_status(401)
-        elif self.request.remote_ip != '127.0.0.1':
-            return self.set_status(401)
-
-        content = json.loads(self.request.body.decode())
-        token = str(uuid.uuid4())
-        email = content['email']
-        password = content['password']
-        weight = content['weight']
-        role = content['role']
-        if not role in ['admin', 'manager']:
-            return self.error('bad user role')
-        hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-        db_body = {'_id': email,
-                   'password_hash': hash_password,
-                   'token': token,
-                   'role': role,
-                   'weight': weight
-                   }
-
-        cursor = self.motor.users.managers
-        try:
-            yield cursor.insert(db_body)
-        except pymongo.errors.DuplicateKeyError:
-            return self.error(email+' exists')
-
-        self.set_status(200)
-        self.write({'token': token})
-
-
 class TargetUpdateHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self, target_id):
         """
@@ -376,6 +229,11 @@ class TargetUpdateHandler(BaseHandler):
         current_user = yield self.get_current_user()
         if not current_user:
             return self.error('Bad credentials', code=401)
+        target_owner = yield self.get_target_owner(target_id)
+        if target_owner is None:
+            return self.error('Bad target_id', code=400)
+        if target_owner != current_user:
+            return self.error('User does not own this target', code=401)
         content = json.loads(self.request.body.decode())
         payload = {}
         if 'engines' in content:
@@ -398,14 +256,15 @@ class TargetUpdateHandler(BaseHandler):
             return self.error('invalid '+target_id)
 
 
-def yates_generator(x):
-    for i in range(len(x)-1, -1, -1):
-        j = random.randrange(i + 1)
-        x[i], x[j] = x[j], x[i]
-        yield x[i]
+# def yates_generator(x):
+#     for i in range(len(x)-1, -1, -1):
+#         j = random.randrange(i + 1)
+#         x[i], x[j] = x[j], x[i]
+#         yield x[i]
 
 
 class EngineKeysHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def post(self):
         """
@@ -438,7 +297,8 @@ class EngineKeysHandler(BaseHandler):
             :status 401: Unauthorized
 
         """
-        if(yield self.get_user_role()) != 'admin':
+        current_user = yield self.get_current_user()
+        if not (yield self.is_admin(current_user)):
             return self.error('Bad credentials', 401)
         content = json.loads(self.request.body.decode())
         for required_key in ['engine', 'description']:
@@ -488,7 +348,8 @@ class EngineKeysHandler(BaseHandler):
             :status 401: Unauthorized
 
         """
-        if(yield self.get_user_role()) != 'admin':
+        current_user = yield self.get_current_user()
+        if not (yield self.is_admin(current_user)):
             return self.error('Bad credentials', 401)
         self.set_status(400)
         body = dict()
@@ -504,6 +365,7 @@ class EngineKeysHandler(BaseHandler):
 
 
 class EngineKeysDeleteHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self, core_key):
         """
@@ -518,7 +380,8 @@ class EngineKeysDeleteHandler(BaseHandler):
             :status 401: Unauthorized
 
         """
-        if(yield self.get_user_role()) != 'admin':
+        current_user = yield self.get_current_user()
+        if not (yield self.is_admin(current_user)):
             return self.error('Bad credentials', 401)
         self.set_status(400)
         cursor = self.motor.engines.keys
@@ -530,6 +393,7 @@ class EngineKeysDeleteHandler(BaseHandler):
 
 
 class CoreAssignHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def post(self):
         """
@@ -539,11 +403,13 @@ class CoreAssignHandler(BaseHandler):
 
             The assignment algorithm is:
 
-            1. Each user is assigned a weight by an administrator.
+            1. Each user who is a manager is assigned a weight.
             2. The set of users who have targets that match the core's engine
                 is determined.
             3. A user is chosen based on his weight relative to other users.
             4. One of the user's targets is chosen based on the target weights
+
+            :reqheader Authorization: core's authentication key
 
             **Example request**
 
@@ -575,6 +441,7 @@ class CoreAssignHandler(BaseHandler):
         try:
             key = self.request.headers['Authorization']
         except:
+            print('BAR')
             self.write(json.dumps({'error': 'missing Authorization header'}))
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
@@ -593,14 +460,14 @@ class CoreAssignHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         if 'donor_token' in content:
             donor_token = content['donor_token']
-            donors = self.motor.community.donors
-            query = yield donors.find_one({'token': donor_token},
+            cursor = self.motor.users.all
+            query = yield cursor.find_one({'token': donor_token},
                                           fields=['_id'])
             if not query:
                 return self.error('bad donor token')
-            donor_id = query['_id']
+            user = query['_id']
         else:
-            donor_id = None
+            user = None
         core_engine = content['engine']
         cursor = self.motor.data.targets
         if 'target_id' in content:
@@ -634,6 +501,7 @@ class CoreAssignHandler(BaseHandler):
                     target_shards[document['_id']] = document['shards']
             if not target_weights:
                 return self.error('no valid targets could be found')
+            # get a list of all managers and their ids
             cursor = self.motor.users.managers
             results = cursor.find(fields={'_id': 1, 'weight': 1})
             while (yield results.fetch_next):
@@ -671,8 +539,8 @@ class CoreAssignHandler(BaseHandler):
         for scv in available_scvs:
             msg = {'target_id': target_id,
                    'engine': core_engine}
-            if donor_id:
-                msg['donor_id'] = donor_id
+            if user:
+                msg['user'] = user
             try:
                 password = SCV(scv, self.db).hget('password')
                 headers = {'Authorization': password}
@@ -694,6 +562,7 @@ class CoreAssignHandler(BaseHandler):
 
 
 class SCVStatusHandler(BaseHandler):
+
     def get(self):
         """
         .. http:put:: /scv/status
@@ -727,6 +596,7 @@ class SCVStatusHandler(BaseHandler):
 
 
 class StreamsHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def post(self):
         """
@@ -773,6 +643,7 @@ class StreamsHandler(BaseHandler):
 
 
 class TargetInfoHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def get(self, target_id):
         """
@@ -810,6 +681,7 @@ class TargetInfoHandler(BaseHandler):
 
 
 class TargetDeleteHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self, target_id):
         """
@@ -838,6 +710,7 @@ class TargetDeleteHandler(BaseHandler):
 
 
 class TargetsHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def get(self):
         """
@@ -934,6 +807,9 @@ class TargetsHandler(BaseHandler):
         current_user = yield self.get_current_user()
         if not current_user:
             return self.error('Bad credentials', code=401)
+        is_manager = yield self.is_manager(current_user)
+        if not is_manager:
+            return self.error('Not a manager', code=401)
         content = json.loads(self.request.body.decode())
         #----------------#
         # verify request #
@@ -1013,11 +889,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/engines/keys', EngineKeysHandler),
             (r'/engines/keys/delete/(.*)', EngineKeysDeleteHandler),
             (r'/core/assign', CoreAssignHandler),
-            (r'/managers/verify', ManagerVerifyHandler),
-            (r'/managers/auth', ManagerAuthHandler),
-            (r'/managers', ManagersHandler),
-            (r'/donors/auth', DonorAuthHandler),
-            (r'/donors', DonorsHandler),
+            # (r'/users/auth', UserAuthHandler),
+            (r'/users/verify', UserVerifyHandler),
             (r'/targets', TargetsHandler),
             (r'/targets/delete/(.*)', TargetDeleteHandler),
             (r'/targets/info/(.*)', TargetInfoHandler),

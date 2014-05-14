@@ -24,11 +24,13 @@ import bcrypt
 import uuid
 import random
 import pymongo
+import bcrypt
 
 import server.cc as cc
 
 
 class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
+
     def setUp(self):
         self.mongo_options = {'host': 'localhost', 'port': 27017}
         self.mdb = pymongo.MongoClient('localhost', 27017)
@@ -51,26 +53,28 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.cc.initialize_motor()
         return self.cc
 
-    def _add_manager(self, email='test@gm.com', role='manager', auth=None):
-        password = str(uuid.uuid4())
-        body = {
-            'email': email,
-            'password': password,
-            'role': role,
-            'weight': 1
-        }
-        if auth is not None:
-            headers = {'Authorization': auth}
-        else:
-            headers = None
-        reply = self.fetch('/managers', method='POST', body=json.dumps(body),
-                           headers=headers)
-        self.assertEqual(reply.code, 200)
-        token = json.loads(reply.body.decode())['token']
-        body['token'] = token
-        return body
+    def _add_user(self, user='proteneer', manager=False, admin=False):
+        token = str(uuid.uuid4())
+        password = 'riesling'
+        email = 'gibberish@gmail.com'
+        db_body = {'_id': user,
+                   'password': password,
+                   'email': email,
+                   'token': token}
+        self.mdb.users.all.insert(db_body)
+        result = db_body
+        result['user'] = user
+        if manager:
+            weight = 1
+            db_body = {'_id': user, 'weight': weight}
+            self.mdb.users.managers.insert(db_body)
+            result['weight'] = weight
+        if admin:
+            db_body = {'_id': user}
+            self.mdb.users.admins.insert(db_body)
+        return result
 
-    def _post_target(self, auth):
+    def _post_target(self, auth, expected_code=200):
         headers = {'Authorization': auth}
         options = {
             'description': "Diwakar and John's top secret project",
@@ -82,10 +86,12 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
             }
         reply = self.fetch('/targets', method='POST', headers=headers,
                            body=json.dumps(body))
-        self.assertEqual(reply.code, 200)
+        self.assertEqual(reply.code, expected_code)
+        if expected_code != 200:
+            return
         target_id = json.loads(reply.body.decode())['target_id']
         reply = self.fetch('/targets/info/'+target_id)
-        self.assertEqual(reply.code, 200)
+        self.assertEqual(reply.code, expected_code)
         content = json.loads(reply.body.decode())
         self.assertTrue(float(content['creation_date'])-time.time() < 2)
         self.assertEqual(content['stage'], 'private')
@@ -116,129 +122,155 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         if expected_code == 200:
             return json.loads(reply.body.decode())
 
-    def test_add_donor(self):
-        username = 'jesse_v'
-        email = 'jv@jv.com'
-        password = 'test_pw'
-        body = {
-            'username': username,
-            'email': email,
-            'password': password
-        }
-        rep = self.fetch('/donors', method='POST', body=json.dumps(body))
-        self.assertEqual(rep.code, 200)
-        query = self.mdb.community.donors.find_one({'_id': username})
-        stored_hash = query['password_hash']
-        stored_token = query['token']
-        self.assertEqual(stored_hash,
-                         bcrypt.hashpw(password.encode(), stored_hash))
-        reply_token = json.loads(rep.body.decode())['token']
-        self.assertEqual(stored_token, reply_token)
+    # def test_user_auth(self):
+    #     result = self._add_user()
+    #     username = result['username']
+    #     password = result['password']
+    #     for i in range(10):
+    #         print(i)
+    #         body = {'username': username, 'password': password}
+    #         rep = self.fetch('/users/auth', method='POST',
+    #                          body=json.dumps(body))
+    #         self.assertEqual(rep.code, 200)
+    #         reply_token = json.loads(rep.body.decode())['token']
+    #         query = self.mdb.users.all.find_one({'_id': username})
+    #         stored_token = query['token']
+    #         self.assertEqual(reply_token, stored_token)
 
-        # test auth
-        for i in range(10):
-            print(i)
-            body = {
-                'username': username,
-                'password': password
-            }
-            rep = self.fetch('/donors/auth', method='POST',
-                             body=json.dumps(body))
-            self.assertEqual(rep.code, 200)
-            reply_token = json.loads(rep.body.decode())['token']
-            query = self.mdb.community.donors.find_one({'_id': username})
-            stored_token = query['token']
-            self.assertEqual(reply_token, stored_token)
-
-        # make sure duplicate email throws error
-        body = {
-            'username': 'joe_bob',
-            'email': email,
-            'password': password
-        }
-        rep = self.fetch('/donors', method='POST', body=json.dumps(body))
-        self.assertEqual(rep.code, 400)
-
-        # make sure duplicate username throws error
-        body = {
-            'username': username,
-            'email': 'test_email',
-            'password': 'test_pw'
-        }
-        rep = self.fetch('/donors', method='POST', body=json.dumps(body))
-        self.assertEqual(rep.code, 400)
-
-    def test_add_manager(self):
-        result = self._add_manager()
-        email = result['email']
-        password = result['password']
+    def test_user_verify(self):
+        result = self._add_user()
         token = result['token']
-        query = self.mdb.users.managers.find_one({'_id': email})
-        stored_hash = query['password_hash']
-        stored_token = query['token']
-        stored_role = query['role']
-        self.assertEqual(stored_hash,
-                         bcrypt.hashpw(password.encode(), stored_hash))
-        self.assertEqual(stored_token, token)
-        self.assertEqual(stored_role, 'manager')
-
-        # test auth
-        for i in range(5):
-            body = {
-                'email': email,
-                'password': password
-            }
-            rep = self.fetch('/managers/auth', method='POST',
-                             body=json.dumps(body))
-            self.assertEqual(rep.code, 200)
-            reply_token = json.loads(rep.body.decode())['token']
-            query = self.mdb.users.managers.find_one({'_id': email})
-            stored_token = query['token']
-            self.assertEqual(reply_token, stored_token)
-
-        body = {
-            'email': 'admin@gmail.com',
-            'password': 'some_pass',
-            'role': 'admin',
-            'weight': 1,
-        }
-
-        reply = self.fetch('/managers', method='POST', body=json.dumps(body))
-        self.assertEqual(reply.code, 200)
-        reply_token = json.loads(reply.body.decode())['token']
-        headers = {'Authorization': reply_token}
-        body = {
-            'email': 'test_user@gmail.com',
-            'password': 'some_pass',
-            'role': 'manager',
-            'weight': 1
-        }
-        reply = self.fetch('/managers', method='POST', body=json.dumps(body),
-                           headers=headers)
-        reply_token = json.loads(reply.body.decode())['token']
-        headers = {'Authorization': reply_token}
+        headers = {'Authorization': token}
+        reply = self.fetch('/users/verify', headers=headers)
         self.assertEqual(reply.code, 200)
 
-        # Try posting as a manager
-        body = {
-            'email': 'test_user2@gmail.com',
-            'password': 'some_pass2',
-            'role': 'manager',
-            'weight': 1
-        }
-        reply = self.fetch('/managers', method='POST', body=json.dumps(body),
-                           headers=headers)
-        self.assertEqual(reply.code, 401)
+    # def test_add_donor(self):
+    #     username = 'jesse_v'
+    #     email = 'jv@jv.com'
+    #     password = 'test_pw'
+    #     body = {
+    #         'username': username,
+    #         'email': email,
+    #         'password': password
+    #     }
+    #     rep = self.fetch('/donors', method='POST', body=json.dumps(body))
+    #     self.assertEqual(rep.code, 200)
+    #     query = self.mdb.community.donors.find_one({'_id': username})
+    #     stored_hash = query['password_hash']
+    #     stored_token = query['token']
+    #     self.assertEqual(stored_hash,
+    #                      bcrypt.hashpw(password.encode(), stored_hash))
+    #     reply_token = json.loads(rep.body.decode())['token']
+    #     self.assertEqual(stored_token, reply_token)
+
+    #     # test auth
+    #     for i in range(10):
+    #         print(i)
+    #         body = {
+    #             'username': username,
+    #             'password': password
+    #         }
+    #         rep = self.fetch('/donors/auth', method='POST',
+    #                          body=json.dumps(body))
+    #         self.assertEqual(rep.code, 200)
+    #         reply_token = json.loads(rep.body.decode())['token']
+    #         query = self.mdb.community.donors.find_one({'_id': username})
+    #         stored_token = query['token']
+    #         self.assertEqual(reply_token, stored_token)
+
+    #     # make sure duplicate email throws error
+    #     body = {
+    #         'username': 'joe_bob',
+    #         'email': email,
+    #         'password': password
+    #     }
+    #     rep = self.fetch('/donors', method='POST', body=json.dumps(body))
+    #     self.assertEqual(rep.code, 400)
+
+    #     # make sure duplicate username throws error
+    #     body = {
+    #         'username': username,
+    #         'email': 'test_email',
+    #         'password': 'test_pw'
+    #     }
+    #     rep = self.fetch('/donors', method='POST', body=json.dumps(body))
+    #     self.assertEqual(rep.code, 400)
+
+    # def test_add_manager(self):
+    #     result = self._add_manager()
+    #     email = result['email']
+    #     password = result['password']
+    #     token = result['token']
+    #     query = self.mdb.users.managers.find_one({'_id': email})
+    #     stored_hash = query['password_hash']
+    #     stored_token = query['token']
+    #     stored_role = query['role']
+    #     self.assertEqual(stored_hash,
+    #                      bcrypt.hashpw(password.encode(), stored_hash))
+    #     self.assertEqual(stored_token, token)
+    #     self.assertEqual(stored_role, 'manager')
+
+    #     # test auth
+    #     for i in range(5):
+    #         body = {
+    #             'email': email,
+    #             'password': password
+    #         }
+    #         rep = self.fetch('/managers/auth', method='POST',
+    #                          body=json.dumps(body))
+    #         self.assertEqual(rep.code, 200)
+    #         reply_token = json.loads(rep.body.decode())['token']
+    #         query = self.mdb.users.managers.find_one({'_id': email})
+    #         stored_token = query['token']
+    #         self.assertEqual(reply_token, stored_token)
+
+    #     body = {
+    #         'email': 'admin@gmail.com',
+    #         'password': 'some_pass',
+    #         'role': 'admin',
+    #         'weight': 1,
+    #     }
+
+    #     reply = self.fetch('/managers', method='POST', body=json.dumps(body))
+    #     self.assertEqual(reply.code, 200)
+    #     reply_token = json.loads(reply.body.decode())['token']
+    #     headers = {'Authorization': reply_token}
+    #     body = {
+    #         'email': 'test_user@gmail.com',
+    #         'password': 'some_pass',
+    #         'role': 'manager',
+    #         'weight': 1
+    #     }
+    #     reply = self.fetch('/managers', method='POST', body=json.dumps(body),
+    #                        headers=headers)
+    #     reply_token = json.loads(reply.body.decode())['token']
+    #     headers = {'Authorization': reply_token}
+    #     self.assertEqual(reply.code, 200)
+
+    #     # Try posting as a manager
+    #     body = {
+    #         'email': 'test_user2@gmail.com',
+    #         'password': 'some_pass2',
+    #         'role': 'manager',
+    #         'weight': 1
+    #     }
+    #     reply = self.fetch('/managers', method='POST', body=json.dumps(body),
+    #                        headers=headers)
+    #     self.assertEqual(reply.code, 401)
 
     def test_post_target(self):
-        result = self._add_manager()
-        email = result['email']
+        result = self._add_user(user='joebob', manager=True)
+        user = result['user']
         auth = result['token']
         result = self._post_target(auth)
-        self.assertEqual(result['owner'], email)
+        self.assertEqual(result['owner'], user)
+        # make sure normal user can't post targets
+        result = self._add_user(user='bobjoe', manager=False)
+        auth = result['token']
+        result = self._post_target(auth, expected_code=401)
 
-    def test_get_targets_handler(self):
-        result = self._add_manager(email="joe@gmail.com")
+    def test_get_targets(self):
+        result = self._add_user(user="joe", manager=True)
         headers = {'Authorization': result['token']}
         result = self._post_target(result['token'])
         target_id = result['target_id']
@@ -247,7 +279,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         targets = json.loads(response.body.decode())['targets']
         self.assertEqual([target_id], targets)
-        result = self._add_manager(email="bob@gmail.com")
+        result = self._add_user(user="bob", manager=True)
         token2 = result['token']
         headers = {'Authorization': token2}
         # fetch using another manager's auth
@@ -275,9 +307,9 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual([target_id2], targets)
 
     def test_update_targets(self):
-        result = self._add_manager()
+        result = self._add_user(manager=True)
         auth = result['token']
-        email = result['email']
+        user = result['user']
         headers = {'Authorization': auth}
         result = self._post_target(auth)
         target_id = result['target_id']
@@ -294,7 +326,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         reply = self.fetch('/targets/info/'+target_id)
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
-        self.assertEqual(content['owner'], email)
+        self.assertEqual(content['owner'], user)
         self.assertEqual(content['stage'], 'public')
         self.assertEqual(content['engines'], new_engines)
         self.assertEqual(content['options'], options)
@@ -311,11 +343,20 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         reply = self.fetch('/targets/update/bad_id', method='PUT',
                            headers=headers, body=json.dumps(body))
         self.assertEqual(reply.code, 400)
+        # update using another managers token
+        result = self._add_user(user='baduser', manager=True)
+        auth = result['token']
+        headers = {'Authorization': auth}
+        reply = self.fetch('/targets/update/'+target_id, method='PUT',
+                           headers=headers, body=json.dumps(body))
+        self.assertEqual(reply.code, 401)
 
     def test_core_keys(self):
-        bad_token = self._add_manager()['token']
+        bad_token = self._add_user()['token']
         self._add_core_key(bad_token, 401)
-        result = self._add_manager(email='test2@gm.com', role='admin')
+        bad_token = self._add_user(user='bad_user2', manager=True)['token']
+        self._add_core_key(bad_token, 401)
+        result = self._add_user(user='good_user', admin=True)
         good_token = result['token']
         keys = []
         content = self._add_core_key(good_token)
