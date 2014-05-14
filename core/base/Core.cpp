@@ -149,6 +149,7 @@ static string parse_error(string body) {
 void Core::assign(const string &cc_uri,
                   const string &donor_token,
                   const string &target_id) {
+    cout << "assignStart" << endl;
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(getHost(cc_uri))) {
         verify_mode = Poco::Net::Context::VERIFY_RELAXED;
@@ -163,57 +164,53 @@ void Core::assign(const string &cc_uri,
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
                                              context);
-    try {
-        cout << "assigning core to a stream..." << flush;
-        Poco::Net::HTTPRequest request("POST", "/core/assign");
-        string body;
-        body += "{";
-        if(donor_token.length() > 0)
-            body += "\"donor_token\": \""+donor_token+"\",";
-        if(target_id.length() > 0)
-            body += "\"target_id\": \""+target_id+"\",";
-        body += "\"engine\": \""+engine_+"\"}";
-        request.set("Authorization", core_key_);
-        request.setContentLength(body.length());
-        cc_session.sendRequest(request) << body;
-        Poco::Net::HTTPResponse response;
-        istream &content_stream = cc_session.receiveResponse(response);
-        if(response.getStatus() != 200) {
-            /*
-            cout << "BAD STATUS CODE" << response.getStatus() << endl;
-            string reason = parse_error(content_stream.rdbuf());
-            stringstream error;
-            error << "Could not get an assignment from CC, reason: ";
-            error << reason << endl;
-            */
-            cout << response.getStatus() << endl;
-            throw std::runtime_error("Bad assignment");
-        }
-        picojson::value json_value;
-        content_stream >> json_value;
-        string err = picojson::get_last_error();
-        if(!err.empty())
-            throw(std::runtime_error("assign() picojson error"+err));
-        if(!json_value.is<picojson::object>())
-            throw(std::runtime_error("no JSON object could be read"+err));
-        picojson::value::object &json_object = json_value.get<picojson::object>();
-        string ws_url(json_object["url"].get<string>());
-        Poco::URI poco_url(ws_url);
-        core_token_ = json_object["token"].get<string>();
-        session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
-            poco_url.getPort(), context);
-    } catch(Poco::Net::SSLException &e) {
-        cout << e.displayText() << endl;
-        throw;
+    cout << "assigning core to a stream..." << flush;
+    Poco::Net::HTTPRequest request("POST", "/core/assign");
+    string body;
+    body += "{";
+    if(donor_token.length() > 0)
+        body += "\"donor_token\": \""+donor_token+"\",";
+    if(target_id.length() > 0)
+        body += "\"target_id\": \""+target_id+"\",";
+    body += "\"engine\": \""+engine_+"\"}";
+    request.set("Authorization", core_key_);
+    request.setContentLength(body.length());
+    cc_session.sendRequest(request) << body;
+    Poco::Net::HTTPResponse response;
+    istream &content_stream = cc_session.receiveResponse(response);
+    if(response.getStatus() != 200) {
+        /*
+        cout << "BAD STATUS CODE" << response.getStatus() << endl;
+        string reason = parse_error(content_stream.rdbuf());
+        stringstream error;
+        error << "Could not get an assignment from CC, reason: ";
+        error << reason << endl;
+        */
+        cout << response.getStatus() << endl;
+        throw std::runtime_error("Bad assignment");
     }
+    picojson::value json_value;
+    content_stream >> json_value;
+    string err = picojson::get_last_error();
+    if(!err.empty())
+        throw(std::runtime_error("assign() picojson error"+err));
+    if(!json_value.is<picojson::object>())
+        throw(std::runtime_error("no JSON object could be read"+err));
+    picojson::value::object &json_object = json_value.get<picojson::object>();
+    string ws_url(json_object["url"].get<string>());
+    Poco::URI poco_url(ws_url);
+    core_token_ = json_object["token"].get<string>();
+    session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
+        poco_url.getPort(), context);
 }
 
 void Core::startStream(const string &cc_uri,
                        const string &donor_token,
                        const string &target_id) {
+    cout << "b-startStream" << endl;
     if(session_ != NULL) {
         delete session_;
-    } 
+    }
     assign(cc_uri, donor_token, target_id);
     cout << "Preparing to start stream..." << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");

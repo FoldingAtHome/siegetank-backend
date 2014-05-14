@@ -89,7 +89,7 @@ int main(int argc, const char * argv[]) {
     );
 
     opt.add(
-        "127.0.0.1:8980", // Default.
+        "cc.proteneer.com", // Default.
         0, // Required?
         1, // Number of args expected.
         0, // Delimiter if expecting multiple args.
@@ -198,11 +198,26 @@ int main(int argc, const char * argv[]) {
         properties["OpenCLDeviceIndex"] = did;
     }
 #endif
+
     string cc_uri;
     opt.get("--cc")->getString(cc_uri);
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
-    cc_uri = "cc.proteneer.com";
+    string donor_token;
+    if(opt.isSet("--donor_token")) {
+        opt.get("--donor_token")->getString(donor_token);
+        if(donor_token.length() != 36) {
+            throw std::runtime_error("donor_token must be 36 characters");
+        }
+    }
+    string target_id;
+    if(opt.isSet("--target_id")) {
+        opt.get("--target_id")->getString(target_id);
+        if(target_id.length() != 36) {
+            throw std::runtime_error("target_id must be 36 characters");
+        }
+    }
+
     double delay_in_sec = 1;
     ExitSignal::init();
     const string engine = "openmm";
@@ -211,20 +226,6 @@ int main(int argc, const char * argv[]) {
         try {
             sleep(delay_in_sec);
             delay_in_sec = delay_in_sec * 2;
-            string donor_token;
-            if(opt.isSet("--donor_token")) {
-                opt.get("--donor_token")->getString(donor_token);
-                if(donor_token.length() != 36) {
-                    throw std::runtime_error("donor_token must be 36 characters");
-                }
-            }
-            string target_id;
-            if(opt.isSet("--target_id")) {
-                opt.get("--target_id")->getString(target_id);
-                if(target_id.length() != 36) {
-                    throw std::runtime_error("target_id must be 36 characters");
-                }
-            }
             core.startStream(cc_uri, donor_token, target_id);
             delay_in_sec = 1;
             core.main();

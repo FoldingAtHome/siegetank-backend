@@ -74,9 +74,7 @@ OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> prope
 }
 
 OpenMMCore::~OpenMMCore() {
-    delete ref_context_;
-    delete core_context_;
-    delete shared_system_;
+    cleanUp();
     // renable proper keyboard input
     changemode(0);
 }
@@ -214,6 +212,7 @@ static void status_header(ostream &out) {
 void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
                              const string &target_id) {
+    cout << "d-startStream" << endl;
     start_time_ = time(NULL);
     Core::startStream(cc_uri, donor_token, target_id);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
@@ -263,6 +262,7 @@ void OpenMMCore::startStream(const string &cc_uri,
 
 
 void OpenMMCore::cleanUp() {
+    cout << "cleaning up" << endl;
     delete ref_context_;
     ref_context_ = NULL;
     delete core_context_;
@@ -276,6 +276,7 @@ void OpenMMCore::cleanUp() {
 }
 
 void OpenMMCore::stopStream(string error_msg) {
+    cout << "stopping stream" << endl;
     flushCheckpoint();
     Core::stopStream(error_msg);
     cleanUp();
@@ -291,16 +292,13 @@ void OpenMMCore::flushCheckpoint() {
 }
 
 void OpenMMCore::checkState(const OpenMM::State &core_state) const {
-
     ref_context_->setState(core_state);
     OpenMM::State reference_state = ref_context_->getState(
         OpenMM::State::Energy | 
         OpenMM::State::Forces);
-
     StateTests::checkForNans(core_state);
     StateTests::checkForDiscrepancies(core_state);
     StateTests::compareForcesAndEnergies(reference_state, core_state);
-
 }
 
 void OpenMMCore::checkFrameWrite(int current_step) {
@@ -362,6 +360,7 @@ float OpenMMCore::nsPerDay(long long steps_completed) const {
 }
 
 void OpenMMCore::main() {
+    cout << "main" << endl;
     try {
         long long current_step = 0;
         changemode(1);

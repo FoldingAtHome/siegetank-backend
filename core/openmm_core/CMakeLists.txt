@@ -11,12 +11,12 @@ list(REMOVE_ITEM OpenMMCoreSources main.cpp)
 
 set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
-set(CORE_VERSION 3)
+set(CORE_VERSION 4)
 add_definitions(-DCORE_VERSION=${CORE_VERSION})
 
 enable_testing()
 
-set(CORE_NAME ocore_${CORE_TYPE})
+set(CORE_NAME ocore_${CORE_TYPE}_v${CORE_VERSION})
 add_executable(${CORE_NAME} main.cpp)
 
 if(CORE_TYPE STREQUAL "CPU")
