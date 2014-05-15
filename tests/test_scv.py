@@ -28,6 +28,7 @@ import hashlib
 import pymongo
 
 from os.path import isfile
+import tests.utils
 
 
 class TestSCV(tornado.testing.AsyncHTTPTestCase):
@@ -44,17 +45,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
     def setUp(self):
         self.mongo_options = {'host': 'localhost', 'port': 27017}
         self.mdb = pymongo.MongoClient('localhost', 27017)
-        token = str(uuid.uuid4())
-        test_manager = 'foo_bar'
-        db_body = {'_id': test_manager,
-                   'email': 'test_ws@gmail.com',
-                   'token': token}
-        self.mdb.users.all.insert(db_body)
-        db_body = {'_id': test_manager,
-                   'weight': 1}
-        self.mdb.users.managers.insert(db_body)
-        self.auth_token = token
-        self.test_manager = test_manager
+        result = tests.utils.add_user(manager=True, admin=True)
+        self.auth_token = result['token']
+        self.test_manager = result['user']
         super(TestSCV, self).setUp()
 
     def tearDown(self):

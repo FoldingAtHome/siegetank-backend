@@ -27,6 +27,7 @@ import uuid
 
 import siegetank.base
 import requests
+import tests.utils
 
 
 class TestSiegeTank(unittest.TestCase):
@@ -47,20 +48,8 @@ class TestSiegeTank(unittest.TestCase):
         cc_uri = '127.0.0.1:8980'
         time.sleep(2)
 
-        self.mdb = pymongo.MongoClient()
-        token = str(uuid.uuid4())
-        test_manager = 'foo_bar'
-        db_body = {'_id': test_manager,
-                   'email': 'test_ws@gmail.com',
-                   'token': token}
-        self.mdb.users.all.insert(db_body)
-        db_body = {'_id': test_manager,
-                   'weight': 1}
-        self.mdb.users.managers.insert(db_body)
-
-        print(token)
-
-        siegetank.login(cc_uri, token)
+        result = tests.utils.add_user(manager=True)
+        siegetank.login(cc_uri, result['token'])
 
     def tearDown(self):
         try:
@@ -74,10 +63,11 @@ class TestSiegeTank(unittest.TestCase):
             print(e)
             pass
         time.sleep(1)
+        mdb = pymongo.MongoClient()
         for data_folder in glob.glob('*_data'):
             shutil.rmtree(data_folder)
-        for db_name in self.mdb.database_names():
-            self.mdb.drop_database(db_name)
+        for db_name in mdb.database_names():
+            mdb.drop_database(db_name)
 
     def test_add_target(self):
         options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}

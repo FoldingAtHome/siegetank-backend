@@ -27,6 +27,7 @@ import pymongo
 import bcrypt
 
 import server.cc as cc
+import tests.utils
 
 
 class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
@@ -53,26 +54,28 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.cc.initialize_motor()
         return self.cc
 
-    def _add_user(self, user='proteneer', manager=False, admin=False):
-        token = str(uuid.uuid4())
-        password = 'riesling'
-        email = 'gibberish@gmail.com'
-        db_body = {'_id': user,
-                   'password': password,
-                   'email': email,
-                   'token': token}
-        self.mdb.users.all.insert(db_body)
-        result = db_body
-        result['user'] = user
-        if manager:
-            weight = 1
-            db_body = {'_id': user, 'weight': weight}
-            self.mdb.users.managers.insert(db_body)
-            result['weight'] = weight
-        if admin:
-            db_body = {'_id': user}
-            self.mdb.users.admins.insert(db_body)
-        return result
+    def _add_user(self, *args, **kwargs):
+        return tests.utils.add_user(*args, **kwargs)
+
+    #     token = str(uuid.uuid4())
+    #     password = 'riesling'
+    #     email = 'gibberish@gmail.com'
+    #     db_body = {'_id': user,
+    #                'password': password,
+    #                'email': email,
+    #                'token': token}
+    #     self.mdb.users.all.insert(db_body)
+    #     result = db_body
+    #     result['user'] = user
+    #     if manager:
+    #         weight = 1
+    #         db_body = {'_id': user, 'weight': weight}
+    #         self.mdb.users.managers.insert(db_body)
+    #         result['weight'] = weight
+    #     if admin:
+    #         db_body = {'_id': user}
+    #         self.mdb.users.admins.insert(db_body)
+    #     return result
 
     def _post_target(self, auth, expected_code=200):
         headers = {'Authorization': auth}

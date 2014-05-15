@@ -34,6 +34,7 @@ import server.common as common
 import sys
 import base64
 import json
+import tests.utils
 
 
 class TestSimple(tornado.testing.AsyncTestCase):
@@ -98,19 +99,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
         for key in self.scvs:
             tornado.ioloop.IOLoop.instance().run_sync(key['app']._register)
         tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
-        token = str(uuid.uuid4())
-        test_manager = 'foo_bar'
-        db_body = {'_id': test_manager,
-                   'email': 'test_ws@gmail.com',
-                   'token': token}
-        self.mdb.users.all.insert(db_body)
-        db_body = {'_id': test_manager,
-                   'weight': 1}
-        self.mdb.users.managers.insert(db_body)
-        db_body = {'_id': test_manager}
-        self.mdb.users.admins.insert(db_body)
-        self.auth_token = token
-        self.manager = test_manager
+        result = tests.utils.add_user(manager=True, admin=True)
+        self.auth_token = result['token']
+        self.manager = result['user']
 
     def tearDown(self):
         super(TestSimple, self).tearDown()
@@ -129,24 +120,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
         kwargs['validate_cert'] = common.is_domain(host)
         self.client.fetch(uri, self.stop, **kwargs)
         return self.wait()
-
-    def _add_user(self):
-        username = 'jesse_v'
-        email = 'jv@jv.com'
-        password = 'test_pw'
-        token = str(uuid.uuid4())
-        body = {
-            '_id': username,
-            'email': email,
-            'password': password,
-            'token': token
-        }
-        self
-        reply = self.fetch(self.cc_host, '/donors', method='POST',
-                           body=json.dumps(body))
-        self.assertEqual(reply.code, 200)
-        body['token'] = json.loads(reply.body.decode())['token']
-        return body
 
     def _post_target(self, host, stage='public', weight=1):
         headers = {'Authorization': self.auth_token}
