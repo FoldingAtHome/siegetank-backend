@@ -49,12 +49,10 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         db_body = {'_id': test_manager,
                    'email': 'test_ws@gmail.com',
                    'token': token}
-        cursor = self.mdb.users.all
-        cursor.insert(db_body)
+        self.mdb.users.all.insert(db_body)
         db_body = {'_id': test_manager,
                    'weight': 1}
-        cursor = self.mdb.users.managers
-        cursor.insert(db_body)
+        self.mdb.users.managers.insert(db_body)
         self.auth_token = token
         self.test_manager = test_manager
         super(TestSCV, self).setUp()

@@ -27,12 +27,12 @@ last_scvs_refresh = 0
 
 
 def login(cc, token):
-    """ Login to a particular command center using the generated token. """
-    url = 'https://'+cc+'/managers/verify'
+    """ Login to a particular command center using your token. """
+    url = 'https://'+cc+'/users/verify'
     headers = {'Authorization': token}
     reply = requests.get(url, verify=is_domain(cc), headers=headers)
     if reply.status_code != 200:
-        raise ValueError("Bad token")
+        print(reply.content)
     global auth_token
     auth_token = token
     global login_cc
@@ -40,19 +40,19 @@ def login(cc, token):
     refresh_scvs()
 
 
-def generate_token(cc, email, password):
-    """ Generate a new login token and login automatically. """
-    data = {
-        "email": email,
-        "password": password
-    }
-    uri = 'https://'+cc+'/managers/auth'
-    reply = requests.post(uri, data=json.dumps(data), verify=is_domain(cc))
-    if reply.status_code != 200:
-        raise ValueError('Bad login credentials.')
-    token = json.loads(reply.text)['token']
-    login(cc, token)
-    return token
+# def generate_token(cc, email, password):
+#     """ Generate a new login token and login automatically. """
+#     data = {
+#         "email": email,
+#         "password": password
+#     }
+#     uri = 'https://'+cc+'/managers/auth'
+#     reply = requests.post(uri, data=json.dumps(data), verify=is_domain(cc))
+#     if reply.status_code != 200:
+#         raise ValueError('Bad login credentials.')
+#     token = json.loads(reply.text)['token']
+#     login(cc, token)
+#     return token
 
 
 def require_login(method):

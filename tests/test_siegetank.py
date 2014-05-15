@@ -23,17 +23,19 @@ import shutil
 import glob
 import random
 import pymongo
+import uuid
 
 import siegetank.base
 import requests
 
 
 class TestSiegeTank(unittest.TestCase):
+
     def setUp(self):
         cc_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                '..', 'cc')
         scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               '..', 'scv')
+                                '..', 'scv')
 
         self.pid2 = subprocess.Popen(scv_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
@@ -45,15 +47,19 @@ class TestSiegeTank(unittest.TestCase):
         cc_uri = '127.0.0.1:8980'
         time.sleep(2)
 
-        # try adding a user
-        requests.post('https://127.0.0.1:8980/managers',
-                      data=json.dumps({'email': 'test_user@gmail.com',
-                                       'password': 'test_pass',
-                                       'role': 'manager',
-                                       'weight': 1}),
-                      verify=False)
-        token = siegetank.generate_token(cc_uri, 'test_user@gmail.com',
-                                         'test_pass')
+        self.mdb = pymongo.MongoClient()
+        token = str(uuid.uuid4())
+        test_manager = 'foo_bar'
+        db_body = {'_id': test_manager,
+                   'email': 'test_ws@gmail.com',
+                   'token': token}
+        self.mdb.users.all.insert(db_body)
+        db_body = {'_id': test_manager,
+                   'weight': 1}
+        self.mdb.users.managers.insert(db_body)
+
+        print(token)
+
         siegetank.login(cc_uri, token)
 
     def tearDown(self):
@@ -70,11 +76,8 @@ class TestSiegeTank(unittest.TestCase):
         time.sleep(1)
         for data_folder in glob.glob('*_data'):
             shutil.rmtree(data_folder)
-        pass
-
-        mdb = pymongo.MongoClient()
-        for db_name in mdb.database_names():
-            mdb.drop_database(db_name)
+        for db_name in self.mdb.database_names():
+            self.mdb.drop_database(db_name)
 
     def test_add_target(self):
         options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}
