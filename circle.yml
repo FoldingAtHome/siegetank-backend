@@ -36,7 +36,7 @@ dependencies:
 test:
   post:
     - ./tests/start_services
-    - cd core/build; make test; 
+    - cd core/build; make test; cat Testing/Temporary/LastTest.log
     - ./tests/stop_services
 
 deployment:

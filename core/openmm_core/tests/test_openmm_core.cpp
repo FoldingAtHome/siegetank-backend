@@ -11,6 +11,7 @@ using namespace std;
 void test_openmm_core() {
     ifstream core_keys("../../../../core_keys.log");
     string key; core_keys >> key;
+    cout << " ?? " << __FILE__ << endl;
     OpenMMCore core("openmm", key);
     core.startStream("127.0.0.1:8980", "", "");
 }
