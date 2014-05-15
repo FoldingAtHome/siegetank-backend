@@ -24,7 +24,7 @@ dependencies:
     - cmake --version
     - if [[ ! -e poco-1.5.2-all ]]; then wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz && tar xvf poco-1.5.2-all.tar.gz; fi
     - cd poco-1.5.2-all && ./configure --no-samples --no-tests --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC && make -j4 && make install;
-    - if [[ ! -e ../openmm_install ]]; then wget http://www.stanford.edu/~yutongz/openmm_install.tar.gz; cd ../; tar xvf ../backend/openmm_install.tar.gz; fi
+    - if [[ ! -e ../openmm_install ]]; then wget http://www.stanford.edu/~yutongz/openmm_install.tar.gz; tar -xvf openmm_install.tar.gz -C ../; fi
     - wget http://www.stanford.edu/~yutongz/fftw_install.tar.gz
     - cd ../; tar xvf backend/fftw_install.tar.gz
     - cd core && mkdir build && cd build && cmake ../ -DPOCO_ROOT="/home/ubuntu/fftw_install" -DPOCO_ROOT=/home/ubuntu/poco152_install -DOPENMM_ROOT=/home/ubuntu/openmm_install -DCMAKE_BUILD_TYPE=Release -DOPENCL_ROOT=/opt/intel/opencl-1.2-3.2.1.16712/ && make
