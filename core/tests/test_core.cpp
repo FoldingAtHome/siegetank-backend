@@ -50,7 +50,7 @@ string gen_random(const int len) {
 }
 
 void testStartStream(string donor_token="", string target_id="") { 
-    ifstream core_keys("../core_keys.log");
+    ifstream core_keys("../../../core_keys.log");
     string key;
     core_keys >> key;
     if(key.length() == 0) {
