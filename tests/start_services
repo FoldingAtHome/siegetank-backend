@@ -11,15 +11,7 @@ import gzip
 import pymongo
 import sys
 
-
-def add_manager():
-    reply = requests.post('https://127.0.0.1:8980/managers',
-                          data=json.dumps({'email': 'test_user@gmail.com',
-                                           'password': 'test_pass',
-                                           'role': 'admin',
-                                           'weight': 1}),
-                          verify=False)
-    assert reply.status_code == 200
+import utils
 
 
 def add_engine_token(manager_token):
@@ -31,24 +23,6 @@ def add_engine_token(manager_token):
                           verify=False)
     assert reply.status_code == 200
     return reply.json()['key']
-
-
-def add_donor():
-    reply = requests.post('https://127.0.0.1:8980/donors',
-                          data=json.dumps({'username': 'test_donor',
-                                           'email': 'test_donor@gmail.com',
-                                           'password': 'test_donor_pass'}),
-                          verify=False)
-    assert reply.status_code == 200
-    return reply.json()['token']
-
-
-def auth_manager():
-    reply = requests.post('https://127.0.0.1:8980/managers/auth',
-                          data=json.dumps({'email': 'test_user@gmail.com',
-                                           'password': 'test_pass'}),
-                          verify=False)
-    return json.loads(reply.content.decode())['token']
 
 
 def post_target(auth_token, stage='private'):
@@ -90,11 +64,11 @@ if __name__ == '__main__':
                                  'stop_services')
         os.system(stop_path)
     cc_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                           '..', '..', 'cc')
+                           '..', 'cc')
     log = open('pids.log', 'w')
     if '--noscv' not in sys.argv:
         scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                '..', '..', 'scv')
+                                '..', 'scv')
         pid2 = subprocess.Popen(scv_path, stdout=subprocess.PIPE, shell=True,
                                 preexec_fn=lambda: os.setpgid(0, 0))
         time.sleep(1)
@@ -105,8 +79,8 @@ if __name__ == '__main__':
     time.sleep(1)
     log.write(str(pid1.pid))
     log.close()
-    add_manager()
-    token = auth_manager()
+    result = utils.add_user(manager=True, admin=True)
+    token = result['token']
     core_key = add_engine_token(token)
     # post a public target
     target_id = post_target(token, stage='public')
@@ -129,7 +103,6 @@ if __name__ == '__main__':
 
     target_id = post_target(token)
     post_streams(target_id, files, token)
-    donor_token = add_donor()
 
     # post a private target
     with open('target_ids.log', 'w') as log:
@@ -137,4 +110,4 @@ if __name__ == '__main__':
     with open('core_keys.log', 'w') as log:
         log.write(str(core_key))
     with open('donor_tokens.log', 'w') as log:
-        log.write(str(donor_token))
+        log.write(str(token))
