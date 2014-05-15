@@ -504,6 +504,7 @@ class StreamDeleteHandler(BaseHandler):
 
 
 class CoreStartHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def get(self):
         """
@@ -730,7 +731,7 @@ class CoreCheckpointHandler(BaseHandler):
         # atomic transaction.
 
         # When streams are started, checkpoint_files U initial_files are
-        # combined, with filenames in checkpoint_files taking precedence. 
+        # combined, with filenames in checkpoint_files taking precedence.
 
         # When a stream deactivates, buffer_files folder is completedly blown
         # away. Note that when the server starts, all streams are deactivated.
@@ -871,6 +872,7 @@ class ActiveStreamsHandler(BaseHandler):
 
 
 class StreamFilesHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def get(self, stream_id):
         """
@@ -909,6 +911,7 @@ class StreamFilesHandler(BaseHandler):
 
 
 class StreamUploadHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def put(self, stream_id, filename):
         """
@@ -961,6 +964,7 @@ class StreamUploadHandler(BaseHandler):
 
 
 class StreamDownloadHandler(BaseHandler):
+
     @tornado.gen.coroutine
     def get(self, stream_id, filename):
         """
@@ -1041,6 +1045,7 @@ class CoreHeartbeatHandler(BaseHandler):
 
 
 class SCV(BaseServerMixin, tornado.web.Application):
+
     def _get_command_centers(self):
         """ Return a dict of Command Center names and hosts """
 

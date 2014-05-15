@@ -767,18 +767,20 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         n_streams = 100
         for i in range(n_streams-1):
             stream_ids.append(self._post_stream(target_id)['stream_id'])
-
-        for i in range(5):
+        target = scv.Target(target_id, self.scv.db)
+        total_streams = target.smembers('streams')
+        for i in range(2):
             activation_times = []
             action_times = []
             # activate all the streams randomly
             for stream_id in stream_ids:
                 activation_times.append(random.uniform(0, 5))
-                action_times.append(random.uniform(0, 7))
+                action_times.append(random.uniform(0, 10))
 
             action_times = sorted(action_times)
             activation_times = sorted(activation_times)
             tokens = []
+            start_time = time.time()
             for index, unused in enumerate(activation_times):
                 if index == 0:
                     sleep_time = activation_times[index]
@@ -795,22 +797,22 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                 time.sleep(sleep_time)
                 headers = {'Authorization': tokens[index]}
                 if bool(random.getrandbits(1)):
-                    print('/core/stop')
                     response = self.fetch('/core/stop', method='PUT',
                                           headers=headers, body='{}')
                 else:
-                    print('/core/heartbeat')
                     response = self.fetch('/core/heartbeat', method='POST',
                                           headers=headers, body='')
-                self.assertEqual(response.code, 200)
+                #self.assertEqual(response.code, 200)
                 self.io_loop.run_sync(self.scv.check_heartbeats)
-           
-             # queue U active_streams should equal to total streams
-            target = scv.Target(target_id, self.scv.db)
-            total_streams = target.smembers('streams')
-            target_queue = set(target.zrange('queue', 0, -1))
-            active_streams = scv.ActiveStream.members(self.scv.db)
-            self.assertEqual(target_queue.union(active_streams), total_streams)
+                target_queue = set(target.zrange('queue', 0, -1))
+                active_streams = scv.ActiveStream.members(self.scv.db)
+                self.assertEqual(target_queue.union(active_streams),
+                                 total_streams)
+
+            # queue U active_streams should equal to total streams
+            # target_queue = set(target.zrange('queue', 0, -1))
+            # active_streams = scv.ActiveStream.members(self.scv.db)
+            # self.assertEqual(target_queue.union(active_streams), total_streams)
             time.sleep(20)
 
             self.io_loop.run_sync(self.scv.check_heartbeats)

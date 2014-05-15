@@ -441,7 +441,6 @@ class CoreAssignHandler(BaseHandler):
         try:
             key = self.request.headers['Authorization']
         except:
-            print('BAR')
             self.write(json.dumps({'error': 'missing Authorization header'}))
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
@@ -852,7 +851,6 @@ class TargetsHandler(BaseHandler):
         yield cursor.insert(payload)
         self.set_status(200)
         response = {'target_id': target_id}
-
         return self.write(response)
 
 

@@ -18,15 +18,12 @@ import os
 import signal
 import time
 import base64
-import json
 import shutil
 import glob
 import random
 import pymongo
-import uuid
 
 import siegetank.base
-import requests
 import tests.utils
 
 
