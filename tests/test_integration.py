@@ -27,6 +27,7 @@ import uuid
 import urllib
 import itertools
 import pymongo
+import random
 
 import server.scv as scv
 import server.cc as cc
@@ -147,16 +148,17 @@ class TestSimple(tornado.testing.AsyncTestCase):
                            headers=headers, body='')
         self.assertEqual(reply.code, 200)
 
-    def _post_stream(self, host, target_id):
+    def _post_stream(self, target_id):
         headers = {'Authorization': self.auth_token}
         rand_bin = base64.b64encode(os.urandom(1024)).decode()
         body = json.dumps({
             'target_id': target_id,
             'files': {"state.xml.gz.b64": rand_bin}
         })
+        # pick a random scv
+        host = random.choice(self.scvs)['host']
         reply = self.fetch(host, '/streams', method='POST', body=body,
                            headers=headers)
-        print(reply.body)
         self.assertEqual(reply.code, 200)
         return json.loads(reply.body.decode())
 
@@ -232,7 +234,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def test_post_stream(self):
         target_id = self._post_target(self.cc_host)['target_id']
-        self._post_stream(self.cc_host, target_id)
+        self._post_stream(target_id)
         info = self._get_target_info(self.cc_host, target_id)
         self.assertTrue(info['shards'][0] in
                         [k['app'].name for k in self.scvs])
@@ -240,7 +242,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def test_assign(self):
         target_id = self._post_target(self.cc_host)['target_id']
         for i in range(10):
-            self._post_stream(self.cc_host, target_id)
+            self._post_stream(target_id)
         content = self._assign(self.cc_host)
         token, url = content['token'], content['url']
         self._core_start(url, token)
@@ -251,7 +253,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         content = self._post_target(self.cc_host)
         target_id = content['target_id']
         options = content['options']
-        self._post_stream(self.cc_host, target_id)
+        self._post_stream(target_id)
         content = self._assign(self.cc_host, target_id)
         content = self._core_start(content['url'], content['token'])
         self.assertEqual(content['options'], options)
@@ -260,7 +262,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def test_assign_private(self):
         content = self._post_target(self.cc_host, stage='private')
         target_id = content['target_id']
-        self._post_stream(self.cc_host, target_id)
+        self._post_stream(target_id)
         self._assign(self.cc_host, expected_code=400)
         content = self._assign(self.cc_host, target_id)
 
@@ -272,7 +274,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         #content = self._add_user()
         token = self.auth_token
         target_id = self._post_target(self.cc_host)['target_id']
-        self._post_stream(self.cc_host, target_id)
+        self._post_stream(target_id)
         self._assign(self.cc_host, donor_token=token)
         self._assign(self.cc_host, donor_token='garbage', expected_code=400)
 
@@ -282,7 +284,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         control = [1, 6, 12]
         for w in control:
             target_id = self._post_target(self.cc_host, weight=w)['target_id']
-            self._post_stream(self.cc_host, target_id)
+            self._post_stream(target_id)
             weights[target_id] = w
             counters[target_id] = 0
         for i in range(100):
@@ -304,7 +306,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         target_id = self._post_target(self.cc_host)['target_id']
         stream_ids = set()
         for i in range(k*len(self.scvs)):
-            content = self._post_stream(self.cc_host, target_id)
+            content = self._post_stream(target_id)
             stream_ids.add(content['stream_id'])
         info = self._get_target_info(self.cc_host, target_id)
         self.assertEqual(set(info['shards']),
@@ -314,7 +316,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def test_target_delete(self):
         target_id = self._post_target(self.cc_host)['target_id']
-        stream_id = self._post_stream(self.cc_host, target_id)['stream_id']
+        stream_id = self._post_stream(target_id)['stream_id']
         headers = {'Authorization': self.auth_token}
         reply = self.fetch(self.cc_host, '/targets/delete/'+target_id,
                            method='PUT', headers=headers, body='')

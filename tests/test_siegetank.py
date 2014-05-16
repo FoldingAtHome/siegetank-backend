@@ -92,10 +92,9 @@ class TestSiegeTank(unittest.TestCase):
                  'integrator.xml.gz.b64': encoded_intg,
                  'state.xml.gz.b64': encoded_state}
         siegetank.base.refresh_scvs()
-        for i in range(20):
-            target.add_stream(files)
         random_scv = random.choice(list(siegetank.base.scvs.keys()))
-        target.add_stream(files, random_scv)
+        for i in range(20):
+            target.add_stream(files, random_scv)
         stream = random.sample(target.streams, 1)[0]
         self.assertEqual(stream.status, 'OK')
         self.assertEqual(stream.frames, 0)

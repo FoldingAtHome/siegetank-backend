@@ -134,7 +134,6 @@ class CommonHandler(tornado.web.RequestHandler):
             return False
         cursor = self.motor.users.managers
         query = yield cursor.find_one({'_id': user})
-        print('DEBUG', query)
         if query:
             return True
         else:

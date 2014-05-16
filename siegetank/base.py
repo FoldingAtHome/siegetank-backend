@@ -12,6 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from __future__ import print_function, absolute_import, division
+
 import requests
 import json
 import base64
@@ -38,22 +40,6 @@ def login(cc, token):
     global login_cc
     login_cc = cc
     refresh_scvs()
-
-
-# def generate_token(cc, email, password):
-#     """ Generate a new login token and login automatically. """
-#     data = {
-#         "email": email,
-#         "password": password
-#     }
-#     uri = 'https://'+cc+'/managers/auth'
-#     reply = requests.post(uri, data=json.dumps(data), verify=is_domain(cc))
-#     if reply.status_code != 200:
-#         raise ValueError('Bad login credentials.')
-#     token = json.loads(reply.text)['token']
-#     login(cc, token)
-#     return token
-
 
 def require_login(method):
     """ Decorator for methods that require logging in. """
@@ -174,8 +160,7 @@ class Stream(Base):
     def download(self, filename):
         """ Download a file from the stream.
 
-        :param filename: ``filename`` can be produced by the core,
-            or it can be a file you initialized passed in.
+        :param filename: name of the file. eg. '2/frames.xtc'.
 
         """
         reply = self._get('/streams/download/'+self.id+'/'+filename)
@@ -183,7 +168,7 @@ class Stream(Base):
 
     def upload(self, filename, filedata):
         """ Upload a file on the stream. The stream must be in the STOPPED
-        state and the file must exist already.
+        state and the file must already exist.
 
         :param filename: name of the file, eg. state.xml.gz.b64
         :param filedata: binary data (do not b64 encode).
@@ -217,7 +202,7 @@ class Stream(Base):
 
     @property
     def active(self):
-        """ Returns True if the stream is activated by a core. """
+        """ Returns True if the stream is worked on by a core. """
         if not self._active:
             self.reload_info()
         return self._active
@@ -301,13 +286,12 @@ class Target(Base):
             raise Exception('could not update target. Reason:'+reply.content)
         self.reload_info()
 
-    def add_stream(self, files, scv=None):
-        """ Add a stream to the target.
+    def add_stream(self, files, scv):
+        """ Add a stream to the target belonging to a particular scv.
 
         :param files: dict, filenames and binaries matching the core's
             requirements.
-        :param scv: str, which particular SCV you want to add the stream to.
-            If None, then the cc will pick a random SCV for you.
+        :param scv: str, which particular SCV to add the stream to.
 
         """
         assert isinstance(files, dict)

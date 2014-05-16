@@ -52,105 +52,7 @@ class BaseHandler(CommonHandler):
         if info:
             return info['owner']
         else:
-            # the target does not exist
             return None
-
-
-# class UserAuthHandler(BaseHandler):
-
-#     @tornado.gen.coroutine
-#     def post(self):
-#         """
-#         .. http:post:: /users/auth
-
-#             Generate a new authorization token for the user
-
-#             **Example request**
-
-#             .. sourcecode:: javascript
-
-#                 {
-#                     "username": "JesseV",
-#                     "password": "some_password"
-#                 }
-
-#             **Example reply**
-
-#             .. sourcecode:: javascript
-
-#                 {
-#                     "token": "uuid_token"
-#                 }
-
-#             :status 200: OK
-#             :status 400: Bad request
-
-#         """
-#         self.set_status(400)
-#         content = json.loads(self.request.body.decode())
-#         username = content['username']
-#         password = content['password']
-#         cursor = self.motor.users.all
-#         query = yield cursor.find_one({'_id': username},
-#                                       fields=['password_hash'])
-#         stored_hash = query['password_hash']
-#         if stored_hash == bcrypt.hashpw(password.encode(), stored_hash):
-#             new_token = str(uuid.uuid4())
-#             yield cursor.update({'_id': username},
-#                                 {'$set': {'token': new_token}})
-#         else:
-#             return self.status(401)
-#         self.set_status(200)
-#         self.write({'token': new_token})
-
-
-# class UsersHandler(BaseHandler):
-
-#     @tornado.gen.coroutine
-#     def post(self):
-#         """ Add a F@H Donor
-
-#         Request: {
-#             "username": "jesse_v",
-#             "password": "jesse's password"
-#             "email": "jv@gmail.com"
-#         }
-
-#         reply: {
-#             "token": token;
-#         }
-
-#         The donor can optionally choose to use token as a commandline arg to
-#         when starting the cores. This way, all work is then associated with
-#         the donor.
-
-#         """
-#         self.set_status(400)
-#         if self.request.remote_ip != '127.0.0.1':
-#             return self.set_status(401)
-#         content = json.loads(self.request.body.decode())
-#         username = content['username']
-#         password = content['password']
-#         email = content['email']
-#         cursor = self.motor.users.all
-#         # see if email exists:
-#         query = yield cursor.find_one({'_id': email})
-#         if query:
-#             return self.error('email exists in db!')
-#         hash_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-#         token = str(uuid.uuid4())
-#         db_body = {'_id': username,
-#                    'password_hash': hash_password,
-#                    'token': token,
-#                    'email': email}
-
-#         try:
-#             yield cursor.insert(db_body)
-#         except:
-#             return self.error(username+' exists')
-
-#         self.set_status(200)
-#         self.write({'token': token})
 
 
 class UserVerifyHandler(BaseHandler):
@@ -254,142 +156,6 @@ class TargetUpdateHandler(BaseHandler):
             self.set_status(200)
         else:
             return self.error('invalid '+target_id)
-
-
-# def yates_generator(x):
-#     for i in range(len(x)-1, -1, -1):
-#         j = random.randrange(i + 1)
-#         x[i], x[j] = x[j], x[i]
-#         yield x[i]
-
-
-class EngineKeysHandler(BaseHandler):
-
-    @tornado.gen.coroutine
-    def post(self):
-        """
-        .. http:post:: /engines/keys
-
-            Add a new core key for the specified engine. The corresponding core
-            must identify itself using the token.
-
-            :reqheader Authorization: access token of an administrator
-
-            **Example request**
-
-            .. sourcecode:: javascript
-
-                {
-                    "engine": "openmm_60_opencl", // required
-                    "description": "some string", // required
-                }
-
-            **Example reply**
-
-            .. sourcecode:: javascript
-
-                {
-                    "key": "uuid4"
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
-
-        """
-        current_user = yield self.get_current_user()
-        if not (yield self.is_admin(current_user)):
-            return self.error('Bad credentials', 401)
-        content = json.loads(self.request.body.decode())
-        for required_key in ['engine', 'description']:
-            if required_key not in content:
-                return self.error('missing: '+required_key)
-        stored_id = str(uuid.uuid4())
-        content['_id'] = stored_id
-        content['creation_date'] = time.time()
-        cursor = self.motor.engines.keys
-        yield cursor.insert(content)
-        self.set_status(200)
-        self.write({'key': stored_id})
-
-    @tornado.gen.coroutine
-    def get(self):
-        """
-        .. http:get:: /engines/keys
-
-            Retrieve a list of core keys for all the engines.
-
-            :reqheader Authorization: access token of an administrator
-
-            **Example reply**
-
-            .. sourcecode:: javascript
-
-                {
-                    "core_key_1": {
-                        "engine": "openmm_55_opencl",
-                        "description": "all platforms",
-                        "creation_date": 874389297.4,
-                    },
-                    "core_key_1": {
-                        "engine": "openmm_60_opencl",
-                        "description": "all platforms",
-                        "creation_date": 874389291.4,
-                    },
-                    "core_key_2": {
-                        "engine": "openmm_60_cuda",
-                        "description": "all platforms",
-                        "creation_date": 538929304.4,
-                    },
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
-
-        """
-        current_user = yield self.get_current_user()
-        if not (yield self.is_admin(current_user)):
-            return self.error('Bad credentials', 401)
-        self.set_status(400)
-        body = dict()
-        cursor = self.motor.engines.keys
-        results = cursor.find()
-        while(yield results.fetch_next):
-            document = results.next_object()
-            core_key = document['_id']
-            document.pop('_id')
-            body[core_key] = document
-        self.set_status(200)
-        self.write(body)
-
-
-class EngineKeysDeleteHandler(BaseHandler):
-
-    @tornado.gen.coroutine
-    def put(self, core_key):
-        """
-        .. http:put:: /engines/keys/delete/:key_id
-
-            Delete a specific core key ``key_id``.
-
-            :reqheader Authorization: access token of an administrator
-
-            :status 200: OK
-            :status 400: Bad request
-            :status 401: Unauthorized
-
-        """
-        current_user = yield self.get_current_user()
-        if not (yield self.is_admin(current_user)):
-            return self.error('Bad credentials', 401)
-        self.set_status(400)
-        cursor = self.motor.engines.keys
-        result = yield cursor.remove({'_id': core_key})
-        if result['n'] > 0:
-            self.set_status(200)
-        else:
-            return self.error('engine key not found')
 
 
 class CoreAssignHandler(BaseHandler):
@@ -592,53 +358,6 @@ class SCVStatusHandler(BaseHandler):
                 body[scv_name]['online'] = False
         self.set_status(200)
         return self.write(body)
-
-
-class StreamsHandler(BaseHandler):
-
-    @tornado.gen.coroutine
-    def post(self):
-        """
-        .. http:post:: /streams
-
-            Add a new stream to an existing target.
-
-            :reqheader Authorization: Manager's authorization token
-
-            **Example request**
-
-            .. sourcecode:: javascript
-
-                {
-                    "target_id": "target_id",
-                    "files": {"file1_name": "file1_bin_b64",
-                              "file2_name": "file2_bin_b64",
-                              }
-                }
-
-            **Example reply**
-
-            .. sourcecode:: javascript
-
-                {
-                    "stream_id": "stream uuid4"
-                }
-
-            :status 200: OK
-            :status 400: Bad request
-
-        """
-        self.set_status(400)
-         # randomly pick from available scvs
-        if SCV.members(self.db):
-            picked_scv = random.sample(SCV.members(self.db), 1)[0]
-            reply = yield self.fetch(picked_scv, '/streams', method='POST',
-                                     body=self.request.body,
-                                     headers=self.request.headers)
-            self.set_status(reply.code)
-            self.write(reply.body)
-        else:
-            self.error('no scvs available')
 
 
 class TargetInfoHandler(BaseHandler):
@@ -854,6 +573,135 @@ class TargetsHandler(BaseHandler):
         return self.write(response)
 
 
+class EngineKeysHandler(BaseHandler):
+
+    @tornado.gen.coroutine
+    def post(self):
+        """
+        .. http:post:: /engines/keys
+
+            Add a new core key for the specified engine. The corresponding core
+            must identify itself using the token.
+
+            :reqheader Authorization: access token of an administrator
+
+            **Example request**
+
+            .. sourcecode:: javascript
+
+                {
+                    "engine": "openmm_60_opencl", // required
+                    "description": "some string", // required
+                }
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "key": "uuid4"
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        current_user = yield self.get_current_user()
+        if not (yield self.is_admin(current_user)):
+            return self.error('Bad credentials', 401)
+        content = json.loads(self.request.body.decode())
+        for required_key in ['engine', 'description']:
+            if required_key not in content:
+                return self.error('missing: '+required_key)
+        stored_id = str(uuid.uuid4())
+        content['_id'] = stored_id
+        content['creation_date'] = time.time()
+        cursor = self.motor.engines.keys
+        yield cursor.insert(content)
+        self.set_status(200)
+        self.write({'key': stored_id})
+
+    @tornado.gen.coroutine
+    def get(self):
+        """
+        .. http:get:: /engines/keys
+
+            Retrieve a list of core keys for all the engines.
+
+            :reqheader Authorization: access token of an administrator
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    "core_key_1": {
+                        "engine": "openmm_55_opencl",
+                        "description": "all platforms",
+                        "creation_date": 874389297.4,
+                    },
+                    "core_key_1": {
+                        "engine": "openmm_60_opencl",
+                        "description": "all platforms",
+                        "creation_date": 874389291.4,
+                    },
+                    "core_key_2": {
+                        "engine": "openmm_60_cuda",
+                        "description": "all platforms",
+                        "creation_date": 538929304.4,
+                    },
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        current_user = yield self.get_current_user()
+        if not (yield self.is_admin(current_user)):
+            return self.error('Bad credentials', 401)
+        self.set_status(400)
+        body = dict()
+        cursor = self.motor.engines.keys
+        results = cursor.find()
+        while(yield results.fetch_next):
+            document = results.next_object()
+            core_key = document['_id']
+            document.pop('_id')
+            body[core_key] = document
+        self.set_status(200)
+        self.write(body)
+
+
+class EngineKeysDeleteHandler(BaseHandler):
+
+    @tornado.gen.coroutine
+    def put(self, core_key):
+        """
+        .. http:put:: /engines/keys/delete/:key_id
+
+            Delete a specific core key ``key_id``.
+
+            :reqheader Authorization: access token of an administrator
+
+            :status 200: OK
+            :status 400: Bad request
+            :status 401: Unauthorized
+
+        """
+        current_user = yield self.get_current_user()
+        if not (yield self.is_admin(current_user)):
+            return self.error('Bad credentials', 401)
+        self.set_status(400)
+        cursor = self.motor.engines.keys
+        result = yield cursor.remove({'_id': core_key})
+        if result['n'] > 0:
+            self.set_status(200)
+        else:
+            return self.error('engine key not found')
+
+
 class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     _max_ws_fails = 10
@@ -887,14 +735,12 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/engines/keys', EngineKeysHandler),
             (r'/engines/keys/delete/(.*)', EngineKeysDeleteHandler),
             (r'/core/assign', CoreAssignHandler),
-            # (r'/users/auth', UserAuthHandler),
             (r'/users/verify', UserVerifyHandler),
             (r'/targets', TargetsHandler),
             (r'/targets/delete/(.*)', TargetDeleteHandler),
             (r'/targets/info/(.*)', TargetInfoHandler),
             (r'/targets/update/(.*)', TargetUpdateHandler),
             (r'/scvs/status', SCVStatusHandler),
-            (r'/streams', StreamsHandler),
             ])
 
     @tornado.gen.coroutine
