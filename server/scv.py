@@ -563,7 +563,7 @@ class CoreStartHandler(BaseHandler):
         assert stream.hget('status') == 'OK'
         reply = dict()
         reply['files'] = dict()
-        initial_files_dir = os.path.join(self.application.streams_folder,
+        seed_files_dir = os.path.join(self.application.streams_folder,
                                          stream_id, 'files')
         frames = stream.hget('frames')
         if frames > 0:
@@ -574,8 +574,8 @@ class CoreStartHandler(BaseHandler):
                 file_path = os.path.join(checkpoint_files, filename)
                 with open(file_path, 'r') as handle:
                     reply['files'][filename] = handle.read()
-        for filename in os.listdir(initial_files_dir):
-            file_path = os.path.join(initial_files_dir, filename)
+        for filename in os.listdir(seed_files_dir):
+            file_path = os.path.join(seed_files_dir, filename)
             with open(file_path, 'r') as handle:
                 if filename not in reply['files']:
                     reply['files'][filename] = handle.read()
@@ -732,7 +732,7 @@ class CoreCheckpointHandler(BaseHandler):
         # to the frame count. This also marks the successful completion of an
         # atomic transaction.
 
-        # When streams are started, checkpoint_files U initial_files are
+        # When streams are started, checkpoint_files U seed_files are
         # combined, with filenames in checkpoint_files taking precedence.
 
         # When a stream deactivates, buffer_files folder is completedly blown
@@ -898,7 +898,7 @@ class StreamSyncHandler(BaseHandler):
                     'partitions': [5, 12, 38],
                     'frame_files': ['frames.xtc', 'log.txt'],
                     'checkpoint_files': ['state.xml.gz.b64'],
-                    'initial_files': ['state.xml.gz.b64',
+                    'seed_files': ['state.xml.gz.b64',
                                       'system.xml.gz.b64',
                                       'integrator.xml.gz.b64']
                 }
@@ -924,10 +924,10 @@ class StreamSyncHandler(BaseHandler):
             except:
                 pass
         partitions = sorted(partitions)
-        initial_files = os.listdir(os.path.join(stream_dir, 'files'))
+        seed_files = os.listdir(os.path.join(stream_dir, 'files'))
         reply = {
             'partitions': partitions,
-            'initial_files': initial_files,
+            'seed_files': seed_files,
         }
         if len(partitions) > 0:
             frame_dir = os.path.join(stream_dir, str(partitions[0]))

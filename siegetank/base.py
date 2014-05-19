@@ -165,35 +165,60 @@ class Stream(Base):
 
         """
         reply = self._get('/streams/download/'+self.id+'/'+filename)
+        if reply.status_code != 200:
+            print(reply.text)
+            raise Exception('Bad status code')
         return reply.content
 
-    def sync(self, folder, seed_files=False):
+    def sync(self, folder, sync_seeds=False):
+        """ Sync the data for a given stream. This method performs an
+        incremental update and should be ran periodically. This method does not
+        fully check for rsync status. 
+
+        :param folder: str, the directory to sync the streams's data to.
+        :param sync_seeds: str, whether or not to sync the initial files.
+
         """
-        :param folder: the directory to sync data to.
-        :param initial_files: whether to sync the initial files or not. These
-            are the files used to start the stream.
-        """
+        # this method could be made more general later on without hardcoding in
+        # all the folder names.
+        def missing(required_list, have_list):
+            """ Order matters. """
+            return list(set(required_list)-set(have_list))
+
         reply = self._get('/streams/sync/'+self.id)
         content = json.loads(reply.text)
-        # check for missing partitions
-        frame_files = content['frame_files']
-        checkpoint_files = content['checkpoint_files']
-        if seed_files:
-            initial_files = content['initial_files']
+
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+        if sync_seeds:
+            required_files = content['seed_files']
+            seed_dir = os.path.join(folder, 'files')
+            if not os.path.exists(seed_dir):
+                os.makedirs(seed_dir)
+            existing_files = os.listdir(seed_dir)
+            for filename in missing(required_files, existing_files):
+                filedata = self.download(os.path.join('files', filename))
+                filepath = os.path.join(seed_dir, filename)
+                open(filepath, 'wb').write(filedata)
 
         # find missing partitions
-        missing = list(set(content['partitions'])-set(os.listdir(folder)))
-        for partition in missing:
-            for filename in frame_files:
-                filepath = os.path.join(str(partition), filename)
-                filedata = self.download(filepath)
+        for partition in missing(content['partitions'], os.listdir(folder)):
+            p_dir = os.path.join(folder, str(partition))
+            if not os.path.exists(p_dir):
+                os.makedirs(p_dir)
+            for frame_n in missing(content['frame_files'], os.listdir(p_dir)):
+                filedata = self.download(os.path.join(str(partition), frame_n))
+                filepath = os.path.join(p_dir, frame_n)
                 open(filepath, 'wb').write(filedata)
-            for filename in checkpoint_files:
-                filepath = os.path.join(str(partition), 'checkpoint_files',
-                                        filename)
-                filedata = self.download(filepath)
+            c_dir = os.path.join(p_dir, str('checkpoint_files'))
+            if not os.path.exists(c_dir):
+                os.makedirs(c_dir)
+            for check_n in missing(content['checkpoint_files'], os.listdir(c_dir)):
+                filedata = self.download(os.path.join(str(partition),
+                                         'checkpoint_files', check_n))
+                filepath = os.path.join(c_dir, check_n)
                 open(filepath, 'wb').write(filedata)
-        return reply.content
 
     def upload(self, filename, filedata):
         """ Upload a file on the stream. The stream must be in the STOPPED
