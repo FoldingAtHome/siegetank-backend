@@ -186,6 +186,9 @@ class Stream(Base):
             return list(set(required_list)-set(have_list))
 
         reply = self._get('/streams/sync/'+self.id)
+        if reply.status_code != 200:
+            print(reply.text)
+            raise Exception('Bad status code')
         content = json.loads(reply.text)
 
         if not os.path.exists(folder):
