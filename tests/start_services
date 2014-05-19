@@ -46,11 +46,12 @@ def post_target(auth_token, stage='private'):
 def post_streams(target_id, files, auth_token):
     message = json.dumps({'target_id': target_id,
                           'files': files})
-    reply = requests.post('https://127.0.0.1:8980/streams',
+    reply = requests.post('https://127.0.0.1:8960/streams',
                           headers={'Authorization': auth_token},
                           verify=False,
                           data=message
                           )
+    print(reply.text)
     assert reply.status_code == 200
     return json.loads(reply.content.decode())['stream_id']
 
@@ -84,9 +85,9 @@ if __name__ == '__main__':
     core_key = add_engine_token(token)
     # post a public target
     target_id = post_target(token, stage='public')
-    state_url = 'http://www.stanford.edu/~yutongz/state.xml.gz'
-    system_url = 'http://www.stanford.edu/~yutongz/system.xml.gz'
-    integrator_url = 'http://www.stanford.edu/~yutongz/integrator.xml.gz'
+    state_url = 'http://web.stanford.edu/~yutongz/state.xml.gz'
+    system_url = 'http://web.stanford.edu/~yutongz/system.xml.gz'
+    integrator_url = 'http://web.stanford.edu/~yutongz/integrator.xml.gz'
     state_gz = requests.get(state_url).content
     system_gz = requests.get(system_url).content
     integrator_gz = requests.get(integrator_url).content

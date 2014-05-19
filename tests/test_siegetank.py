@@ -27,35 +27,6 @@ import pymongo
 import siegetank.base
 import tests.utils
 
-def are_dir_trees_equal(dir1, dir2):
-    """
-    Compare two directories recursively. Files in each directory are
-    assumed to be equal if their names and contents are equal.
-
-    @param dir1: First directory path
-    @param dir2: Second directory path
-
-    @return: True if the directory trees are the same and 
-        there were no errors while accessing the directories or files, 
-        False otherwise.
-   """
-
-    dirs_cmp = filecmp.dircmp(dir1, dir2)
-    if len(dirs_cmp.left_only)>0 or len(dirs_cmp.right_only)>0 or \
-        len(dirs_cmp.funny_files)>0:
-        return False
-    (_, mismatch, errors) =  filecmp.cmpfiles(
-        dir1, dir2, dirs_cmp.common_files, shallow=False)
-    if len(mismatch)>0 or len(errors)>0:
-        return False
-    for common_dir in dirs_cmp.common_dirs:
-        new_dir1 = os.path.join(dir1, common_dir)
-        new_dir2 = os.path.join(dir2, common_dir)
-        if not are_dir_trees_equal(new_dir1, new_dir2):
-            return False
-    return True
-
-
 class TestSiegeTank(unittest.TestCase):
 
     def setUp(self):
@@ -121,6 +92,35 @@ class TestSiegeTank(unittest.TestCase):
             stream_dir = os.path.join('sync_data', stream_id)
             os.remove(os.path.join(stream_dir, 'files', filename))
 
+
+        def are_dir_trees_equal(dir1, dir2):
+            """
+            Compare two directories recursively. Files in each directory are
+            assumed to be equal if their names and contents are equal.
+
+            @param dir1: First directory path
+            @param dir2: Second directory path
+
+            @return: True if the directory trees are the same and 
+                there were no errors while accessing the directories or files, 
+                False otherwise.
+           """
+
+            dirs_cmp = filecmp.dircmp(dir1, dir2)
+            if len(dirs_cmp.left_only)>0 or len(dirs_cmp.right_only)>0 or \
+                len(dirs_cmp.funny_files)>0:
+                return False
+            (_, mismatch, errors) =  filecmp.cmpfiles(
+                dir1, dir2, dirs_cmp.common_files, shallow=False)
+            if len(mismatch)>0 or len(errors)>0:
+                return False
+            for common_dir in dirs_cmp.common_dirs:
+                new_dir1 = os.path.join(dir1, common_dir)
+                new_dir2 = os.path.join(dir2, common_dir)
+                if not are_dir_trees_equal(new_dir1, new_dir2):
+                    return False
+            return True
+
         weight = 5
         options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}
         engines = ['openmm_60_opencl', 'openmm_60_cuda']
@@ -141,10 +141,12 @@ class TestSiegeTank(unittest.TestCase):
             target.add_stream(files, random_scv)
         target.add_stream(files, random_scv)
         stream = random.sample(target.streams, 1)[0]
-        add_partition(stream.id, [4, 9, 34, 493])
-        # test stream sync
         sync_dir = os.path.join('sync_data',stream.id)
         stream_dir = os.path.join('firebat_data', 'streams', stream.id)
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        add_partition(stream.id, [4, 9, 34, 493])
+        # test stream sync
         stream.sync(sync_dir, sync_seeds=True)
         self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
         add_partition(stream.id, [589, 2098, 29038])
