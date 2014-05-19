@@ -16,7 +16,7 @@ from __future__ import print_function, absolute_import, division
 
 import requests
 import json
-import base64
+import os
 import hashlib
 import functools
 import time
@@ -40,6 +40,7 @@ def login(cc, token):
     global login_cc
     login_cc = cc
     refresh_scvs()
+
 
 def require_login(method):
     """ Decorator for methods that require logging in. """
@@ -166,12 +167,32 @@ class Stream(Base):
         reply = self._get('/streams/download/'+self.id+'/'+filename)
         return reply.content
 
-    def sync(self, folder):
+    def sync(self, folder, seed_files=False):
         """
         :param folder: the directory to sync data to.
+        :param initial_files: whether to sync the initial files or not. These
+            are the files used to start the stream.
         """
         reply = self._get('/streams/sync/'+self.id)
-        print('syncing...')
+        content = json.loads(reply.text)
+        # check for missing partitions
+        frame_files = content['frame_files']
+        checkpoint_files = content['checkpoint_files']
+        if seed_files:
+            initial_files = content['initial_files']
+
+        # find missing partitions
+        missing = list(set(content['partitions'])-set(os.listdir(folder)))
+        for partition in missing:
+            for filename in frame_files:
+                filepath = os.path.join(str(partition), filename)
+                filedata = self.download(filepath)
+                open(filepath, 'wb').write(filedata)
+            for filename in checkpoint_files:
+                filepath = os.path.join(str(partition), 'checkpoint_files',
+                                        filename)
+                filedata = self.download(filepath)
+                open(filepath, 'wb').write(filedata)
         return reply.content
 
     def upload(self, filename, filedata):

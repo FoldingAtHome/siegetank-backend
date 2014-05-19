@@ -884,8 +884,7 @@ class StreamSyncHandler(BaseHandler):
             manner. This method does not invoke os.walk() or anything that
             requires invoking stat on a large number of files.
 
-            Retrieve a list of partitions for this particular stream. For
-            example, if the partition returns the list [5, 12, 38], then the
+            If the partition is comprised of the list [5, 12, 38], then the
             stream is divided into the partition (0, 5](5, 12](12, 38], where
             (a,b] denote the open and closed ends.
 
@@ -903,6 +902,9 @@ class StreamSyncHandler(BaseHandler):
                                       'system.xml.gz.b64',
                                       'integrator.xml.gz.b64']
                 }
+
+            .. note:: If 'partitions' is not an empty list, then 'frame_files'
+                and 'checkpoint_files' are present.
 
         """
         self.set_status(400)
@@ -922,18 +924,19 @@ class StreamSyncHandler(BaseHandler):
             except:
                 pass
         partitions = sorted(partitions)
-        frame_dir = os.path.join(stream_dir, str(partitions[0]))
-        frame_files = os.listdir(frame_dir)
-        chkpt_name = 'checkpoint_files'
-        frame_files.remove(chkpt_name)
-        chkpt_files = os.listdir(os.path.join(frame_dir, chkpt_name))
         initial_files = os.listdir(os.path.join(stream_dir, 'files'))
         reply = {
             'partitions': partitions,
-            'frame_files': frame_files,
-            'checkpoint_files': chkpt_files,
             'initial_files': initial_files,
         }
+        if len(partitions) > 0:
+            frame_dir = os.path.join(stream_dir, str(partitions[0]))
+            frame_files = os.listdir(frame_dir)
+            chkpt_name = 'checkpoint_files'
+            frame_files.remove(chkpt_name)
+            chkpt_files = os.listdir(os.path.join(frame_dir, chkpt_name))
+            reply['frame_files'] = frame_files
+            reply['checkpoint_files'] = chkpt_files
         self.set_status(200)
         self.write(reply)
 
