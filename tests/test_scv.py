@@ -453,10 +453,11 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         # test listing the files
         reply = self.fetch('/streams/sync/'+stream_id, headers=manager_headers)
         content = json.loads(reply.body.decode())
-        content['partitions'] = [sum(n_counts)]
-        content['initial_files'] = files
-        content['checkpoint_files'] = [replacement_filename]
-        content['frame_files'] = ['frames.xtc']
+        self.assertEqual(content['partitions'], [sum(n_counts)])
+        self.assertEqual(set(content['initial_files']), set(list(files.keys())))
+        self.assertEqual(content['checkpoint_files'], [replacement_filename])
+        self.assertEqual(content['frame_files'], ['frames.xtc'])
+        self.assertEqual(reply.code, 200)
         self.assertEqual(reply.code, 200)
 
     def test_core_stop(self):
@@ -642,10 +643,10 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
        # test sync api
         reply = self.fetch('/streams/sync/'+stream_id, headers=manager_headers)
         content = json.loads(reply.body.decode())
-        content['partitions'] = [n_frames, n_frames+n_frames]
-        content['initial_files'] = files
-        content['checkpoint_files'] = [replacement_filename]
-        content['frame_files'] = ['frames.xtc']
+        self.assertEqual(content['partitions'], [n_frames, n_frames+n_frames])
+        self.assertEqual(set(content['initial_files']), set(list(files.keys())))
+        self.assertEqual(content['checkpoint_files'], [replacement_filename])
+        self.assertEqual(content['frame_files'], ['frames.xtc'])
         self.assertEqual(reply.code, 200)
 
     def test_stream_start_stop(self):

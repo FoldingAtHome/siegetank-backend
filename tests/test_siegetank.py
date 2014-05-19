@@ -98,8 +98,6 @@ class TestSiegeTank(unittest.TestCase):
         stream = random.sample(target.streams, 1)[0]
         self.assertEqual(stream.status, 'OK')
         self.assertEqual(stream.frames, 0)
-        self.assertEqual(set(stream.files), {'files/state.xml.gz.b64',
-            'files/integrator.xml.gz.b64', 'files/system.xml.gz.b64'})
         self.assertEqual(stream.download('files/state.xml.gz.b64'),
                          encoded_state.encode())
         self.assertEqual(stream.active, False)

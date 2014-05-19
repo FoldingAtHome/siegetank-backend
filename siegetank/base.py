@@ -166,6 +166,14 @@ class Stream(Base):
         reply = self._get('/streams/download/'+self.id+'/'+filename)
         return reply.content
 
+    def sync(self, folder):
+        """
+        :param folder: the directory to sync data to.
+        """
+        reply = self._get('/streams/sync/'+self.id)
+        print('syncing...')
+        return reply.content
+
     def upload(self, filename, filedata):
         """ Upload a file on the stream. The stream must be in the STOPPED
         state and the file must already exist.
@@ -189,12 +197,6 @@ class Stream(Base):
         self._status = content['status']
         self._error_count = content['error_count']
         self._active = content['active']
-
-    @property
-    def files(self):
-        """ Return a list of available files for stream. """
-        reply = self._get('/streams/files/'+self.id)
-        return reply.json()['files']
 
     @property
     def id(self):
