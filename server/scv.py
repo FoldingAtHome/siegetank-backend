@@ -499,6 +499,8 @@ class StreamDeleteHandler(BaseHandler):
                 return self.write(result['ok'])
             target.delete()
         stream_path = os.path.join(self.application.streams_folder, stream_id)
+        # TODO: can change to subprocess.call(['rm', '-rf', stream_path])
+        # since it's much much faster (4x as fast in certain scenarios)
         shutil.rmtree(stream_path)
         self.set_status(200)
 
@@ -871,14 +873,21 @@ class ActiveStreamsHandler(BaseHandler):
         self.write(reply)
 
 
-class StreamFilesHandler(BaseHandler):
+class StreamSyncHandler(BaseHandler):
 
     @tornado.gen.coroutine
     def get(self, stream_id):
         """
-        .. http:get:: /streams/files/:stream_id
+        .. http:get:: /streams/sync/:stream_id
 
-            Retrieve a list of files for this particular stream.
+            Retrieve the information needed to sync data back in an efficient
+            manner. This method does not invoke os.walk() or anything that
+            requires invoking stat on a large number of files.
+
+            Retrieve a list of partitions for this particular stream. For
+            example, if the partition returns the list [5, 12, 38], then the
+            stream is divided into the partition (0, 5](5, 12](12, 38], where
+            (a,b] denote the open and closed ends.
 
             :reqheader Authorization: manager authorization token
 
@@ -887,9 +896,12 @@ class StreamFilesHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "files": ['3/frames.xtc',
-                             '389/frames.xtc',
-                             '201/frames.xtc']
+                    'partitions': [5, 12, 38],
+                    'frame_files': ['frames.xtc', 'log.txt'],
+                    'checkpoint_files': ['state.xml.gz.b64'],
+                    'initial_files': ['state.xml.gz.b64',
+                                      'system.xml.gz.b64',
+                                      'integrator.xml.gz.b64']
                 }
 
         """
@@ -902,12 +914,28 @@ class StreamFilesHandler(BaseHandler):
             return self.set_status(401)
         streams_folder = self.application.streams_folder
         stream_dir = os.path.join(streams_folder, stream_id)
-        reply = []
-        for root, dirs, files in os.walk(stream_dir):
-            for f in files:
-                reply.append((root+'/'+f)[len(stream_dir)+1:])
+        folders = os.listdir(stream_dir)
+        partitions = []
+        for item in folders:
+            try:
+                partitions.append(int(item))
+            except:
+                pass
+        partitions = sorted(partitions)
+        frame_dir = os.path.join(stream_dir, str(partitions[0]))
+        frame_files = os.listdir(frame_dir)
+        chkpt_name = 'checkpoint_files'
+        frame_files.remove(chkpt_name)
+        chkpt_files = os.listdir(os.path.join(frame_dir, chkpt_name))
+        initial_files = os.listdir(os.path.join(stream_dir, 'files'))
+        reply = {
+            'partitions': partitions,
+            'frame_files': frame_files,
+            'checkpoint_files': chkpt_files,
+            'initial_files': initial_files,
+        }
         self.set_status(200)
-        self.write({"files": reply})
+        self.write(reply)
 
 
 class StreamUploadHandler(BaseHandler):
@@ -1094,7 +1122,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
             (r'/streams/start/(.*)', StreamStartHandler),
             (r'/streams/stop/(.*)', StreamStopHandler),
             (r'/streams/delete/(.*)', StreamDeleteHandler),
-            (r'/streams/files/(.*)', StreamFilesHandler),
+            (r'/streams/sync/(.*)', StreamSyncHandler),
             (r'/streams/upload/([^/]+)/(.+)', StreamUploadHandler),
             (r'/streams/download/([^/]+)/(.+)', StreamDownloadHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler),

@@ -409,6 +409,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         files = result['files']
         token = result['token']
         headers = {'Authorization': token}
+        manager_headers = {'Authorization': self.auth_token}
         self._core_start(target_id)
 
         active_stream = scv.ActiveStream(stream_id, self.scv.db)
@@ -450,14 +451,13 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertFalse(os.path.exists(buffer_path))
 
         # test listing the files
-        reply = self.fetch('/streams/files/'+stream_id,
-                           headers={'Authorization': self.auth_token})
+        reply = self.fetch('/streams/sync/'+stream_id, headers=manager_headers)
+        content = json.loads(reply.body.decode())
+        content['partitions'] = [sum(n_counts)]
+        content['initial_files'] = files
+        content['checkpoint_files'] = [replacement_filename]
+        content['frame_files'] = ['frames.xtc']
         self.assertEqual(reply.code, 200)
-        available_files = json.loads(reply.body.decode())
-        for filename in available_files:
-            if 'frames.xtc' in filename:
-                data = self._download(stream_id, filename)
-                self.assertEqual(data, frame_buffer)
 
     def test_core_stop(self):
         result = self._post_and_activate_stream()
@@ -639,9 +639,13 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(0, content['error_count'])
         self.assertEqual(False, content['active'])
 
-        # test listing the files
-        reply = self.fetch('/streams/files/'+stream_id,
-                           headers=manager_headers)
+       # test sync api
+        reply = self.fetch('/streams/sync/'+stream_id, headers=manager_headers)
+        content = json.loads(reply.body.decode())
+        content['partitions'] = [n_frames, n_frames+n_frames]
+        content['initial_files'] = files
+        content['checkpoint_files'] = [replacement_filename]
+        content['frame_files'] = ['frames.xtc']
         self.assertEqual(reply.code, 200)
 
     def test_stream_start_stop(self):
