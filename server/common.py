@@ -27,6 +27,8 @@ import tornado.options
 import tornado.web
 import logging
 
+from pymongo.read_preferences import ReadPreference
+
 
 def is_domain(url):
     """ Returns True if url is a domain """
@@ -149,12 +151,13 @@ class BaseServerMixin():
 
     def initialize_motor(self):
         mongo_options = self._mongo_options
-        if mongo_options:
-            host = mongo_options['host']
-            ssl_kwargs = {}
-            if is_domain(host):
-                ssl_kwargs['ssl'] = True
-            self.motor = motor.MotorClient(host, **ssl_kwargs)
+        if is_domain(mongo_options['host']):
+            mongo_options['ssl'] = True
+        if 'replicaSet' in mongo_options:
+            self.motor = motor.MotorReplicaSetClient(**mongo_options)
+            self.motor.read_preference = ReadPreference.SECONDARY_PREFERRED
+        else:
+            self.motor = motor.MotorClient(**mongo_options)
 
     def base_init(self, name, redis_options, mongo_options):
         """ A BaseServer is a server that is connected to both a redis server
@@ -164,7 +167,6 @@ class BaseServerMixin():
         if not os.path.exists(self.data_folder):
             os.makedirs(self.data_folder)
         self.redis_options = redis_options
-        self.mongo_options = mongo_options
 
         if 'appendfilename' in redis_options:
             redis_options['appendonly'] = 'yes'

@@ -7,7 +7,6 @@ import time
 import requests
 import json
 import base64
-import gzip
 import pymongo
 import sys
 
@@ -43,10 +42,23 @@ def post_target(auth_token, stage='private'):
     return json.loads(reply.content.decode())['target_id']
 
 
+def get_mongo_options():
+    config_path = os.path.join(os.path.dirname(os.path.basename(__file__)),
+        'cc.conf')
+    config_path = os.path.abspath(config_path)
+    def exec_in(code, glob, loc=None):
+        if isinstance(code, str):
+            code = compile(code, '<string>', 'exec', dont_inherit=True)
+        exec(code, glob, loc)
+    config = {}
+    exec_in(open(config_path).read(), config, config)
+    return config['mongo_options']
+
+
 def post_streams(target_id, files, auth_token):
     message = json.dumps({'target_id': target_id,
                           'files': files})
-    reply = requests.post('https://127.0.0.1:8980/streams',
+    reply = requests.post('https://127.0.0.1:8960/streams',
                           headers={'Authorization': auth_token},
                           verify=False,
                           data=message
@@ -79,7 +91,8 @@ if __name__ == '__main__':
     time.sleep(1)
     log.write(str(pid1.pid))
     log.close()
-    result = utils.add_user(manager=True, admin=True)
+    result = utils.add_user(manager=True, admin=True,
+                            mongo_options=get_mongo_options())
     token = result['token']
     core_key = add_engine_token(token)
     # post a public target
