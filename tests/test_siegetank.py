@@ -21,11 +21,11 @@ import base64
 import shutil
 import glob
 import random
+import filecmp
 import pymongo
 
 import siegetank.base
 import tests.utils
-
 
 class TestSiegeTank(unittest.TestCase):
 
@@ -66,6 +66,111 @@ class TestSiegeTank(unittest.TestCase):
         for db_name in mdb.database_names():
             mdb.drop_database(db_name)
 
+    def test_sync_stream(self):
+
+        def add_partition(stream_id, partitions):
+            stream_dir = os.path.join('firebat_data', 'streams', stream_id)
+            for i in partitions:
+                p_dir = os.path.join(stream_dir, str(i))
+                os.makedirs(p_dir)
+                open(os.path.join(p_dir, 'bin1'),'wb').write(os.urandom(5987))
+                open(os.path.join(p_dir, 'bin2'),'wb').write(os.urandom(9820))
+                os.makedirs(os.path.join(p_dir, 'checkpoint_files'))
+                open(os.path.join(p_dir, 'checkpoint_files',
+                     'cin1'), 'wb').write(os.urandom(2048))
+                open(os.path.join(p_dir, 'checkpoint_files',
+                     'cin2'), 'wb').write(os.urandom(2048))
+        
+        def remove_local_partition(stream_id, partition, filename=None):
+            stream_dir = os.path.join('sync_data', stream_id)
+            if filename:
+                os.remove(os.path.join(stream_dir, str(partition), filename))
+            else:
+                shutil.rmtree(os.path.join(stream_dir, str(partition)))
+
+        def remove_local_seed_file(stream_id, filename):
+            stream_dir = os.path.join('sync_data', stream_id)
+            os.remove(os.path.join(stream_dir, 'files', filename))
+
+
+        def are_dir_trees_equal(dir1, dir2):
+            """
+            Compare two directories recursively. Files in each directory are
+            assumed to be equal if their names and contents are equal.
+
+            @param dir1: First directory path
+            @param dir2: Second directory path
+
+            @return: True if the directory trees are the same and 
+                there were no errors while accessing the directories or files, 
+                False otherwise.
+           """
+
+            dirs_cmp = filecmp.dircmp(dir1, dir2)
+            if len(dirs_cmp.left_only)>0 or len(dirs_cmp.right_only)>0 or \
+                len(dirs_cmp.funny_files)>0:
+                return False
+            (_, mismatch, errors) =  filecmp.cmpfiles(
+                dir1, dir2, dirs_cmp.common_files, shallow=False)
+            if len(mismatch)>0 or len(errors)>0:
+                return False
+            for common_dir in dirs_cmp.common_dirs:
+                new_dir1 = os.path.join(dir1, common_dir)
+                new_dir2 = os.path.join(dir2, common_dir)
+                if not are_dir_trees_equal(new_dir1, new_dir2):
+                    return False
+            return True
+
+        weight = 5
+        options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}
+        engines = ['openmm_60_opencl', 'openmm_60_cuda']
+        target = siegetank.base.add_target(options=options,
+                                           engines=engines,
+                                           stage='public',
+                                           weight=weight,
+                                           )
+        encoded_state = 'some_binary1'
+        encoded_system = 'some_binary2'
+        encoded_intg = 'some_binary3'
+        files = {'system.xml.gz.b64': encoded_system,
+                 'integrator.xml.gz.b64': encoded_intg,
+                 'state.xml.gz.b64': encoded_state}
+        siegetank.base.refresh_scvs()
+        random_scv = random.choice(list(siegetank.base.scvs.keys()))
+        for i in range(3):
+            target.add_stream(files, random_scv)
+        target.add_stream(files, random_scv)
+        stream = random.sample(target.streams, 1)[0]
+        sync_dir = os.path.join('sync_data',stream.id)
+        stream_dir = os.path.join('firebat_data', 'streams', stream.id)
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        add_partition(stream.id, [4, 9, 34, 493])
+        # test stream sync
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        add_partition(stream.id, [589, 2098, 29038])
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        remove_local_partition(stream.id, 589)
+        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        remove_local_partition(stream.id, 34, 'bin1')
+        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        remove_local_partition(stream.id, 4, 'checkpoint_files/cin1')
+        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        remove_local_seed_file(stream.id, 'system.xml.gz.b64')
+        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir, sync_seeds=False)
+        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir, sync_seeds=True)
+        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+
     def test_add_target(self):
         options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}
         engines = ['openmm_60_opencl', 'openmm_60_cuda']
@@ -96,6 +201,8 @@ class TestSiegeTank(unittest.TestCase):
         for i in range(20):
             target.add_stream(files, random_scv)
         stream = random.sample(target.streams, 1)[0]
+        
+
         self.assertEqual(stream.status, 'OK')
         self.assertEqual(stream.frames, 0)
         self.assertEqual(stream.download('files/state.xml.gz.b64'),
