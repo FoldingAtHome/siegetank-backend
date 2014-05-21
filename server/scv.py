@@ -41,7 +41,8 @@ class Stream(Entity):
     fields = {'frames': int,  # total number of frames completed
               'status': str,  # 'OK', 'STOPPED'
               'error_count': int,  # number of consecutive errors,
-              'creation_date': int,  # when the stream was created
+              'creation_date': int,  # when the stream was created,
+              'checkpoints': str,  # checkpoints "1, 3, 587, 928"
               }
 
 
@@ -51,7 +52,6 @@ class ActiveStream(Entity):
               'buffer_frames': int,  # number of frames in buffer.xtc
               'auth_token': str,  # core Authorization token
               'user': str,  # the user assigned to the stream
-              'steps': int,  # number of steps completed
               'start_time': float,  # time we started at
               'frame_hash': str,  # md5sum of the received frame
               'engine': str,  # which engine is being used
@@ -63,13 +63,16 @@ class Target(Entity):
     fields = {'queue': zset(str)}  # queue of inactive streams
 
 
-ActiveStream.add_lookup('auth_token')
-ActiveStream.add_lookup('user', injective=False)
+#ActiveStream.add_lookup('auth_token')
+#ActiveStream.add_lookup('user', injective=False)
 relate(Target, 'streams', {Stream}, 'target')
 relate(Target, 'active_streams', {ActiveStream})
 
 
 class BaseHandler(CommonHandler):
+
+    def get_stream_id_from_token(self, token):
+        return self.db.get('auth_token:'+token+':active_stream')
 
     @property
     def deactivate_stream(self):
@@ -87,7 +90,7 @@ class BaseHandler(CommonHandler):
         """ Returns a stream_id if token is valid, None otherwise """
         try:
             token = self.request.headers['Authorization']
-            stream_id = ActiveStream.lookup('auth_token', token, self.db)
+            stream_id = self.get_stream_id_from_token(token)
             if stream_id:
                 return stream_id
             else:
@@ -122,7 +125,7 @@ def authenticate_core(method):
         except:
             self.write({'error': 'missing Authorization header'})
             return self.set_status(401)
-        stream_id = ActiveStream.lookup('auth_token', token, self.db)
+        stream_id = self.get_stream_id_from_token(token)
         if stream_id:
             return method(self, stream_id)
         else:
@@ -244,36 +247,56 @@ class StreamActivateHandler(BaseHandler):
             :status 400: Bad request
 
         """
+
         if self.request.headers['Authorization'] != self.application.password:
             return self.error('Not authorized', code=401)
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content["target_id"]
-        target = Target(target_id, self.db)
-        stream_id = target.zrevpop('queue')
 
+        # this method does check for locks the stream as it assumes that if
+        # a stream has been deactivated, then it is fully safe. That is, it has
+        # no pending filesystem operations or other non-redis pending ops.
+
+        script = """
+        local target_id = KEYS[1]
+        local token = KEYS[2]
+        local engine = KEYS[3]
+        local user = KEYS[4]
+        local expiration = KEYS[5]
+        local stime = KEYS[6]
+        local target_queue = 'target:'..target_id..':queue'
+        local stream_id = redis.call('zrange', target_queue, -1, -1)[1]
+        if stream_id then
+            redis.call('zremrangebyrank', target_queue, -1, -1)
+            redis.call('sadd', 'active_streams', stream_id)
+            redis.call('hset', 'active_stream:'..stream_id, 'buffer_frames', 0)
+            redis.call('hset', 'active_stream:'..stream_id, 'total_frames', 0)
+            redis.call('hset', 'active_stream:'..stream_id, 'auth_token', token)
+            redis.call('hset', 'active_stream:'..stream_id, 'user', user)
+            redis.call('hset', 'active_stream:'..stream_id, 'start_time', stime)
+            redis.call('hset', 'active_stream:'..stream_id, 'engine', engine)
+            redis.call('zadd', 'heartbeats', expiration, stream_id)
+            redis.call('set', 'auth_token:'..token..':active_stream', stream_id)
+        end
+        return stream_id
+        """
+
+        action = self.db.register_script(script)
         token = str(uuid.uuid4())
-        if stream_id:
-            fields = {
-                'buffer_frames': 0,
-                'total_frames': 0,
-                'auth_token': token,
-                'steps': 0,
-                'start_time': time.time(),
-                'engine': content['engine'],
-            }
-            if 'user' in content:
-                fields['user'] = content['user']
-            ActiveStream.create(stream_id, self.db, fields)
-            increment = tornado.options.options['heartbeat_increment']
-            self.db.zadd('heartbeats', stream_id, time.time() + increment)
-
-            reply = {}
-            reply["token"] = token
-            self.set_status(200)
-            return self.write(reply)
+        if 'user' in content:
+            user = content['user']
         else:
-            return self.error('no streams available')
+            user = None
+        expiration = time.time()+tornado.options.options['heartbeat_increment']
+        stime = time.time()
+        result = action(keys=[target_id, token, content['engine'], user,
+                              expiration, stime])
+        if result:
+            self.set_status(200)
+            return self.write({'token': token})
+        else:
+            return self.error('No streams available')
 
 
 class StreamsHandler(BaseHandler):
@@ -1077,8 +1100,41 @@ class CoreHeartbeatHandler(BaseHandler):
 
 class SCV(BaseServerMixin, tornado.web.Application):
 
+    def start_lock(self, stream_id):
+        """ Lock the stream with id ```stream_id``` and return an unlock
+        function for invocation later on.
+
+        Usage:
+
+        unlock = self.start_lock(stream_id)
+        # do something to stream
+        unlock()
+
+        """
+        token = str(uuid.uuid4())
+        start = functools.partial(self.acquire_stream_lock,
+                                  stream_id=stream_id, token=token)
+        start()
+        stop = functools.partial(self.release_stream_lock,
+                                 stream_id=stream_id, token=token)
+        return stop
+
+    def acquire_stream_lock(self, stream_id, token, max_time=1000):
+        while(not self.db.set('lock:'+stream_id, token, nx=True, px=max_time)):
+            time.sleep(0.05)
+
+    def release_stream_lock(self, stream_id, token):
+        script = """
+        local stream_id = KEYS[1]
+        local token = KEYS[2]
+        if redis.call("get", 'lock:'..stream_id) == token then
+            return redis.call("del", 'lock:'..stream_id)
+        """
+        action = self.db.register_script(script)
+        action(keys=[stream_id, token])
+
     def _get_command_centers(self):
-        """ Return a dict of Command Center names and hosts """
+        """ Return a dict of Command Center names and hosts. """
 
     @tornado.gen.coroutine
     def _register(self):
@@ -1146,24 +1202,51 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
-        active_stream = ActiveStream(stream_id, self.db, verify=False)
-        pipeline = self.db.pipeline()
-        active_stream.hget_pipe('user', pipeline=pipeline)
-        active_stream.hget_pipe('engine', pipeline=pipeline)
-        active_stream.hget_pipe('start_time', pipeline=pipeline)
-        active_stream.hget_pipe('total_frames', pipeline=pipeline)
-        active_stream.delete(pipeline=pipeline)
-        result = pipeline.execute()
-        removed = result[-1]
-        if removed > 0:
-            user, engine = result[0], result[1]
-            start_time, frames = float(result[2]), int(result[3])
+
+        # check for locks
+
+        unlock = self.start_lock(stream_id)
+
+        print('DEBUG1', self.db.hget('active_stream:'+stream_id, 'auth_token'))
+        print('DEBUG2', self.db.sismember('active_streams', stream_id))
+
+        # TODO: Configurable weights
+
+        script = """
+        local stream_id = KEYS[1]
+        if redis.call('sismember', 'active_streams', stream_id) then
+            local token = redis.call('hget', 'active_stream:'..stream_id, 'auth_token')
+            redis.call('del', 'auth_token:'..token..':active_stream')
+            local tf = redis.call('hget', 'active_stream:'..stream_id, 'total_frames')
+            local us = redis.call('hget', 'active_stream:'..stream_id, 'user')
+            local st = redis.call('hget', 'active_stream:'..stream_id, 'start_time')
+            local en = redis.call('hget', 'active_stream:'..stream_id, 'engine')
+            redis.call('del', 'active_stream:'..stream_id)
+            redis.call('zrem', 'heartbeats', stream_id)
+            redis.call('srem', 'active_streams', stream_id)
+            local target_id = redis.call('hget', 'stream:'..stream_id, 'target')
+            local frames = redis.call('hget', 'stream:'..stream_id, 'frames')
+            redis.call('zadd', 'target:'..target_id..':queue', frames, stream_id)
+            return {tf, us, st, en}
+        else
+            return false
+        end
+        """
+
+        action = self.db.register_script(script)
+        result = action(keys=[stream_id])
+        print('DEBUG RESULT', result)
+        if result:
+            frames = result[0]
+            user = result[1]
+            start_time = result[2]
+            engine = result[3]
             end_time = time.time()
-            self.db.zrem('heartbeats', stream_id)
             stream_path = os.path.join(self.streams_folder, stream_id)
             buffer_path = os.path.join(stream_path, 'buffer_files')
             if os.path.exists(buffer_path):
                 shutil.rmtree(buffer_path)
+            unlock()
             if frames:
                 body = {
                     'engine': engine,
@@ -1175,13 +1258,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 }
                 cursor = self.motor.stats.fragments
                 yield cursor.insert(body)
-            # push this stream back into queue
-            stream = Stream(stream_id, self.db)
-            frames_completed = stream.hget('frames')
-            target = Target(stream.hget('target'), self.db)
-            # TODO: do a check to make sure the stream's status is OK. Check
-            # the error count, if it's too high, then the stream is stopped
-            target.zadd('queue', stream_id, frames_completed)
+        else:
+            unlock()
 
 #########################
 # Defined here globally #

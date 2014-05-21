@@ -99,6 +99,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                               headers=headers)
         self.assertEqual(response.code, 200)
 
+    def _get_stream_id_from_token(self, token):
+        return self.scv.db.get('auth_token:'+token+':active_stream')
+
     def _activate_stream(self, target_id):
         body = {'target_id': target_id, 'engine': 'test_engine'}
         headers = {'Authorization': self.scv.password}
@@ -108,7 +111,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, 200)
         reply_data = json.loads(reply.body.decode())
         token = reply_data['token']
-        stream_id = scv.ActiveStream.lookup('auth_token', token, self.scv.db)
+        stream_id = self._get_stream_id_from_token(token)
         return stream_id, token
 
     def _post_and_activate_stream(self, target_id=None):
@@ -222,8 +225,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         increment = tornado.options.options['heartbeat_increment']
         self.assertAlmostEqual(self.scv.db.zscore('heartbeats', stream1),
                                time.time()+increment, 1)
-        self.assertEqual(scv.ActiveStream.lookup('auth_token',
-                         token, self.scv.db), stream1)
+        self.assertEqual(self._get_stream_id_from_token(token), stream1)
 
     def test_get_active_streams(self):
         tornado.options.options.heartbeat_increment = 10
