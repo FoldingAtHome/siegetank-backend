@@ -664,7 +664,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         # activating the stream should fail
         body = json.dumps({
-            'target_id': target_id
+            'target_id': target_id,
+            'engine': 'test_engine'
         })
         response = self.fetch('/streams/activate', method='POST', body=body,
                               headers={'Authorization': self.scv.password})

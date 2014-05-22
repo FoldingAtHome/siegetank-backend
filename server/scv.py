@@ -1129,6 +1129,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         local token = KEYS[2]
         if redis.call("get", 'lock:'..stream_id) == token then
             return redis.call("del", 'lock:'..stream_id)
+        end
         """
         action = self.db.register_script(script)
         action(keys=[stream_id, token])
@@ -1203,18 +1204,15 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
 
-        # check for locks
-
         unlock = self.start_lock(stream_id)
-
-        print('DEBUG1', self.db.hget('active_stream:'+stream_id, 'auth_token'))
-        print('DEBUG2', self.db.sismember('active_streams', stream_id))
-
+        #print('DEBUG1', self.db.smembers('active_streams'))
+        #print('DEBUG2', self.db.hgetall('active_stream:'+stream_id))
         # TODO: Configurable weights
-
         script = """
         local stream_id = KEYS[1]
-        if redis.call('sismember', 'active_streams', stream_id) then
+        if redis.call('sismember', 'active_streams', stream_id) == 0 then
+            return false
+        else
             local token = redis.call('hget', 'active_stream:'..stream_id, 'auth_token')
             redis.call('del', 'auth_token:'..token..':active_stream')
             local tf = redis.call('hget', 'active_stream:'..stream_id, 'total_frames')
@@ -1228,14 +1226,11 @@ class SCV(BaseServerMixin, tornado.web.Application):
             local frames = redis.call('hget', 'stream:'..stream_id, 'frames')
             redis.call('zadd', 'target:'..target_id..':queue', frames, stream_id)
             return {tf, us, st, en}
-        else
-            return false
         end
         """
-
         action = self.db.register_script(script)
         result = action(keys=[stream_id])
-        print('DEBUG RESULT', result)
+        #print('DEBUG3', result)
         if result:
             frames = result[0]
             user = result[1]
