@@ -42,7 +42,7 @@ class Stream(Entity):
               'status': str,  # 'OK', 'STOPPED'
               'error_count': int,  # number of consecutive errors,
               'creation_date': int,  # when the stream was created,
-              'checkpoints': str,  # checkpoints "1, 3, 587, 928"
+              'checkpoints': str,  # checkpoints string, "1, 3, 587, 928"
               }
 
 
@@ -741,8 +741,6 @@ class CoreCheckpointHandler(BaseHandler):
 
         """
 
-        # New Algorithm:
-
         # All buffered frame files are stored in the buffer_files folder:
 
         # buffer_files/frames.xtc
@@ -766,6 +764,9 @@ class CoreCheckpointHandler(BaseHandler):
         if not stream_id:
             return self.error('Bad core token', code=401)
         content = json.loads(self.request.body.decode())
+
+        unlock = self.start_lock(stream_id)
+
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
         stream_frames = stream.hget('frames')
@@ -793,12 +794,17 @@ class CoreCheckpointHandler(BaseHandler):
                                     str(total_frames))
         os.rename(buffer_folder, frame_folder)
 
+        # 3) TODO: remove extra checkpoints
+
         # TODO: If the server crashes here, we need a check to make sure that
         # extraneous buffer frames are cleaned up properly.
 
         stream.hincrby('frames', buffer_frames)
         active_stream.hincrby('total_frames', buffer_frames)
         active_stream.hset('buffer_frames', 0)
+
+        unlock()
+
         self.set_status(200)
 
 
@@ -920,7 +926,7 @@ class StreamSyncHandler(BaseHandler):
                 {
                     'partitions': [5, 12, 38],
                     'frame_files': ['frames.xtc', 'log.txt'],
-                    'checkpoint_files': ['state.xml.gz.b64'],
+                    'checkpoint_files': ['state.xml.gz.b64'], // optional
                     'seed_files': ['state.xml.gz.b64',
                                       'system.xml.gz.b64',
                                       'integrator.xml.gz.b64']
@@ -956,10 +962,14 @@ class StreamSyncHandler(BaseHandler):
             frame_dir = os.path.join(stream_dir, str(partitions[0]))
             frame_files = os.listdir(frame_dir)
             chkpt_name = 'checkpoint_files'
-            frame_files.remove(chkpt_name)
-            chkpt_files = os.listdir(os.path.join(frame_dir, chkpt_name))
+            try:
+                frame_files.remove(chkpt_name)
+                chkpt_files = os.listdir(os.path.join(frame_dir, chkpt_name))
+                reply['checkpoint_files'] = chkpt_files
+            except:
+                pass
             reply['frame_files'] = frame_files
-            reply['checkpoint_files'] = chkpt_files
+
         self.set_status(200)
         self.write(reply)
 
@@ -1146,14 +1156,17 @@ class SCV(BaseServerMixin, tornado.web.Application):
                              'password': self.password,
                              'host': self.external_host}, upsert=True)
 
+    @tornado.gen.coroutine
     def maintain_integrity(self):
         """ Maintain integrity of the streams by ensuring that redis entries
-            are consistent with stream file data.
+            are consistent with stream data.
         """
-        stream_dirs = os.listdir(self.streams_folder)
-        print("Maintaining integrity of", len(stream_dirs), "streams...")
-        assert set(stream_dirs) == Stream.members(self.db)
-        for stream_id in stream_dirs:
+        print('Checking for bad streams...', end="", flush=True)
+        # check for bad locks:
+        locks = self.db.keys('lock:*')
+        for lock in locks:
+            stream_id = lock[5:]
+            print("Found bad stream: ", stream_id)
             stream_dir = os.path.join(self.streams_folder, stream_id)
             li = sorted([int(f) for f in os.listdir(stream_dir) if f.isdigit()])
             stream = Stream(stream_id, self.db)
@@ -1161,6 +1174,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 stream.hset('frames', 0)
             else:
                 stream.hset('frames', li[-1])
+            yield self.deactivate_stream(stream_id)
+        print(' done')
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
@@ -1169,7 +1184,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
         if not os.path.exists(self.streams_folder):
             os.makedirs(self.streams_folder)
-        self.maintain_integrity()
+        #self.maintain_integrity()
         self.ccs = None
         self.db.setnx('password', str(uuid.uuid4()))
         self.password = self.db.get('password')
@@ -1289,6 +1304,7 @@ def start():
     instance.initialize_motor()
 
     if tornado.process.task_id() == 0:
+        tornado.ioloop.IOLoop.instance().run_sync(instance.maintain_integrity)
         tornado.ioloop.IOLoop.instance().add_callback(instance.check_heartbeats)
         tornado.ioloop.IOLoop.instance().add_callback(instance._register)
         frequency = tornado.options.options['check_heart_frequency_in_ms']

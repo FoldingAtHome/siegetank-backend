@@ -173,7 +173,7 @@ class Stream(Base):
     def sync(self, folder, sync_seeds=False):
         """ Sync the data for a given stream. This method performs an
         incremental update and should be ran periodically. This method does not
-        fully check for rsync status. 
+        fully check for rsync status.
 
         :param folder: str, the directory to sync the streams's data to.
         :param sync_seeds: str, whether or not to sync the initial files.
@@ -214,14 +214,15 @@ class Stream(Base):
                 filedata = self.download(os.path.join(str(partition), frame_n))
                 filepath = os.path.join(p_dir, frame_n)
                 open(filepath, 'wb').write(filedata)
-            c_dir = os.path.join(p_dir, str('checkpoint_files'))
-            if not os.path.exists(c_dir):
-                os.makedirs(c_dir)
-            for check_n in missing(content['checkpoint_files'], os.listdir(c_dir)):
-                filedata = self.download(os.path.join(str(partition),
-                                         'checkpoint_files', check_n))
-                filepath = os.path.join(c_dir, check_n)
-                open(filepath, 'wb').write(filedata)
+            if 'checkpoint_files' in content:
+                c_dir = os.path.join(p_dir, str('checkpoint_files'))
+                if not os.path.exists(c_dir):
+                    os.makedirs(c_dir)
+                for check_n in missing(content['checkpoint_files'], os.listdir(c_dir)):
+                    filedata = self.download(os.path.join(str(partition),
+                                             'checkpoint_files', check_n))
+                    filepath = os.path.join(c_dir, check_n)
+                    open(filepath, 'wb').write(filedata)
 
     def upload(self, filename, filedata):
         """ Upload a file on the stream. The stream must be in the STOPPED

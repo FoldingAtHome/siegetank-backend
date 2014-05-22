@@ -196,6 +196,8 @@ class BaseServerMixin():
     def shutdown(self, signal_number=None, stack_frame=None, kill=True):
         self.shutdown_redis()
         if kill:
+            # TODO: Change to a graceful shutdown. Need a way to access the
+            # server object.
             tornado.ioloop.IOLoop.instance().stop()
             sys.exit(0)
 
