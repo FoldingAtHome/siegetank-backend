@@ -75,7 +75,7 @@ class BaseHandler(CommonHandler):
         return self.db.get('auth_token:'+token+':active_stream')
 
     def initialize(self):
-        self.cleanup_stream = self.application.cleanup_stream
+        self.deactivate_stream = self.application.deactivate_stream
         self.start_lock = self.application.start_lock
 
     @tornado.gen.coroutine
@@ -340,7 +340,6 @@ class StreamsHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        print(1)
         self.set_status(400)
         current_user = yield self.get_current_user()
         if current_user is None:
@@ -352,20 +351,37 @@ class StreamsHandler(BaseHandler):
         target_id = content['target_id']
         stream_files = content['files']
 
-        if not Target.exists(target_id, self.db):
-            target = Target.create(target_id, self.db)
-        else:
-            target = Target(target_id, self.db)
-        print(2)
-        # Bad if server dies here
-        cursor = self.motor.data.targets
-        result = yield cursor.update({'_id': target_id},
-            {'$addToSet': {'shards': self.application.name}})
-        if not result['ok']:
-            self.set_status(400)
-            return self.write(result['ok'])
-
         stream_id = str(uuid.uuid4())+':'+self.application.name
+        unlock = self.start_lock(stream_id)
+
+        script = """
+        local target_id = KEYS[1]
+        local stream_id = KEYS[2]
+        local new_target = false
+        if redis.call('sismember', 'targets', target_id) == 0 then
+            redis.call('sadd', 'targets', target_id)
+            new_target = true
+        end
+        redis.call('sadd', 'streams', stream_id)
+        redis.call('hset', 'stream:'..stream_id, 'target', target_id)
+        redis.call('hset', 'stream:'..stream_id, 'frames', 0)
+        redis.call('hset', 'stream:'..stream_id, 'status', 'OK')
+        redis.call('hset', 'stream:'..stream_id, 'error_count', 0)
+        redis.call('zadd', 'target:'..target_id..':queue', 0, stream_id)
+        redis.call('sadd', 'target:'..target_id..':streams', stream_id)
+        return new_target
+        """
+
+        action = self.db.register_script(script)
+        is_new_target = action(keys=[target_id, stream_id])
+
+        if is_new_target:
+            cursor = self.motor.data.targets
+            result = yield cursor.update({'_id': target_id},
+                {'$addToSet': {'shards': self.application.name}})
+            if not result['ok']:
+                self.set_status(400)
+                return self.write('Could not access mdb while adding stream')
         stream_dir = os.path.join(self.application.streams_folder, stream_id)
         files_dir = os.path.join(stream_dir, 'files')
         if not os.path.exists(files_dir):
@@ -373,17 +389,9 @@ class StreamsHandler(BaseHandler):
         for filename, binary in stream_files.items():
             with open(os.path.join(files_dir, filename), 'w') as handle:
                 handle.write(binary)
-        print(3)
-        pipeline = self.db.pipeline()
-        target.zadd('queue', stream_id, 0, pipeline=pipeline)
-        stream_fields = {
-            'target': target,
-            'frames': 0,
-            'status': 'OK',
-            'error_count': 0
-        }
-        Stream.create(stream_id, pipeline, stream_fields)
-        pipeline.execute()
+
+        unlock()
+
         self.set_status(200)
         self.write({'stream_id': stream_id})
 
@@ -465,7 +473,7 @@ class StreamStopHandler(BaseHandler):
 
         unlock = self.start_lock(stream_id)
 
-        yield self.cleanup_stream(stream_id)
+        yield self.deactivate_stream(stream_id)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -520,7 +528,7 @@ class StreamDeleteHandler(BaseHandler):
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
-        yield self.cleanup_stream(stream_id)
+        yield self.deactivate_stream(stream_id)
 
         pipeline = self.db.pipeline()
         target.zrem('queue', stream_id, pipeline=pipeline)
@@ -858,7 +866,7 @@ class CoreStopHandler(BaseHandler):
             with open(log_path, 'a') as handle:
                 handle.write(time.strftime("%c")+'\n'+message)
         self.set_status(200)
-        yield self.cleanup_stream(stream_id)
+        yield self.deactivate_stream(stream_id)
         unlock()
 
 class ActiveStreamsHandler(BaseHandler):
@@ -1145,7 +1153,14 @@ class SCV(BaseServerMixin, tornado.web.Application):
         for stream_id in self.db.zrangebyscore('locks', 0, time.time()-5):
             message = 'Scruffy found a bad stream: '+stream_id
             logging.getLogger('tornado.application').critical(message)
-            self.cleanup_stream(stream_id)
+
+            # 1. See if the stream exists in the the db.
+            if not Stream.exists(stream_id, self.db):
+                stream_dir = os.path.join(self.streams_folder, stream_id)
+                if os.path.exists(stream_dir):
+                    os.shutil.rmtree(stream_dir)
+            else:
+                self.deactivate_stream(stream_id)
             self.release_lock(stream_id)
     
     def acquire_lock(self, resource):
@@ -1216,12 +1231,12 @@ class SCV(BaseServerMixin, tornado.web.Application):
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
             unlock = self.start_lock(dead_stream)
-            self.cleanup_stream(dead_stream)
+            self.deactivate_stream(dead_stream)
             unlock()
 
     @tornado.gen.coroutine
-    def cleanup_stream(self, stream_id):
-        """ Clean up a stream. """
+    def deactivate_stream(self, stream_id):
+        """ Deactivate a stream. """
         script = """
         local stream_id = KEYS[1]
         if redis.call('sismember', 'active_streams', stream_id) == 0 then

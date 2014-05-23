@@ -52,11 +52,17 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
     def tearDown(self):
         super(TestSCV, self).tearDown()
-        self.scv.db.flushdb()
-        self.scv.shutdown_redis()
+
         for db_name in self.mdb.database_names():
             self.mdb.drop_database(db_name)
         shutil.rmtree(self.scv.data_folder)
+
+        keys = self.scv.db.keys('*')
+
+        if keys != ['password']:
+            self.scv.db.flushdb()
+            self.scv.shutdown_redis()
+            raise Exception('REDIS is not clean', keys)
 
     def _download(self, stream_id, filename):
         headers = {'Authorization': self.auth_token}
@@ -163,9 +169,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         stream_id = result['stream_id']
         target_id = result['target_id']
         files = result['files']
-
-        print('downloading stream...')
-
         for filename, filebin in files.items():
             data = self._download(stream_id, 'files/'+filename)
             self.assertEqual(filebin.encode(), data)
