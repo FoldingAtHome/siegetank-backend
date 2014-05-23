@@ -507,11 +507,9 @@ class StreamDeleteHandler(BaseHandler):
 
         """
         # delete from database before deleting from disk
-
-        # this method is horrendously not safe right now, need to fix.
-
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
+
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
@@ -523,6 +521,7 @@ class StreamDeleteHandler(BaseHandler):
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
         yield self.cleanup_stream(stream_id)
+
         pipeline = self.db.pipeline()
         target.zrem('queue', stream_id, pipeline=pipeline)
         stream.delete(pipeline=pipeline)

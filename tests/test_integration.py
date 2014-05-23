@@ -98,7 +98,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(TestSimple, self).setUp()
         for key in self.scvs:
-            tornado.ioloop.IOLoop.instance().run_sync(key['app']._register)
+            tornado.ioloop.IOLoop.instance().run_sync(key['app'].register)
         tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
         result = tests.utils.add_user(manager=True, admin=True)
         self.auth_token = result['token']
