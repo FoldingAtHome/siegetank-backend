@@ -1009,8 +1009,6 @@ class StreamUploadHandler(BaseHandler):
         stream = Stream(stream_id, self.db)
         if stream.hget('status') != 'STOPPED':
             self.error('Stream must be stopped before upload')
-        if not Stream.exists(stream_id, self.db):
-            self.error('Stream does not exist')
         # prevent files from leaking out
         streams_folder = self.application.streams_folder
         stream_dir = os.path.abspath(os.path.join(streams_folder, stream_id))
@@ -1134,13 +1132,13 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 raise Exception("Unable to lock stream", stream_id)
 
     def scruffy(self):
-        """ cleans up after streams have ended up in a failed state, due to a
+        """ Cleans up after streams have ended up in a failed state, due to a
         process randomly dying or something similarly bad. Scruffy is
         idempotent, which means that it can be called multiple times in case
         scruffy itself dies. Scruffy assumes that it is the only cleaner of
         streams in the case of expired locks, so be sure to run scruffy on a
         single process. Note that scruffy does not know which particular
-        action resulted in the bad stream. """
+        action resulted in the bad stream so it attempts a full recovery. """
 
         # 1. Find expired locks by seeing if there any locks more than 1 minute
         # older than current time

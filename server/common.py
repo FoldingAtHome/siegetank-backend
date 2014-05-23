@@ -144,7 +144,7 @@ class CommonHandler(tornado.web.RequestHandler):
 
     def error(self, message='', code=400):
         """ Write a message to the output buffer and flush. """
-        raise tornado.web.HTTPError(400, reason=message)
+        raise tornado.web.HTTPError(code, reason=message)
 
 
 class BaseServerMixin():
