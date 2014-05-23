@@ -97,15 +97,15 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         result['files'] = files
         return result
 
-    def _delete_stream(self, stream_id):
+    def _delete_stream(self, stream_id, expected_code=200):
         headers = {'Authorization': self.auth_token}
         response = self.fetch('/streams/delete/'+stream_id,
                               method='PUT',
                               body='',
                               headers=headers)
-        if response.code != 200:
+        if response.code != expected_code:
             print(response.code, response.body)
-        self.assertEqual(response.code, 200)
+        self.assertEqual(response.code, expected_code)
 
     def _get_stream_id_from_token(self, token):
         return self.scv.db.get('auth_token:'+token+':active_stream')
@@ -802,6 +802,32 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.io_loop.run_sync(self.scv.check_heartbeats)
         self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
 
+        self._delete_stream(stream_id)
+
+    def test_locks(self):
+        result = self._post_stream()
+        stream_id, token = self._activate_stream(result['target_id'])
+        self.scv.db.zadd('locks', stream_id, time.time())
+        headers = {'Authorization': token}
+        # this should block all the following requests
+        response = self.fetch('/core/start', headers=headers)
+        self.assertEqual(response.code, 400)
+        self._delete_stream(stream_id, 400)
+        time.sleep(5)
+        self.io_loop.run_sync(self.scv.scruffy)
+        response = self.fetch('/core/start', headers=headers)
+        self.assertEqual(response.code, 400)
+        self._delete_stream(stream_id, 200)
+
+    def test_scruffy(self):
+        result = self._post_stream()
+        stream_id, token = self._activate_stream(result['target_id'])
+        # test adding a lock
+        self.scv.db.zadd('locks', stream_id, time.time())
+        time.sleep(5)
+        self.io_loop.run_sync(self.scv.scruffy)
+        self.assertEqual(self.scv.db.smembers('locks'), set())
+        self.assertEqual(self.scv.db.smembers('active_streams'), set())
         self._delete_stream(stream_id)
 
     def test_expiration(self):

@@ -20,6 +20,7 @@ import shutil
 import hashlib
 import base64
 import gzip
+import logging
 import functools
 
 import tornado.escape
@@ -107,14 +108,18 @@ class BaseHandler(CommonHandler):
         """
 
         action = self.db.register_script(script)
+        start_time = time.time()
+        attempts = 0
         while(True):
             result = action(keys=[token, time.time()])
             if result == -2:
                 self.error('invalid stream')
             elif result == -1:
-                # add retry logic
-                # self.error('FATAL: stream locked')
-                pass
+                print('sleeping')
+                time.sleep(0.1)
+                if attempts == 2:
+                    self.error('stream is busy', code=400)
+                attempts += 1
             else:
                 stream_id = result
                 unlock = functools.partial(self.application.release_lock, stream_id)
@@ -1119,21 +1124,21 @@ class SCV(BaseServerMixin, tornado.web.Application):
         while(True):
             if self.acquire_lock(stream_id):
                 return functools.partial(self.release_lock, stream_id)
-            elif time.time() - start_time > 0.05:
-                raise Exception("Unable to lock stream", stream_id)
+            elif time.time() - start_time > 0.1:
+                raise tornado.web.HTTPError(400, reason="stream is busy")
 
+    @tornado.gen.coroutine
     def scruffy(self):
         """ Cleans up after streams with bad locks. """
-        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-10):
+        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-3):
             message = 'Scruffy found a bad stream: '+stream_id
             logging.getLogger('tornado.application').critical(message)
-
             if not Stream.exists(stream_id, self.db):
                 stream_dir = os.path.join(self.streams_folder, stream_id)
                 if os.path.exists(stream_dir):
                     os.shutil.rmtree(stream_dir)
             else:
-                self.deactivate_stream(stream_id)
+                yield self.deactivate_stream(stream_id)
             self.release_lock(stream_id)
     
     def acquire_lock(self, resource):
