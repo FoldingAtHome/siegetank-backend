@@ -103,6 +103,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                               method='PUT',
                               body='',
                               headers=headers)
+        if response.code != 200:
+            print(response.code, response.body)
         self.assertEqual(response.code, 200)
 
     def _get_stream_id_from_token(self, token):
@@ -172,7 +174,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         for filename, filebin in files.items():
             data = self._download(stream_id, 'files/'+filename)
             self.assertEqual(filebin.encode(), data)
-
         target = scv.Target(target_id, self.scv.db)
         self.assertFalse(target.zscore('queue', stream_id) is None)
         self.assertTrue(scv.Stream.exists(stream_id, self.scv.db))
@@ -186,6 +187,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [self.scv.name])
+        self._delete_stream(stream_id)
 
     def test_delete_stream(self):
         result = self._post_stream()
@@ -231,6 +233,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertAlmostEqual(self.scv.db.zscore('heartbeats', stream1),
                                time.time()+increment, 1)
         self.assertEqual(self._get_stream_id_from_token(token), stream1)
+        self._delete_stream(stream1)
 
     def test_get_active_streams(self):
         tornado.options.options.heartbeat_increment = 10
@@ -259,6 +262,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                 streams.add(sid)
         self.assertEqual(targets, {target_id})
         self.assertEqual(streams, {stream1, new_stream1})
+
+        self._delete_stream(stream1)
+        self._delete_stream(new_stream1)
 
     def test_delete_target(self):
         total_streams = set()
@@ -324,20 +330,22 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         core_files = json.loads(response.body.decode())['files']
         files[replacement_filename] = checkpoint_bin.decode()
         self.assertEqual(core_files, files)
+        self._delete_stream(stream_id)
 
     def test_core_frame(self):
-        result = self._post_and_activate_stream()
+        result = self._core_start()
         stream_id = result['stream_id']
         target_id = result['target_id']
         files = result['files']
         token = result['token']
         headers = {'Authorization': token}
-        self._core_start(target_id)
 
         frame_buffer = bytes()
         n_frames = 25
         active_stream = scv.ActiveStream(stream_id, self.scv.db)
         stream = scv.Stream(stream_id, self.scv.db)
+
+        initial_keys = set(self.scv.db.keys('*'))
 
         # PUT 20 frames
         for count in range(n_frames):
@@ -410,16 +418,28 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
+        # make sure redis key size stays the same throughout
+        finished_keys = set(self.scv.db.keys('*'))
+        self.assertEqual(initial_keys, finished_keys)
+
+        # stop the stream
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+        deactivated = set(self.scv.db.keys('*'))
+        for key in deactivated:
+            self.assertTrue('active_stream' not in key)
+            self.assertTrue('auth_token' not in key)
+        self._delete_stream(stream_id)
 
     def test_core_frame_variadic(self):
-        result = self._post_and_activate_stream()
+        result = self._core_start()
         stream_id = result['stream_id']
         target_id = result['target_id']
         files = result['files']
         token = result['token']
         headers = {'Authorization': token}
         manager_headers = {'Authorization': self.auth_token}
-        self._core_start(target_id)
 
         active_stream = scv.ActiveStream(stream_id, self.scv.db)
         stream = scv.Stream(stream_id, self.scv.db)
@@ -468,6 +488,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['frame_files'], ['frames.xtc'])
         self.assertEqual(reply.code, 200)
         self.assertEqual(reply.code, 200)
+        self._delete_stream(stream_id)
 
     def test_core_stop(self):
         result = self._post_and_activate_stream()
@@ -493,6 +514,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                                    stream_id, 'buffer_frames.xtc')
         self.assertFalse(os.path.exists(buffer_path))
         stream_id, token = self._activate_stream(target_id)
+        self._delete_stream(stream_id)
 
     def test_core_stop_error(self):
         result = self._post_and_activate_stream()
@@ -527,6 +549,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         buffer_path = os.path.join(self.scv.streams_folder,
                                    stream_id, 'buffer_frames.xtc')
         self.assertFalse(os.path.exists(buffer_path))
+        self._delete_stream(stream_id)
 
     def test_stream_upload(self):
         result = self._post_stream()
@@ -553,19 +576,20 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         reply = self.fetch('/streams/upload/'+stream_id+'/files/'+random_file,
                            method='PUT', body=random_binary, headers=headers)
         self.assertEqual(reply.code, 200)
-
         data = self._download(stream_id, 'files/'+random_file)
         self.assertEqual(data, random_binary)
 
+        self._delete_stream(stream_id)
+
     def test_stream_cycle(self):
-        result = self._post_and_activate_stream()
+        result = self._core_start()
         stream_id = result['stream_id']
         target_id = result['target_id']
         files = result['files']
         token = result['token']
         headers = {'Authorization': token}
         manager_headers = {'Authorization': self.auth_token}
-        self._core_start(target_id)
+        
 
         frame_buffer = bytes()
         n_frames = 25
@@ -658,6 +682,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['frame_files'], ['frames.xtc'])
         self.assertEqual(reply.code, 200)
 
+        self._delete_stream(stream_id)
+
     def test_stream_start_stop(self):
         result = self._post_and_activate_stream()
         target_id = result['target_id']
@@ -694,6 +720,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         # activating stream should succeed
         stream_id_activated, token_id = self._activate_stream(target_id)
         self.assertEqual(stream_id, stream_id_activated)
+
+        self._delete_stream(stream_id)
 
     def test_priority_queue(self):
         # test to make sure we get the stream with the most number of frames
@@ -744,6 +772,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         new_stream_id, token = self._activate_stream(target_id)
         self.assertEqual(stream_id, new_stream_id)
 
+        self._delete_stream(stream_id)
+
     def test_heartbeat(self):
         tornado.options.options.heartbeat_increment = 5
         result = self._post_and_activate_stream()
@@ -772,6 +802,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.io_loop.run_sync(self.scv.check_heartbeats)
         self.assertEqual(scv.ActiveStream.members(self.scv.db), set())
 
+        self._delete_stream(stream_id)
+
     def test_expiration(self):
         # test posting a bunch of streams, make random heartbeats to make sure
         # they expire, assert that active_streams U queue = total streams
@@ -784,6 +816,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             stream_ids.append(self._post_stream(target_id)['stream_id'])
         target = scv.Target(target_id, self.scv.db)
         total_streams = target.smembers('streams')
+        self.assertEqual(set(stream_ids), total_streams)
         for i in range(2):
             activation_times = []
             action_times = []
@@ -824,10 +857,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                 self.assertEqual(target_queue.union(active_streams),
                                  total_streams)
 
-            # queue U active_streams should equal to total streams
-            # target_queue = set(target.zrange('queue', 0, -1))
-            # active_streams = scv.ActiveStream.members(self.scv.db)
-            # self.assertEqual(target_queue.union(active_streams), total_streams)
             time.sleep(20)
 
             self.io_loop.run_sync(self.scv.check_heartbeats)
@@ -835,7 +864,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             self.assertEqual(target_queue, total_streams)
             active_streams = scv.ActiveStream.members(self.scv.db)
             self.assertEqual(active_streams, set())
-            # queue U active_streams should equal to total streams
+
+        for stream in stream_ids:
+            self._delete_stream(stream)
 
 
 if __name__ == '__main__':

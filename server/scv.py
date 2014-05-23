@@ -426,6 +426,8 @@ class StreamStartHandler(BaseHandler):
         if stream_owner != current_user:
             return self.set_status(401)
 
+        unlock = self.start_lock(stream_id)
+
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -437,6 +439,8 @@ class StreamStartHandler(BaseHandler):
             count = stream.hget('frames')
             target.zadd('queue', stream_id, count, pipeline=pipeline)
             pipeline.execute()
+
+        unlock()
 
         return self.set_status(200)
 
@@ -516,7 +520,7 @@ class StreamDeleteHandler(BaseHandler):
         """
         # delete from database before deleting from disk
         if not Stream.exists(stream_id, self.db):
-            return self.set_status(400)
+            self.error('Invalid stream_id:', stream_id)
 
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
@@ -528,6 +532,7 @@ class StreamDeleteHandler(BaseHandler):
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
+
         yield self.deactivate_stream(stream_id)
 
         pipeline = self.db.pipeline()
@@ -666,11 +671,6 @@ class CoreFrameHandler(BaseHandler):
 
             :status 200: OK
             :status 400: Bad request
-
-            If the filename ends in b64, it is b64 decoded. If the remaining
-            suffix ends in gz, it is unzipped. Afterwards, the file is written
-            to disk with the name buffer_[filename], with the b64/gz suffixes
-            stripped.
 
         """
         # There are four intervals:
