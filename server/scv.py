@@ -62,12 +62,7 @@ class Target(Entity):
     prefix = 'target'
     fields = {'queue': zset(str)}  # queue of inactive streams
 
-
-#ActiveStream.add_lookup('auth_token')
-#ActiveStream.add_lookup('user', injective=False)
 relate(Target, 'streams', {Stream}, 'target')
-relate(Target, 'active_streams', {ActiveStream})
-
 
 class BaseHandler(CommonHandler):
 
@@ -346,14 +341,11 @@ class StreamsHandler(BaseHandler):
             self.error('Invalid user', 401)
         if not self.is_manager():
             self.error('User is not a manager', 401)
-
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
         stream_files = content['files']
-
         stream_id = str(uuid.uuid4())+':'+self.application.name
         unlock = self.start_lock(stream_id)
-
         script = """
         local target_id = KEYS[1]
         local stream_id = KEYS[2]
@@ -371,9 +363,16 @@ class StreamsHandler(BaseHandler):
         redis.call('sadd', 'target:'..target_id..':streams', stream_id)
         return new_target
         """
-
         action = self.db.register_script(script)
         is_new_target = action(keys=[target_id, stream_id])
+        stream_dir = os.path.join(self.application.streams_folder, stream_id)
+        files_dir = os.path.join(stream_dir, 'files')
+        if not os.path.exists(files_dir):
+            os.makedirs(files_dir)
+        for filename, binary in stream_files.items():
+            with open(os.path.join(files_dir, filename), 'w') as handle:
+                handle.write(binary)
+        unlock()
 
         if is_new_target:
             cursor = self.motor.data.targets
@@ -382,15 +381,6 @@ class StreamsHandler(BaseHandler):
             if not result['ok']:
                 self.set_status(400)
                 return self.write('Could not access mdb while adding stream')
-        stream_dir = os.path.join(self.application.streams_folder, stream_id)
-        files_dir = os.path.join(stream_dir, 'files')
-        if not os.path.exists(files_dir):
-            os.makedirs(files_dir)
-        for filename, binary in stream_files.items():
-            with open(os.path.join(files_dir, filename), 'w') as handle:
-                handle.write(binary)
-
-        unlock()
 
         self.set_status(200)
         self.write({'stream_id': stream_id})
@@ -425,13 +415,10 @@ class StreamStartHandler(BaseHandler):
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
             return self.set_status(401)
-
         unlock = self.start_lock(stream_id)
-
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
-
         if stream.hget('status') != 'OK':
             pipeline = self.db.pipeline()
             stream.hset('status', 'OK', pipeline=pipeline)
@@ -439,9 +426,7 @@ class StreamStartHandler(BaseHandler):
             count = stream.hget('frames')
             target.zadd('queue', stream_id, count, pipeline=pipeline)
             pipeline.execute()
-
         unlock()
-
         return self.set_status(200)
 
 
@@ -474,9 +459,7 @@ class StreamStopHandler(BaseHandler):
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
             return self.set_status(401)
-
         unlock = self.start_lock(stream_id)
-
         yield self.deactivate_stream(stream_id)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
@@ -486,9 +469,7 @@ class StreamStopHandler(BaseHandler):
             stream.hset('status', 'STOPPED', pipeline=pipeline)
             target.zrem('queue', stream_id, pipeline=pipeline)
             pipeline.execute()
-
         unlock()
-
         return self.set_status(200)
 
 
@@ -521,24 +502,25 @@ class StreamDeleteHandler(BaseHandler):
         # delete from database before deleting from disk
         if not Stream.exists(stream_id, self.db):
             self.error('Invalid stream_id:', stream_id)
-
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
             return self.set_status(401)
-
         unlock = self.start_lock(stream_id)
-
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
-
         yield self.deactivate_stream(stream_id)
-
         pipeline = self.db.pipeline()
         target.zrem('queue', stream_id, pipeline=pipeline)
         stream.delete(pipeline=pipeline)
         pipeline.execute()
+        stream_path = os.path.join(self.application.streams_folder, stream_id)
+        # TODO: can change to subprocess.call(['rm', '-rf', stream_path])
+        # since it's much much faster (4x as fast in certain scenarios)
+        shutil.rmtree(stream_path)
+        self.set_status(200)
+        unlock()
         if target.scard('streams') == 0:
             cursor = self.motor.data.targets
             result = yield cursor.update({'_id': target_id},
@@ -550,13 +532,6 @@ class StreamDeleteHandler(BaseHandler):
                 self.set_status(400)
                 return self.write(result['ok'])
             target.delete()
-        stream_path = os.path.join(self.application.streams_folder, stream_id)
-        # TODO: can change to subprocess.call(['rm', '-rf', stream_path])
-        # since it's much much faster (4x as fast in certain scenarios)
-        shutil.rmtree(stream_path)
-        self.set_status(200)
-
-        unlock()
 
 
 class CoreStartHandler(BaseHandler):
@@ -631,10 +606,10 @@ class CoreStartHandler(BaseHandler):
             with open(file_path, 'r') as handle:
                 if filename not in reply['files']:
                     reply['files'][filename] = handle.read()
+        unlock()
         reply['stream_id'] = stream_id
         reply['target_id'] = target_id
         cursor = self.motor.data.targets
-        unlock()
         result = yield cursor.find_one({'_id': target_id}, {'options': 1})
         reply['options'] = result['options']
         self.set_status(200)
@@ -1149,12 +1124,10 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     def scruffy(self):
         """ Cleans up after streams with bad locks. """
-        print('Scruffy is at work....')
-        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-5):
+        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-10):
             message = 'Scruffy found a bad stream: '+stream_id
             logging.getLogger('tornado.application').critical(message)
 
-            # 1. See if the stream exists in the the db.
             if not Stream.exists(stream_id, self.db):
                 stream_dir = os.path.join(self.streams_folder, stream_id)
                 if os.path.exists(stream_dir):
