@@ -1126,7 +1126,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
         start_time = time.time()
         while(True):
             if self.acquire_lock(stream_id):
-                print('acquired lock successfully')
                 return functools.partial(self.release_lock, stream_id)
             elif time.time() - start_time > 0.05:
                 raise Exception("Unable to lock stream", stream_id)
@@ -1142,6 +1141,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
         # 1. Find expired locks by seeing if there any locks more than 1 minute
         # older than current time
+        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-2):
+            pass
+
 
         # 2. Remove all files from the buffers folder if it exists.
 
