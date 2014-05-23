@@ -75,7 +75,7 @@ class BaseHandler(CommonHandler):
         return self.db.get('auth_token:'+token+':active_stream')
 
     def initialize(self):
-        self.deactivate_stream = self.application.deactivate_stream
+        self.cleanup_stream = self.application.cleanup_stream
         self.start_lock = self.application.start_lock
 
     @tornado.gen.coroutine
@@ -89,8 +89,7 @@ class BaseHandler(CommonHandler):
     def authenticate_core(self):
         """ Authenticate a core to see if the given token is mapped to a
         particular active_stream or not. If so, it returns (stream_id, method),
-        where method is used for unlocking the stream. If the given token does
-        not map to a particular stream, then a tuple of two Nones are returned.
+        where method is used for unlocking the stream.
         """
 
         if not 'Authorization' in self.request.headers:
@@ -112,9 +111,9 @@ class BaseHandler(CommonHandler):
         end
         """
 
-        acquire_lock = self.db.register_script(script)
+        action = self.db.register_script(script)
         while(True):
-            result = acquire_lock(keys=[token, time.time()])
+            result = action(keys=[token, time.time()])
             if result == -2:
                 self.error('invalid stream')
             elif result == -1:
@@ -464,7 +463,9 @@ class StreamStopHandler(BaseHandler):
         if stream_owner != current_user:
             return self.set_status(401)
 
-        yield self.deactivate_stream(stream_id)
+        unlock = self.start_lock(stream_id)
+
+        yield self.cleanup_stream(stream_id)
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
@@ -473,6 +474,9 @@ class StreamStopHandler(BaseHandler):
             stream.hset('status', 'STOPPED', pipeline=pipeline)
             target.zrem('queue', stream_id, pipeline=pipeline)
             pipeline.execute()
+
+        unlock()
+
         return self.set_status(200)
 
 
@@ -503,18 +507,23 @@ class StreamDeleteHandler(BaseHandler):
 
         """
         # delete from database before deleting from disk
+
+        # this method is horrendously not safe right now, need to fix.
+
         if not Stream.exists(stream_id, self.db):
             return self.set_status(400)
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
             return self.set_status(401)
+
+        unlock = self.start_lock(stream_id)
+
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         target = Target(target_id, self.db)
-
+        yield self.cleanup_stream(stream_id)
         pipeline = self.db.pipeline()
-        yield self.deactivate_stream(stream_id)
         target.zrem('queue', stream_id, pipeline=pipeline)
         stream.delete(pipeline=pipeline)
         pipeline.execute()
@@ -534,6 +543,8 @@ class StreamDeleteHandler(BaseHandler):
         # since it's much much faster (4x as fast in certain scenarios)
         shutil.rmtree(stream_path)
         self.set_status(200)
+
+        unlock()
 
 
 class CoreStartHandler(BaseHandler):
@@ -848,9 +859,8 @@ class CoreStopHandler(BaseHandler):
             with open(log_path, 'a') as handle:
                 handle.write(time.strftime("%c")+'\n'+message)
         self.set_status(200)
+        yield self.cleanup_stream(stream_id)
         unlock()
-        yield self.application.deactivate_stream(stream_id)
-
 
 class ActiveStreamsHandler(BaseHandler):
 
@@ -1131,27 +1141,14 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 raise Exception("Unable to lock stream", stream_id)
 
     def scruffy(self):
-        """ Cleans up after streams have ended up in a failed state, due to a
-        process randomly dying or something similarly bad. Scruffy is
-        idempotent, which means that it can be called multiple times in case
-        scruffy itself dies. Scruffy assumes that it is the only cleaner of
-        streams in the case of expired locks, so be sure to run scruffy on a
-        single process. Note that scruffy does not know which particular
-        action resulted in the bad stream so it attempts a full recovery. """
-
-        # 1. Find expired locks by seeing if there any locks more than 1 minute
-        # older than current time
-        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-2):
-            pass
-
-
-        # 2. Remove all files from the buffers folder if it exists.
-
-        # 3. Remove the stream from active_streams and add the stream back into
-        # the queue.
-
-        # 4. Release the lock
-
+        """ Cleans up after streams with bad locks. """
+        print('Scruffy is at work....')
+        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-5):
+            message = 'Scruffy found a bad stream: '+stream_id
+            logging.getLogger('tornado.application').critical(message)
+            self.cleanup_stream(stream_id)
+            self.release_lock(stream_id)
+    
     def acquire_lock(self, resource):
         script = """
         local resource = KEYS[1]
@@ -1174,39 +1171,14 @@ class SCV(BaseServerMixin, tornado.web.Application):
     def release_lock(self, resource):
         self.db.zrem('locks', resource)
 
-    def _get_command_centers(self):
-        """ Return a dict of Command Center names and hosts. """
-
     @tornado.gen.coroutine
-    def _register(self):
+    def register(self):
         """ Register the SCV in MDB. """
         cursor = self.motor.servers.scvs
         yield cursor.update({'_id': self.name},
                             {'_id': self.name,
                              'password': self.password,
                              'host': self.external_host}, upsert=True)
-
-    @tornado.gen.coroutine
-    def maintain_integrity(self):
-        # deprecate with scruffy...
-        """ Maintain integrity of the streams by ensuring that redis entries
-            are consistent with stream data.
-        """
-        print('Checking for bad streams...', end="", flush=True)
-        # check for bad locks:
-        locks = self.db.keys('lock:*')
-        for lock in locks:
-            stream_id = lock[5:]
-            print("Found bad stream: ", stream_id)
-            stream_dir = os.path.join(self.streams_folder, stream_id)
-            li = sorted([int(f) for f in os.listdir(stream_dir) if f.isdigit()])
-            stream = Stream(stream_id, self.db)
-            if len(li) == 0:
-                stream.hset('frames', 0)
-            else:
-                stream.hset('frames', li[-1])
-            yield self.deactivate_stream(stream_id)
-        print(' done')
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
@@ -1244,15 +1216,13 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def check_heartbeats(self):
         for dead_stream in self.db.zrangebyscore('heartbeats', 0, time.time()):
-            yield self.deactivate_stream(dead_stream)
+            unlock = self.start_lock(dead_stream)
+            self.cleanup_stream(dead_stream)
+            unlock()
 
     @tornado.gen.coroutine
-    def deactivate_stream(self, stream_id):
-
-        unlock = self.start_lock(stream_id)
-        #print('DEBUG1', self.db.smembers('active_streams'))
-        #print('DEBUG2', self.db.hgetall('active_stream:'+stream_id))
-        # TODO: Configurable weights
+    def cleanup_stream(self, stream_id):
+        """ Clean up a stream. """
         script = """
         local stream_id = KEYS[1]
         if redis.call('sismember', 'active_streams', stream_id) == 0 then
@@ -1285,7 +1255,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
             buffer_path = os.path.join(stream_path, 'buffer_files')
             if os.path.exists(buffer_path):
                 shutil.rmtree(buffer_path)
-            unlock()
             if frames:
                 body = {
                     'engine': engine,
@@ -1296,9 +1265,19 @@ class SCV(BaseServerMixin, tornado.web.Application):
                     'stream': stream_id
                 }
                 cursor = self.motor.stats.fragments
-                yield cursor.insert(body)
-        else:
-            unlock()
+                attempts = 0
+                while(attempts < 3):
+                    try:
+                        yield cursor.insert(body)
+                        break
+                    except:
+                        yield tornado.gen.Task(
+                            tornado.ioloop.IOLoop.instance().add_timeout,
+                            time.time() + 5)
+                        attempts += 1
+                if attempts == 3:
+                    message = 'Could not record fragment: '+json.dumps(body)
+                    logging.getLogger('tornado.general').critical(message)
 
 #########################
 # Defined here globally #
@@ -1333,11 +1312,12 @@ def start():
     instance.initialize_motor()
 
     if tornado.process.task_id() == 0:
-        tornado.ioloop.IOLoop.instance().run_sync(instance.maintain_integrity)
-        tornado.ioloop.IOLoop.instance().add_callback(instance.check_heartbeats)
-        tornado.ioloop.IOLoop.instance().add_callback(instance._register)
+        tornado.ioloop.IOLoop.instance().run_sync(instance.scruffy)
+        tornado.ioloop.IOLoop.instance().run_sync(instance.check_heartbeats)
+        tornado.ioloop.IOLoop.instance().run_sync(instance.register)
         frequency = tornado.options.options['check_heart_frequency_in_ms']
         pulse = tornado.ioloop.PeriodicCallback(instance.check_heartbeats,
                                                 frequency)
         pulse.start()
+        tornado.ioloop.PeriodicCallback(instance.scruffy, 2000).start()
     tornado.ioloop.IOLoop.instance().start()
