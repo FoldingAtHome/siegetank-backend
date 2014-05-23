@@ -164,6 +164,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         target_id = result['target_id']
         files = result['files']
 
+        print('downloading stream...')
+
         for filename, filebin in files.items():
             data = self._download(stream_id, 'files/'+filename)
             self.assertEqual(filebin.encode(), data)
@@ -350,6 +352,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         body = {'files': {replacement_filename: checkpoint_bin.decode()}}
         response = self.fetch('/core/checkpoint', headers=headers,
                               body=json.dumps(body), method='PUT')
+
         self.assertEqual(response.code, 200)
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
         self.assertEqual(stream.hget('frames'), n_frames)
@@ -403,6 +406,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
 
     def test_core_frame_variadic(self):
         result = self._post_and_activate_stream()

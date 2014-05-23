@@ -74,9 +74,9 @@ class BaseHandler(CommonHandler):
     def get_stream_id_from_token(self, token):
         return self.db.get('auth_token:'+token+':active_stream')
 
-    @property
-    def deactivate_stream(self):
-        return self.application.deactivate_stream
+    def initialize(self):
+        self.deactivate_stream = self.application.deactivate_stream
+        self.start_lock = self.application.start_lock
 
     @tornado.gen.coroutine
     def get_stream_owner(self, stream_id):
@@ -87,17 +87,44 @@ class BaseHandler(CommonHandler):
         return query['owner']
 
     def authenticate_core(self):
-        """ Returns a stream_id if token is valid, None otherwise """
-        try:
-            token = self.request.headers['Authorization']
-            stream_id = self.get_stream_id_from_token(token)
-            if stream_id:
-                return stream_id
-            else:
-                return None
-        except:
-            return None
+        """ Authenticate a core to see if the given token is mapped to a
+        particular active_stream or not. If so, it returns (stream_id, method),
+        where method is used for unlocking the stream. If the given token does
+        not map to a particular stream, then a tuple of two Nones are returned.
+        """
 
+        if not 'Authorization' in self.request.headers:
+            self.error('Missing Authorization header')
+        token = self.request.headers['Authorization']
+        script = """
+        local token = KEYS[1]
+        local time = KEYS[2]
+        local stream_id = redis.call('get', 'auth_token:'..token..':active_stream')
+        if not stream_id then
+            return -2
+        end
+        local already_locked = redis.call('zscore', 'locks', stream_id)
+        if already_locked then
+            return -1
+        else
+            redis.call('zadd', 'locks', time, stream_id)
+            return stream_id
+        end
+        """
+
+        acquire_lock = self.db.register_script(script)
+        while(True):
+            result = acquire_lock(keys=[token, time.time()])
+            if result == -2:
+                self.error('invalid stream')
+            elif result == -1:
+                # add retry logic
+                # self.error('FATAL: stream locked')
+                pass
+            else:
+                stream_id = result
+                unlock = functools.partial(self.application.release_lock, stream_id)
+                return stream_id, unlock
 
 def authenticate_cc(method):
     """ Decorator for handlers that require the incoming request's remote_ip
@@ -111,26 +138,6 @@ def authenticate_cc(method):
         else:
             return method(self, *args, **kwargs)
 
-    return wrapper
-
-
-def authenticate_core(method):
-    """ Decorator for core methods used for authentication. The authorization
-    token is mapped to a stream_id that is passed in as an argument.
-    """
-    @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
-        try:
-            token = self.request.headers['Authorization']
-        except:
-            self.write({'error': 'missing Authorization header'})
-            return self.set_status(401)
-        stream_id = self.get_stream_id_from_token(token)
-        if stream_id:
-            return method(self, stream_id)
-        else:
-            self.write({'error': 'bad Authorization header'})
-            return self.set_status(401)
     return wrapper
 
 
@@ -207,7 +214,7 @@ class TargetStreamsHandler(BaseHandler):
         try:
             target = Target(target_id, self.db)
         except KeyError:
-            return self.error('specified target does not exist on this scv')
+            self.error('specified target does not exist on this scv')
         streams = list(target.smembers('streams'))
         self.set_status(200)
         body = {'streams': streams}
@@ -249,7 +256,7 @@ class StreamActivateHandler(BaseHandler):
         """
 
         if self.request.headers['Authorization'] != self.application.password:
-            return self.error('Not authorized', code=401)
+            self.error('Not authorized', code=401)
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         target_id = content["target_id"]
@@ -296,7 +303,7 @@ class StreamActivateHandler(BaseHandler):
             self.set_status(200)
             return self.write({'token': token})
         else:
-            return self.error('No streams available')
+            self.error('No streams available')
 
 
 class StreamsHandler(BaseHandler):
@@ -334,12 +341,13 @@ class StreamsHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        print(1)
         self.set_status(400)
         current_user = yield self.get_current_user()
         if current_user is None:
-            return self.error('Invalid user', 401)
+            self.error('Invalid user', 401)
         if not self.is_manager():
-            return self.error('User is not a manager', 401)
+            self.error('User is not a manager', 401)
 
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
@@ -349,7 +357,7 @@ class StreamsHandler(BaseHandler):
             target = Target.create(target_id, self.db)
         else:
             target = Target(target_id, self.db)
-
+        print(2)
         # Bad if server dies here
         cursor = self.motor.data.targets
         result = yield cursor.update({'_id': target_id},
@@ -366,7 +374,7 @@ class StreamsHandler(BaseHandler):
         for filename, binary in stream_files.items():
             with open(os.path.join(files_dir, filename), 'w') as handle:
                 handle.write(binary)
-
+        print(3)
         pipeline = self.db.pipeline()
         target.zadd('queue', stream_id, 0, pipeline=pipeline)
         stream_fields = {
@@ -578,16 +586,14 @@ class CoreStartHandler(BaseHandler):
         #
         # In other words, the core does not write frames for the zeroth frame.
         self.set_status(400)
-        stream_id = self.authenticate_core()
-        if not stream_id:
-            return self.error('Bad core token', code=401)
+        stream_id, unlock = self.authenticate_core()
         stream = Stream(stream_id, self.db)
         target_id = stream.hget('target')
         assert stream.hget('status') == 'OK'
         reply = dict()
         reply['files'] = dict()
         seed_files_dir = os.path.join(self.application.streams_folder,
-                                         stream_id, 'files')
+                                      stream_id, 'files')
         frames = stream.hget('frames')
         if frames > 0:
             checkpoint_files = os.path.join(self.application.streams_folder,
@@ -605,6 +611,7 @@ class CoreStartHandler(BaseHandler):
         reply['stream_id'] = stream_id
         reply['target_id'] = target_id
         cursor = self.motor.data.targets
+        unlock()
         result = yield cursor.find_one({'_id': target_id}, {'options': 1})
         reply['options'] = result['options']
         self.set_status(200)
@@ -671,13 +678,12 @@ class CoreFrameHandler(BaseHandler):
         # fwi = 2
         # fsi = cwf = 100
         # sci = 2x per day
-        stream_id = self.authenticate_core()
-        if not stream_id:
-            return self.error('Bad core token', code=401)
+        stream_id, unlock = self.authenticate_core()
         self.set_status(400)
         active_stream = ActiveStream(stream_id, self.db)
         frame_hash = hashlib.md5(self.request.body).hexdigest()
         if active_stream.hget('frame_hash') == frame_hash:
+            unlock()
             return self.set_status(200)
         active_stream.hset('frame_hash', frame_hash)
         content = json.loads(self.request.body.decode())
@@ -685,7 +691,8 @@ class CoreFrameHandler(BaseHandler):
             frame_count = content['frames']
             if frame_count < 1:
                 self.set_status(400)
-                return self.write({'error': 'frames < 1'})
+                unlock()
+                self.error('frames < 1')
         else:
             frame_count = 1
         files = content['files']
@@ -708,7 +715,7 @@ class CoreFrameHandler(BaseHandler):
             with open(buffer_filename, 'ab') as buffer_handle:
                 buffer_handle.write(filedata)
         active_stream.hincrby('buffer_frames', frame_count)
-
+        unlock()
         return self.set_status(200)
 
 
@@ -760,13 +767,8 @@ class CoreCheckpointHandler(BaseHandler):
         # away. Note that when the server starts, all streams are deactivated.
 
         self.set_status(400)
-        stream_id = self.authenticate_core()
-        if not stream_id:
-            return self.error('Bad core token', code=401)
+        stream_id, unlock = self.authenticate_core()
         content = json.loads(self.request.body.decode())
-
-        unlock = self.start_lock(stream_id)
-
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
         stream_frames = stream.hget('frames')
@@ -774,6 +776,7 @@ class CoreCheckpointHandler(BaseHandler):
         total_frames = stream_frames + buffer_frames
         # Important check for idempotency
         if buffer_frames == 0:
+            unlock()
             return self.set_status(200)
         streams_folder = self.application.streams_folder
         buffer_folder = os.path.join(streams_folder, stream_id, 'buffer_files')
@@ -833,9 +836,7 @@ class CoreStopHandler(BaseHandler):
             :status 400: Bad request
 
         """
-        stream_id = self.authenticate_core()
-        if not stream_id:
-            return self.error('Bad core token', code=401)
+        stream_id, unlock = self.authenticate_core()
         # TODO: add field denoting if stream should be finished
         stream = Stream(stream_id, self.db)
         content = json.loads(self.request.body.decode())
@@ -847,6 +848,7 @@ class CoreStopHandler(BaseHandler):
             with open(log_path, 'a') as handle:
                 handle.write(time.strftime("%c")+'\n'+message)
         self.set_status(200)
+        unlock()
         yield self.application.deactivate_stream(stream_id)
 
 
@@ -938,7 +940,7 @@ class StreamSyncHandler(BaseHandler):
         """
         self.set_status(400)
         if not Stream.exists(stream_id, self.db):
-            return self.error('Stream does not exist')
+            self.error('Stream does not exist')
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
@@ -1006,9 +1008,9 @@ class StreamUploadHandler(BaseHandler):
             return self.set_status(401)
         stream = Stream(stream_id, self.db)
         if stream.hget('status') != 'STOPPED':
-            return self.error('Stream must be stopped before upload')
+            self.error('Stream must be stopped before upload')
         if not Stream.exists(stream_id, self.db):
-            return self.error('Stream does not exist')
+            self.error('Stream does not exist')
         # prevent files from leaking out
         streams_folder = self.application.streams_folder
         stream_dir = os.path.abspath(os.path.join(streams_folder, stream_id))
@@ -1018,10 +1020,10 @@ class StreamUploadHandler(BaseHandler):
         if requested_file[0:len(stream_dir)] != stream_dir:
             return
         if not os.path.exists(requested_file):
-            return self.error('Requested file does not exist')
+            self.error('Requested file does not exist')
         md5 = self.request.headers.get('Content-MD5')
         if md5 != hashlib.md5(self.request.body).hexdigest():
-            return self.error('MD5 mismatch')
+            self.error('MD5 mismatch')
         with open(requested_file, 'wb') as f:
             f.write(self.request.body)
         self.set_status(200)
@@ -1064,13 +1066,13 @@ class StreamDownloadHandler(BaseHandler):
         if requested_file[0:len(stream_dir)] != stream_dir:
             return
         if not Stream.exists(stream_id, self.db):
-            return self.error('Stream does not exist')
+            self.error('Stream does not exist')
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
         if stream_owner != current_user:
             return self.set_status(401)
         if not os.path.exists(requested_file):
-            return self.error('Requested file does not exist')
+            self.error('Requested file does not exist')
 
         self.set_header('Content-Type', 'application/octet-stream')
         self.set_header('Content-Length', os.path.getsize(requested_file))
@@ -1089,8 +1091,8 @@ class StreamDownloadHandler(BaseHandler):
 
 
 class CoreHeartbeatHandler(BaseHandler):
-    @authenticate_core
-    def post(self, stream_id):
+
+    def post(self):
         """
         .. http:post:: /core/heartbeat
 
@@ -1103,16 +1105,18 @@ class CoreHeartbeatHandler(BaseHandler):
             :status 400: Bad request
 
         """
+        stream_id, unlock = self.authenticate_core()
         increment = tornado.options.options['heartbeat_increment']
         self.db.zadd('heartbeats', stream_id, time.time()+increment)
         self.set_status(200)
+        unlock()
 
 
 class SCV(BaseServerMixin, tornado.web.Application):
 
     def start_lock(self, stream_id):
-        """ Lock the stream with id ```stream_id``` and return an unlock
-        function for invocation later on.
+        """ Lock stream_id and return an unlock function for invocation later
+        on. Acquiring the lock fully blocks the event loop.
 
         Usage:
 
@@ -1121,28 +1125,54 @@ class SCV(BaseServerMixin, tornado.web.Application):
         unlock()
 
         """
-        token = str(uuid.uuid4())
-        start = functools.partial(self.acquire_stream_lock,
-                                  stream_id=stream_id, token=token)
-        start()
-        stop = functools.partial(self.release_stream_lock,
-                                 stream_id=stream_id, token=token)
-        return stop
+        start_time = time.time()
+        while(True):
+            if self.acquire_lock(stream_id):
+                print('acquired lock successfully')
+                return functools.partial(self.release_lock, stream_id)
+            elif time.time() - start_time > 0.05:
+                raise Exception("Unable to lock stream", stream_id)
 
-    def acquire_stream_lock(self, stream_id, token, max_time=1000):
-        while(not self.db.set('lock:'+stream_id, token, nx=True, px=max_time)):
-            time.sleep(0.05)
+    def scruffy(self):
+        """ cleans up after streams have ended up in a failed state, due to a
+        process randomly dying or something similarly bad. Scruffy is
+        idempotent, which means that it can be called multiple times in case
+        scruffy itself dies. Scruffy assumes that it is the only cleaner of
+        streams in the case of expired locks, so be sure to run scruffy on a
+        single process. Note that scruffy does not know which particular
+        action resulted in the bad stream. """
 
-    def release_stream_lock(self, stream_id, token):
+        # 1. Find expired locks by seeing if there any locks more than 1 minute
+        # older than current time
+
+        # 2. Remove all files from the buffers folder if it exists.
+
+        # 3. Remove the stream from active_streams and add the stream back into
+        # the queue.
+
+        # 4. Release the lock
+
+    def acquire_lock(self, resource):
         script = """
-        local stream_id = KEYS[1]
-        local token = KEYS[2]
-        if redis.call("get", 'lock:'..stream_id) == token then
-            return redis.call("del", 'lock:'..stream_id)
+        local resource = KEYS[1]
+        local time = KEYS[2]
+        local already_locked = redis.call('zscore', 'locks', resource)
+        if already_locked then
+            return false
+        else
+            redis.call('zadd', 'locks', time, resource)
+            return 'OK'
         end
         """
-        action = self.db.register_script(script)
-        action(keys=[stream_id, token])
+        acquire_lock = self.db.register_script(script)
+        result = acquire_lock(keys=[resource, time.time()])
+        if result == 'OK':
+            return True
+        else:
+            return False
+
+    def release_lock(self, resource):
+        self.db.zrem('locks', resource)
 
     def _get_command_centers(self):
         """ Return a dict of Command Center names and hosts. """
@@ -1158,6 +1188,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def maintain_integrity(self):
+        # deprecate with scruffy...
         """ Maintain integrity of the streams by ensuring that redis entries
             are consistent with stream data.
         """
@@ -1184,7 +1215,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
         self.streams_folder = os.path.join(self.data_folder, streams_folder)
         if not os.path.exists(self.streams_folder):
             os.makedirs(self.streams_folder)
-        #self.maintain_integrity()
         self.ccs = None
         self.db.setnx('password', str(uuid.uuid4()))
         self.password = self.db.get('password')
@@ -1245,7 +1275,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
         """
         action = self.db.register_script(script)
         result = action(keys=[stream_id])
-        #print('DEBUG3', result)
         if result:
             frames = result[0]
             user = result[1]

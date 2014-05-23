@@ -98,10 +98,6 @@ class CommonHandler(tornado.web.RequestHandler):
     def motor(self):
         return self.application.motor
 
-    @property
-    def deactivate_stream(self):
-        return self.application.deactivate_stream
-
     @tornado.gen.coroutine
     def get_current_user(self, token=None):
         """" Get the user making the request. If token is None, then this
@@ -141,10 +137,14 @@ class CommonHandler(tornado.web.RequestHandler):
         else:
             return False
 
-    def error(self, message, code=400):
-        """ Write a message to the output buffer """
-        self.set_status(code)
-        self.write({'error': message})
+    def write_error(self, status_code, **kwargs):
+        exception = kwargs['exc_info'][1]
+        if isinstance(exception, tornado.web.HTTPError):
+            self.write({'error': exception.reason})
+
+    def error(self, message='', code=400):
+        """ Write a message to the output buffer and flush. """
+        raise tornado.web.HTTPError(400, reason=message)
 
 
 class BaseServerMixin():
