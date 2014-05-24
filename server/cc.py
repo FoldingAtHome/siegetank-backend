@@ -26,6 +26,7 @@ import random
 import time
 import bcrypt
 import io
+import signal
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import CommonHandler
