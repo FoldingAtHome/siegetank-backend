@@ -154,9 +154,10 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         result['core_files'] = content['files']
         return result
 
-    def _add_frames(self, core_token):
+    def _add_frames(self, core_token, frame_bin=None):
         headers = {'Authorization': core_token}
-        frame_bin = os.urandom(1024)
+        if frame_bin is None:
+            frame_bin = os.urandom(1024)
         body = {
             'files': {'frames.xtc.b64':
                       base64.b64encode(frame_bin).decode()},
@@ -828,6 +829,50 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.io_loop.run_sync(self.scv.scruffy)
         self.assertEqual(self.scv.db.smembers('locks'), set())
         self.assertEqual(self.scv.db.smembers('active_streams'), set())
+        self._delete_stream(stream_id)
+
+    def test_speed(self):
+        result = self._core_start()
+        stream_id = result['stream_id']
+        target_id = result['target_id']
+        files = result['files']
+        token = result['token']
+        headers = {'Authorization': token}
+        manager_headers = {'Authorization': self.auth_token}
+        
+        frame_buffer = bytes()
+        n_frames = 25
+        active_stream = scv.ActiveStream(stream_id, self.scv.db)
+
+        random_file = random.choice(list(files.keys()))
+        # download a frame file that has not been replaced yet
+        data = self._download(stream_id, 'files/'+random_file)
+        self.assertEqual(data.decode(), files[random_file])
+
+        # PUT 25 frames
+        total = 0
+        for count in range(n_frames):
+            frame_bin = os.urandom(90000)
+            start = time.time()
+            frame_buffer += self._add_frames(token, frame_bin=frame_bin)
+            total += time.time()-start
+        self.assertTrue(total/n_frames < 0.010)
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+        streams_dir = self.scv.streams_folder
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer_files',
+                                   'frames.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # PUT a checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1460000))
+        replacement_filename = random.choice(list(files.keys()))
+
+        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
+        start = time.time()
+        response = self.fetch('/core/checkpoint', headers=headers,
+                              body=json.dumps(body), method='PUT')
+        self.assertEqual(response.code, 200)
+        self.assertTrue(total/n_frames < 0.030)
         self._delete_stream(stream_id)
 
     def test_expiration(self):
