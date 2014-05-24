@@ -21,6 +21,7 @@ import hashlib
 import base64
 import gzip
 import logging
+import signal
 import functools
 
 import tornado.escape
@@ -849,6 +850,7 @@ class CoreStopHandler(BaseHandler):
         yield self.deactivate_stream(stream_id)
         unlock()
 
+
 class ActiveStreamsHandler(BaseHandler):
 
     def get(self):
@@ -1140,7 +1142,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
             else:
                 yield self.deactivate_stream(stream_id)
             self.release_lock(stream_id)
-    
+
     def acquire_lock(self, resource):
         script = """
         local resource = KEYS[1]
@@ -1284,12 +1286,10 @@ def start():
                                '..', 'scv.conf')
     configure_options(config_file)
     options = tornado.options.options
-
     instance = SCV(name=options.name,
                    external_host=options.external_host,
                    redis_options=options.redis_options,
                    mongo_options=options.mongo_options)
-
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', options.ssl_certfile)
     key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -1299,6 +1299,14 @@ def start():
 
     server = tornado.httpserver.HTTPServer(instance, ssl_options={
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
+    def graceful_stop(signal_number=None, stack_frame=None):
+        if tornado.process.task_id() == 0:
+            print('Shutting down the SCV ...')
+        server.stop()
+        time.sleep(10)
+        instance.shutdown()
+    signal.signal(signal.SIGINT, graceful_stop)
+    signal.signal(signal.SIGTERM, graceful_stop)
     server.bind(options.internal_http_port)
     server.start(0)
     instance.initialize_motor()

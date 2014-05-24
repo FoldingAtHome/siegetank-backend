@@ -811,9 +811,17 @@ def start():
             'keyfile': key_path,
             'ca_certs': ca_path
         }
-    cc_server = tornado.httpserver.HTTPServer(instance, ssl_options=ssl_opts)
-    cc_server.bind(options.internal_http_port)
-    cc_server.start(0)
+    server = tornado.httpserver.HTTPServer(instance, ssl_options=ssl_opts)
+    def graceful_stop(signal_number=None, stack_frame=None):
+        if tornado.process.task_id() == 0:
+            print('Shutting down the CC ...')
+            server.stop()
+        time.sleep(10)
+        instance.shutdown()
+    signal.signal(signal.SIGINT, graceful_stop)
+    signal.signal(signal.SIGTERM, graceful_stop)
+    server.bind(options.internal_http_port)
+    server.start(0)
     instance.initialize_motor()
     if tornado.process.task_id() == 0:
         tornado.ioloop.IOLoop.instance().add_callback(instance._check_scvs)

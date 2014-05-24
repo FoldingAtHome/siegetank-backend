@@ -186,20 +186,15 @@ class BaseServerMixin():
 
         self._mongo_options = mongo_options
 
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGTERM, self.shutdown)
-
+        #signal.signal(signal.SIGINT, self.shutdown)
+        #
     def shutdown_redis(self):
         self.db.shutdown()
         self.db.connection_pool.disconnect()
 
-    def shutdown(self, signal_number=None, stack_frame=None, kill=True):
+    def shutdown(self):
         self.shutdown_redis()
-        if kill:
-            # TODO: Change to a graceful shutdown. Need a way to access the
-            # server object.
-            tornado.ioloop.IOLoop.instance().stop()
-            sys.exit(0)
+        tornado.ioloop.IOLoop.instance().stop()
 
 
 def configure_options(config_file, extra_options=None):

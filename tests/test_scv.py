@@ -856,7 +856,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             start = time.time()
             frame_buffer += self._add_frames(token, frame_bin=frame_bin)
             total += time.time()-start
-        self.assertTrue(total/n_frames < 0.010)
+        self.assertTrue(total/n_frames < 0.025)
         self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
         streams_dir = self.scv.streams_folder
         buffer_path = os.path.join(streams_dir, stream_id, 'buffer_files',
@@ -872,7 +872,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/core/checkpoint', headers=headers,
                               body=json.dumps(body), method='PUT')
         self.assertEqual(response.code, 200)
-        self.assertTrue(total/n_frames < 0.030)
+        self.assertTrue(total/n_frames < 0.050)
         self._delete_stream(stream_id)
 
     def test_expiration(self):
