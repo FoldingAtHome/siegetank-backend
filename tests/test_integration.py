@@ -85,11 +85,11 @@ class TestSimple(tornado.testing.AsyncTestCase):
         for db_name in self.mdb.database_names():
             self.mdb.drop_database(db_name)
         self.cc_server.stop()
-        self.cc.shutdown(kill=False)
+        self.cc.shutdown()
         shutil.rmtree(self.cc.data_folder)
         for key in self.scvs:
             key['server'].stop()
-            key['app'].shutdown(kill=False)
+            key['app'].shutdown()
             shutil.rmtree(key['app'].data_folder)
 
     def get_new_ioloop(self):

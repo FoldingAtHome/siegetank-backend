@@ -167,27 +167,20 @@ class BaseServerMixin():
         if not os.path.exists(self.data_folder):
             os.makedirs(self.data_folder)
         self.redis_options = redis_options
-
         if 'appendfilename' in redis_options:
             redis_options['appendonly'] = 'yes'
         self.db = init_redis(redis_options, cwd=self.data_folder)
-
         access_channel = logging.FileHandler(os.path.join(self.data_folder,
             'access.log'))
         logging.getLogger('tornado.access').addHandler(access_channel)
-
         app_channel = logging.FileHandler(os.path.join(self.data_folder,
             'application.log'))
         logging.getLogger('tornado.application').addHandler(app_channel)
-
         general_channel = logging.FileHandler(os.path.join(self.data_folder,
             'general.log'))
         logging.getLogger('tornado.general').addHandler(general_channel)
-
         self._mongo_options = mongo_options
 
-        #signal.signal(signal.SIGINT, self.shutdown)
-        #
     def shutdown_redis(self):
         self.db.shutdown()
         self.db.connection_pool.disconnect()
