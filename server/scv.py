@@ -23,6 +23,7 @@ import gzip
 import logging
 import signal
 import functools
+import sys
 
 import tornado.escape
 import tornado.ioloop
@@ -33,9 +34,11 @@ import tornado.httpclient
 import tornado.options
 import tornado.process
 import tornado.gen
+import tornado.netutil
 
 from server.common import BaseServerMixin, configure_options, CommonHandler
 from server.apollo import Entity, zset, relate
+from server import process2
 
 
 class Stream(Entity):
@@ -1132,6 +1135,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def scruffy(self):
         """ Cleans up after streams with bad locks. """
+        print('Checking for bad locks ...')
         for stream_id in self.db.zrangebyscore('locks', 0, time.time()-3):
             message = 'Scruffy found a bad stream: '+stream_id
             logging.getLogger('tornado.application').critical(message)
@@ -1281,15 +1285,37 @@ tornado.options.define('heartbeat_increment', default=900, type=int)
 tornado.options.define('check_heart_frequency_in_ms', default=1000, type=int)
 
 
+def stop_parent(sig, frame):
+    print('parent is waiting for children to terminate')
+    for pid in process2.children.keys():
+        os.waitpid(pid, 0)
+    print('shutting down redis')
+    app.db.shutdown()
+    sys.exit(0)
+
+
+def stop_children(sig, frame):
+    print('    stopping children', process2.task_id())
+    app.db.zrange('locks', 0, -1)  # access db
+    server.stop()
+    time.sleep(10)
+    app.shutdown()
+    sys.exit(0)
+
+
 def start():
     config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                '..', 'scv.conf')
     configure_options(config_file)
     options = tornado.options.options
-    instance = SCV(name=options.name,
-                   external_host=options.external_host,
-                   redis_options=options.redis_options,
-                   mongo_options=options.mongo_options)
+
+    global app
+    global server
+
+    app = SCV(name=options.name,
+              external_host=options.external_host,
+              redis_options=options.redis_options,
+              mongo_options=options.mongo_options)
     cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                              '..', options.ssl_certfile)
     key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -1297,27 +1323,34 @@ def start():
     ca_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                            '..', options.ssl_ca_certs)
 
-    server = tornado.httpserver.HTTPServer(instance, ssl_options={
-        'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
-    def graceful_stop(signal_number=None, stack_frame=None):
-        if tornado.process.task_id() == 0:
-            print('Shutting down the SCV ...')
-        server.stop()
-        time.sleep(10)
-        instance.shutdown()
-    signal.signal(signal.SIGINT, graceful_stop)
-    signal.signal(signal.SIGTERM, graceful_stop)
-    server.bind(options.internal_http_port)
-    server.start(0)
-    instance.initialize_motor()
+    sockets = tornado.netutil.bind_sockets(options.internal_http_port)
 
-    if tornado.process.task_id() == 0:
-        tornado.ioloop.IOLoop.instance().run_sync(instance.scruffy)
-        tornado.ioloop.IOLoop.instance().run_sync(instance.check_heartbeats)
-        tornado.ioloop.IOLoop.instance().run_sync(instance.register)
+    # parent handles signals differently
+    signal.signal(signal.SIGINT, stop_parent)
+    signal.signal(signal.SIGTERM, stop_parent)
+
+    process2.fork_processes(0)
+
+
+    #server.bind(options.internal_http_port)
+    #server.start(2)
+    # children execute the lines below, but not the parent
+    signal.signal(signal.SIGINT, stop_children)
+    signal.signal(signal.SIGTERM, stop_children)
+
+    server = tornado.httpserver.HTTPServer(app, ssl_options={
+        'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
+    server.add_sockets(sockets)
+
+    app.initialize_motor()
+
+    if tornado.process.task_id() is None:
+        tornado.ioloop.IOLoop.instance().run_sync(app.scruffy)
+        tornado.ioloop.IOLoop.instance().run_sync(app.check_heartbeats)
+        tornado.ioloop.IOLoop.instance().run_sync(app.register)
         frequency = tornado.options.options['check_heart_frequency_in_ms']
-        pulse = tornado.ioloop.PeriodicCallback(instance.check_heartbeats,
+        pulse = tornado.ioloop.PeriodicCallback(app.check_heartbeats,
                                                 frequency)
         pulse.start()
-        tornado.ioloop.PeriodicCallback(instance.scruffy, 2000).start()
+        tornado.ioloop.PeriodicCallback(app.scruffy, 2000).start()
     tornado.ioloop.IOLoop.instance().start()

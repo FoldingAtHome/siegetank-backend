@@ -22,7 +22,6 @@ import tornado
 import ipaddress
 import os
 import motor
-import signal
 import tornado.options
 import tornado.web
 import logging
@@ -43,6 +42,10 @@ def is_domain(url):
         return True
 
 
+def preexec():  # Don't forward signals.
+    os.setpgrp()
+
+
 def init_redis(redis_options, cwd=None):
     """ Spawn a redis subprocess port and returns a redis client. """
     redis_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -52,7 +55,7 @@ def init_redis(redis_options, cwd=None):
     for option_name, option_value in redis_options.items():
         args.append('--'+option_name)
         args.append(str(option_value))
-    redis_process = subprocess.Popen(args, cwd=cwd)
+    redis_process = subprocess.Popen(args, cwd=cwd, preexec_fn=preexec)
 
     if redis_process.poll() is not None:
         print('Could not start redis server, aborting')
@@ -169,7 +172,9 @@ class BaseServerMixin():
         self.redis_options = redis_options
         if 'appendfilename' in redis_options:
             redis_options['appendonly'] = 'yes'
+        print('REDIS initiaLIZEd')
         self.db = init_redis(redis_options, cwd=self.data_folder)
+        print('LOCKS', self.db.zrange('locks', 0, -1))
         access_channel = logging.FileHandler(os.path.join(self.data_folder,
             'access.log'))
         logging.getLogger('tornado.access').addHandler(access_channel)
@@ -182,11 +187,13 @@ class BaseServerMixin():
         self._mongo_options = mongo_options
 
     def shutdown_redis(self):
+        print('SHUTTING DOWN REDIS')
         self.db.shutdown()
         self.db.connection_pool.disconnect()
 
     def shutdown(self):
-        self.shutdown_redis()
+        print('calling instance shutdown')
+        #self.shutdown_redis()
         tornado.ioloop.IOLoop.instance().stop()
 
 
