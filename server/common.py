@@ -172,9 +172,7 @@ class BaseServerMixin():
         self.redis_options = redis_options
         if 'appendfilename' in redis_options:
             redis_options['appendonly'] = 'yes'
-        print('REDIS initiaLIZEd')
         self.db = init_redis(redis_options, cwd=self.data_folder)
-        print('LOCKS', self.db.zrange('locks', 0, -1))
         access_channel = logging.FileHandler(os.path.join(self.data_folder,
             'access.log'))
         logging.getLogger('tornado.access').addHandler(access_channel)
@@ -186,14 +184,7 @@ class BaseServerMixin():
         logging.getLogger('tornado.general').addHandler(general_channel)
         self._mongo_options = mongo_options
 
-    def shutdown_redis(self):
-        print('SHUTTING DOWN REDIS')
-        self.db.shutdown()
-        self.db.connection_pool.disconnect()
-
     def shutdown(self):
-        print('calling instance shutdown')
-        #self.shutdown_redis()
         tornado.ioloop.IOLoop.instance().stop()
 
 

@@ -32,7 +32,6 @@ import tornado.httputil
 import tornado.httpserver
 import tornado.httpclient
 import tornado.options
-import tornado.process
 import tornado.gen
 import tornado.netutil
 
@@ -1135,7 +1134,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def scruffy(self):
         """ Cleans up after streams with bad locks. """
-        print('Checking for bad locks ...')
         for stream_id in self.db.zrangebyscore('locks', 0, time.time()-3):
             message = 'Scruffy found a bad stream: '+stream_id
             logging.getLogger('tornado.application').critical(message)
@@ -1277,30 +1275,38 @@ class SCV(BaseServerMixin, tornado.web.Application):
                     message = 'Could not record fragment: '+json.dumps(body)
                     logging.getLogger('tornado.general').critical(message)
 
-#########################
-# Defined here globally #
-#########################
 
 tornado.options.define('heartbeat_increment', default=900, type=int)
 tornado.options.define('check_heart_frequency_in_ms', default=1000, type=int)
 
 
 def stop_parent(sig, frame):
-    print('parent is waiting for children to terminate')
+    print('Waiting for children to terminate ...')
     for pid in process2.children.keys():
         os.waitpid(pid, 0)
-    print('shutting down redis')
+    print('Shutting down redis ...')
     app.db.shutdown()
+    # exit() is required here so parent doesn't go back to fork_processes()
     sys.exit(0)
 
 
 def stop_children(sig, frame):
-    print('    stopping children', process2.task_id())
-    app.db.zrange('locks', 0, -1)  # access db
+    print('-> stopping children', process2.task_id())
+    # stop accepting new requests
     server.stop()
-    time.sleep(10)
-    app.shutdown()
-    sys.exit(0)
+
+    # wait for all the locks to expire
+    deadline = time.time() + 10
+    io_loop = tornado.ioloop.IOLoop.instance()
+
+    def stop_loop():
+        now = time.time()
+        if now < deadline and app.db.zrange('locks', 0, -1):
+            io_loop.add_timeout(now + 1, stop_loop)
+        else:
+            app.shutdown()
+
+    stop_loop()
 
 
 def start():
@@ -1331,20 +1337,15 @@ def start():
 
     process2.fork_processes(0)
 
-
-    #server.bind(options.internal_http_port)
-    #server.start(2)
-    # children execute the lines below, but not the parent
+    # children override the default signal handlers
     signal.signal(signal.SIGINT, stop_children)
     signal.signal(signal.SIGTERM, stop_children)
 
     server = tornado.httpserver.HTTPServer(app, ssl_options={
         'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
     server.add_sockets(sockets)
-
     app.initialize_motor()
-
-    if tornado.process.task_id() is None:
+    if process2.task_id() == 0:
         tornado.ioloop.IOLoop.instance().run_sync(app.scruffy)
         tornado.ioloop.IOLoop.instance().run_sync(app.check_heartbeats)
         tornado.ioloop.IOLoop.instance().run_sync(app.register)
@@ -1352,5 +1353,5 @@ def start():
         pulse = tornado.ioloop.PeriodicCallback(app.check_heartbeats,
                                                 frequency)
         pulse.start()
-        tornado.ioloop.PeriodicCallback(app.scruffy, 2000).start()
+        tornado.ioloop.PeriodicCallback(app.scruffy, 3000).start()
     tornado.ioloop.IOLoop.instance().start()

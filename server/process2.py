@@ -159,8 +159,6 @@ def fork_processes(num_processes, max_restarts=100):
             return id
     num_restarts = 0
 
-    print('CHILDREN:', children)
-
     while children:
         try:
             pid, status = os.wait()
