@@ -174,7 +174,7 @@ class CoreAssignHandler(BaseHandler):
             2. The set of users who have targets that match the core's engine
                 is determined.
             3. A manager is chosen based on his weight relative to others.
-            4. One of his targets is chosen based on the target's weights
+            4. One of his targets is chosen based on his target's weights
 
             :reqheader Authorization: core's authentication key
 
@@ -749,10 +749,8 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def fetch(self, scv_id, path, **kwargs):
-        """ This is a fairly special method. First, it takes care of boiler
-        plate code. Second, it keeps track of how many times an SCV has
-        failed. If it has failed too many times, then the SCV's fail_count is
-        incremented.
+        """ Make a request to a particular SCV and keep track of whether or not
+        it is alive.
 
         """
         cursor = SCV(scv_id, self.db)
@@ -852,6 +850,6 @@ def start():
             pulse.start()
         tornado.ioloop.IOLoop.instance().start()
     except SystemExit as e:
-        print('parent is shutting down ...', e)
+        print('! parent is shutting down ...')
         app.db.shutdown()
         sys.exit(0)
