@@ -920,7 +920,7 @@ class StreamSyncHandler(BaseHandler):
             stream is divided into the partition (0, 5](5, 12](12, 38], where
             (a,b] denote the open and closed ends.
 
-            :reqheader Authorization: manager authorization token
+            :reqheader Authorization: Manager token
 
             **Example reply**:
 
@@ -929,10 +929,9 @@ class StreamSyncHandler(BaseHandler):
                 {
                     'partitions': [5, 12, 38],
                     'frame_files': ['frames.xtc', 'log.txt'],
-                    'checkpoint_files': ['state.xml.gz.b64'], // optional
-                    'seed_files': ['state.xml.gz.b64',
-                                      'system.xml.gz.b64',
-                                      'integrator.xml.gz.b64']
+                    'checkpoint_files': ['state.xml.gz.b64']
+                    'seed_files': ['state.xml.gz.b64', 'system.xml.gz.b64',
+                                   'integrator.xml.gz.b64']
                 }
 
             .. note:: If 'partitions' is not an empty list, then 'frame_files'
@@ -965,12 +964,9 @@ class StreamSyncHandler(BaseHandler):
             frame_dir = os.path.join(stream_dir, str(partitions[0]))
             frame_files = os.listdir(frame_dir)
             chkpt_name = 'checkpoint_files'
-            try:
-                frame_files.remove(chkpt_name)
-                chkpt_files = os.listdir(os.path.join(frame_dir, chkpt_name))
-                reply['checkpoint_files'] = chkpt_files
-            except:
-                pass
+            frame_files.remove(chkpt_name)
+            chkpt_files = os.listdir(os.path.join(frame_dir, chkpt_name))
+            reply['checkpoint_files'] = chkpt_files
             reply['frame_files'] = frame_files
 
         self.set_status(200)
@@ -1170,11 +1166,13 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def register(self):
         """ Register the SCV in MDB. """
+        print('REGISTERING', self.name)
         cursor = self.motor.servers.scvs
         yield cursor.update({'_id': self.name},
                             {'_id': self.name,
                              'password': self.password,
                              'host': self.external_host}, upsert=True)
+        print('OK-----')
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):

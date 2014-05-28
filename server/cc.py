@@ -350,6 +350,9 @@ class SCVStatusHandler(BaseHandler):
         """
         self.set_status(400)
         body = {}
+
+        print('SCV STATUS HANDLER INVOKED', SCV.members(self.db))
+
         for scv_name in SCV.members(self.db):
             cursor = SCV(scv_name, self.db)
             body[scv_name] = {}
@@ -748,9 +751,9 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def fetch(self, scv_id, path, **kwargs):
         """ This is a fairly special method. First, it takes care of boiler
-        plate code. Second, it keeps track of how many times a workserver has
-        failed. If it has failed one too many times, then the workserver is
-        taken offline automatically.
+        plate code. Second, it keeps track of how many times an SCV has
+        failed. If it has failed too many times, then the SCV's fail_count is
+        incremented.
 
         """
         cursor = SCV(scv_id, self.db)
@@ -834,7 +837,6 @@ def start():
             'keyfile': key_path,
             'ca_certs': ca_path
         }
-
 
     sockets = tornado.netutil.bind_sockets(options.internal_http_port)
 
