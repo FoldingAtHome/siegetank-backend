@@ -86,6 +86,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
             self.mdb.drop_database(db_name)
         self.cc_server.stop()
         self.cc.shutdown()
+        self.cc.db.shutdown()
         shutil.rmtree(self.cc.data_folder)
         for key in self.scvs:
             key['server'].stop()

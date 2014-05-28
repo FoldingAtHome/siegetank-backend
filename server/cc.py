@@ -24,7 +24,6 @@ import os
 import uuid
 import random
 import time
-import bcrypt
 import io
 import signal
 import sys
@@ -76,7 +75,7 @@ class UserVerifyHandler(BaseHandler):
         self.set_status(400)
         current_user = yield self.get_current_user()
         if not current_user:
-            return self.error('Bad credentials', code=401)
+            self.error('Bad credentials', code=401)
         else:
             return self.set_status(200)
 
@@ -133,12 +132,12 @@ class TargetUpdateHandler(BaseHandler):
         self.set_status(400)
         current_user = yield self.get_current_user()
         if not current_user:
-            return self.error('Bad credentials', code=401)
+            self.error('Bad credentials', code=401)
         target_owner = yield self.get_target_owner(target_id)
         if target_owner is None:
-            return self.error('Bad target_id', code=400)
+            self.error('Bad target_id', code=400)
         if target_owner != current_user:
-            return self.error('User does not own this target', code=401)
+            self.error('User does not own this target', code=401)
         content = json.loads(self.request.body.decode())
         payload = {}
         if 'engines' in content:
@@ -147,7 +146,7 @@ class TargetUpdateHandler(BaseHandler):
             if content['stage'] in ['disabled', 'private', 'beta', 'public']:
                 payload['stage'] = content['stage']
             else:
-                return self.error('invalid stage')
+                self.error('invalid stage')
         if 'weight' in content:
             payload['weight'] = max(content['weight'], 0)
         if 'options' in content:
@@ -158,7 +157,7 @@ class TargetUpdateHandler(BaseHandler):
         if result['updatedExisting']:
             self.set_status(200)
         else:
-            return self.error('invalid '+target_id)
+            self.error('invalid '+target_id)
 
 
 class CoreAssignHandler(BaseHandler):
@@ -172,11 +171,11 @@ class CoreAssignHandler(BaseHandler):
 
             The assignment algorithm is:
 
-            1. Each user who is a manager is assigned a weight.
+            1. Each user who is a manager has a weight.
             2. The set of users who have targets that match the core's engine
                 is determined.
-            3. A user is chosen based on his weight relative to other users.
-            4. One of the user's targets is chosen based on the target weights
+            3. A manager is chosen based on his weight relative to others.
+            4. One of his targets is chosen based on the target's weights
 
             :reqheader Authorization: core's authentication key
 
@@ -210,7 +209,7 @@ class CoreAssignHandler(BaseHandler):
         try:
             key = self.request.headers['Authorization']
         except:
-            self.write(json.dumps({'error': 'missing Authorization header'}))
+            self.error('missing Authorization header', code=401)
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
         core_engine = content['engine']
@@ -222,7 +221,7 @@ class CoreAssignHandler(BaseHandler):
             document = results.next_object()
             keys.append(document['_id'])
         if key not in keys:
-            return self.error('Bad engine key')
+            self.error('Bad engine key')
 
         self.set_status(400)
         content = json.loads(self.request.body.decode())
@@ -232,7 +231,7 @@ class CoreAssignHandler(BaseHandler):
             query = yield cursor.find_one({'token': donor_token},
                                           fields=['_id'])
             if not query:
-                return self.error('bad donor token')
+                self.error('bad donor token')
             user = query['_id']
         else:
             user = None
@@ -245,9 +244,9 @@ class CoreAssignHandler(BaseHandler):
                                             'shards': 1,
                                             })
             if core_engine not in result['engines']:
-                return self.error('core engine not allowed for this target')
+                self.error('core engine not allowed for this target')
             if not result['shards']:
-                return self.error('target specified has no shards')
+                self.error('target specified has no shards')
             shards = result['shards']
         else:
             results = cursor.find({'engines': {'$in': [core_engine]},
@@ -268,7 +267,7 @@ class CoreAssignHandler(BaseHandler):
                     target_owners[document['_id']] = document['owner']
                     target_shards[document['_id']] = document['shards']
             if not target_weights:
-                return self.error('no valid targets could be found')
+                self.error('no valid targets could be found')
             # get a list of all managers and their ids
             cursor = self.motor.users.managers
             results = cursor.find(fields={'_id': 1, 'weight': 1})
@@ -326,7 +325,7 @@ class CoreAssignHandler(BaseHandler):
             except tornado.httpclient.HTTPError:
                 print('--CAUGHT HTTP ERROR--')
                 pass
-        return self.error('no streams available for the target')
+        self.error('no streams available for the target')
 
 
 class SCVStatusHandler(BaseHandler):
@@ -419,7 +418,7 @@ class TargetDeleteHandler(BaseHandler):
 
         """
         if(yield self.get_current_user()) is None:
-            return self.error('Bad Manager Credentials', 401)
+            self.error('Bad Manager Credentials', 401)
         self.set_status(400)
         cursor = self.motor.data.targets
         result = yield cursor.remove({'_id': target_id,
@@ -427,7 +426,7 @@ class TargetDeleteHandler(BaseHandler):
         if result['n'] > 0:
             return self.set_status(200)
         else:
-            return self.error('Cannot remove target all streams are removed')
+            self.error('Cannot remove target all streams are removed')
 
 
 class TargetsHandler(BaseHandler):
@@ -527,10 +526,10 @@ class TargetsHandler(BaseHandler):
         self.set_status(400)
         current_user = yield self.get_current_user()
         if not current_user:
-            return self.error('Bad credentials', code=401)
+            self.error('Bad credentials', code=401)
         is_manager = yield self.is_manager(current_user)
         if not is_manager:
-            return self.error('Not a manager', code=401)
+            self.error('Not a manager', code=401)
         content = json.loads(self.request.body.decode())
         #----------------#
         # verify request #
@@ -540,7 +539,7 @@ class TargetsHandler(BaseHandler):
             if content['stage'] in ['disabled', 'private', 'public']:
                 stage = content['stage']
             else:
-                return self.error('unsupported stage')
+                self.error('unsupported stage')
         else:
             stage = 'private'
         if 'options' in content:
@@ -612,11 +611,11 @@ class EngineKeysHandler(BaseHandler):
         """
         current_user = yield self.get_current_user()
         if not (yield self.is_admin(current_user)):
-            return self.error('Bad credentials', 401)
+            self.error('Bad credentials', 401)
         content = json.loads(self.request.body.decode())
         for required_key in ['engine', 'description']:
             if required_key not in content:
-                return self.error('missing: '+required_key)
+                self.error('missing: '+required_key)
         stored_id = str(uuid.uuid4())
         content['_id'] = stored_id
         content['creation_date'] = time.time()
@@ -663,7 +662,7 @@ class EngineKeysHandler(BaseHandler):
         """
         current_user = yield self.get_current_user()
         if not (yield self.is_admin(current_user)):
-            return self.error('Bad credentials', 401)
+            self.error('Bad credentials', 401)
         self.set_status(400)
         body = dict()
         cursor = self.motor.engines.keys
@@ -695,14 +694,14 @@ class EngineKeysDeleteHandler(BaseHandler):
         """
         current_user = yield self.get_current_user()
         if not (yield self.is_admin(current_user)):
-            return self.error('Bad credentials', 401)
+            self.error('Bad credentials', 401)
         self.set_status(400)
         cursor = self.motor.engines.keys
         result = yield cursor.remove({'_id': core_key})
         if result['n'] > 0:
             self.set_status(200)
         else:
-            return self.error('engine key not found')
+            self.error('engine key not found')
 
 
 class CommandCenter(BaseServerMixin, tornado.web.Application):
@@ -805,19 +804,7 @@ def stop_children(sig, frame):
     print('-> stopping children', process2.task_id())
     # stop accepting new requests
     server.stop()
-
-    # wait for all the locks to expire
-    deadline = time.time() + 10
-    io_loop = tornado.ioloop.IOLoop.instance()
-
-    def stop_loop():
-        now = time.time()
-        if now < deadline and app.db.zrange('locks', 0, -1):
-            io_loop.add_timeout(now + 1, stop_loop)
-        else:
-            app.shutdown()
-
-    stop_loop()
+    app.shutdown()
 
 
 def start():

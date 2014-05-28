@@ -20,11 +20,8 @@ import unittest
 import sys
 import json
 import time
-import bcrypt
-import uuid
 import random
 import pymongo
-import bcrypt
 
 import server.cc as cc
 import tests.utils
@@ -35,11 +32,13 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     def setUp(self):
         self.mongo_options = {'host': 'localhost', 'port': 27017}
         self.mdb = pymongo.MongoClient('localhost', 27017)
+        for db_name in self.mdb.database_names():
+            self.mdb.drop_database(db_name)
         super(TestCommandCenter, self).setUp()
 
     def tearDown(self):
         self.cc.db.flushdb()
-        self.cc.shutdown_redis()
+        self.cc.db.shutdown()
         for db_name in self.mdb.database_names():
             self.mdb.drop_database(db_name)
         super(TestCommandCenter, self).tearDown()

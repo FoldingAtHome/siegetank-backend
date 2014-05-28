@@ -73,14 +73,14 @@ class TestSiegeTank(unittest.TestCase):
             for i in partitions:
                 p_dir = os.path.join(stream_dir, str(i))
                 os.makedirs(p_dir)
-                open(os.path.join(p_dir, 'bin1'),'wb').write(os.urandom(5987))
-                open(os.path.join(p_dir, 'bin2'),'wb').write(os.urandom(9820))
+                open(os.path.join(p_dir, 'bin1'), 'wb').write(os.urandom(5987))
+                open(os.path.join(p_dir, 'bin2'), 'wb').write(os.urandom(9820))
                 os.makedirs(os.path.join(p_dir, 'checkpoint_files'))
                 open(os.path.join(p_dir, 'checkpoint_files',
                      'cin1'), 'wb').write(os.urandom(2048))
                 open(os.path.join(p_dir, 'checkpoint_files',
                      'cin2'), 'wb').write(os.urandom(2048))
-        
+
         def remove_local_partition(stream_id, partition, filename=None):
             stream_dir = os.path.join('sync_data', stream_id)
             if filename:
@@ -101,18 +101,18 @@ class TestSiegeTank(unittest.TestCase):
             @param dir1: First directory path
             @param dir2: Second directory path
 
-            @return: True if the directory trees are the same and 
+            @return: True if the directory trees are the same and
                 there were no errors while accessing the directories or files, 
                 False otherwise.
            """
 
             dirs_cmp = filecmp.dircmp(dir1, dir2)
-            if len(dirs_cmp.left_only)>0 or len(dirs_cmp.right_only)>0 or \
-                len(dirs_cmp.funny_files)>0:
+            if len(dirs_cmp.left_only) > 0 or len(dirs_cmp.right_only) > 0 or \
+                len(dirs_cmp.funny_files) > 0:
                 return False
-            (_, mismatch, errors) =  filecmp.cmpfiles(
+            (_, mismatch, errors) = filecmp.cmpfiles(
                 dir1, dir2, dirs_cmp.common_files, shallow=False)
-            if len(mismatch)>0 or len(errors)>0:
+            if len(mismatch) > 0 or len(errors) > 0:
                 return False
             for common_dir in dirs_cmp.common_dirs:
                 new_dir1 = os.path.join(dir1, common_dir)
