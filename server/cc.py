@@ -18,6 +18,7 @@ import tornado.ioloop
 import tornado.web
 import tornado.httpserver
 import tornado.httpclient
+import tornado.process
 
 import json
 import os
@@ -31,8 +32,6 @@ import sys
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import CommonHandler
 from server.apollo import Entity
-from server import process2
-
 
 class SCV(Entity):
     prefix = 'scv'
@@ -794,17 +793,11 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
 
 def stop_parent(sig, frame):
-    print('Waiting for children to terminate ...')
-    for pid in process2.children.keys():
-        os.waitpid(pid, 0)
-    print('Shutting down redis ...')
-    app.db.shutdown()
-    # exit() is required here so parent doesn't go back to fork_processes()
-    sys.exit(0)
+    pass
 
 
 def stop_children(sig, frame):
-    print('-> stopping children', process2.task_id())
+    print('-> stopping children', tornado.process.task_id())
     # stop accepting new requests
     server.stop()
     app.shutdown()
@@ -843,17 +836,22 @@ def start():
     signal.signal(signal.SIGINT, stop_parent)
     signal.signal(signal.SIGTERM, stop_parent)
 
-    process2.fork_processes(0)
+    try:
+        tornado.process.fork_processes(0)
 
-    signal.signal(signal.SIGINT, stop_children)
-    signal.signal(signal.SIGTERM, stop_children)
+        signal.signal(signal.SIGINT, stop_children)
+        signal.signal(signal.SIGTERM, stop_children)
 
-    server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_opts)
-    server.add_sockets(sockets)
+        server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_opts)
+        server.add_sockets(sockets)
 
-    app.initialize_motor()
-    if tornado.process.task_id() == 0:
-        tornado.ioloop.IOLoop.instance().add_callback(app._check_scvs)
-        pulse = tornado.ioloop.PeriodicCallback(app._check_scvs, 5000)
-        pulse.start()
-    tornado.ioloop.IOLoop.instance().start()
+        app.initialize_motor()
+        if tornado.process.task_id() == 0:
+            tornado.ioloop.IOLoop.instance().add_callback(app._check_scvs)
+            pulse = tornado.ioloop.PeriodicCallback(app._check_scvs, 5000)
+            pulse.start()
+        tornado.ioloop.IOLoop.instance().start()
+    except SystemExit as e:
+        print('parent is shutting down ...', e)
+        app.db.shutdown()
+        sys.exit(0)

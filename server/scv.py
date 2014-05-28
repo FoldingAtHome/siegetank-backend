@@ -34,10 +34,10 @@ import tornado.httpclient
 import tornado.options
 import tornado.gen
 import tornado.netutil
+import tornado.process
 
 from server.common import BaseServerMixin, configure_options, CommonHandler
 from server.apollo import Entity, zset, relate
-from server import process2
 
 
 class Stream(Entity):
@@ -1279,17 +1279,10 @@ tornado.options.define('check_heart_frequency_in_ms', default=1000, type=int)
 
 
 def stop_parent(sig, frame):
-    print('Waiting for children to terminate ...')
-    for pid in process2.children.keys():
-        os.waitpid(pid, 0)
-    print('Shutting down redis ...')
-    app.db.shutdown()
-    # exit() is required here so parent doesn't go back to fork_processes()
-    sys.exit(0)
-
+    pass
 
 def stop_children(sig, frame):
-    print('-> stopping children', process2.task_id())
+    print('-> stopping children', tornado.process.task_id())
     # stop accepting new requests
     server.stop()
 
@@ -1333,23 +1326,28 @@ def start():
     signal.signal(signal.SIGINT, stop_parent)
     signal.signal(signal.SIGTERM, stop_parent)
 
-    process2.fork_processes(0)
+    try:
+        tornado.process.fork_processes(0)
 
-    # children override the default signal handlers
-    signal.signal(signal.SIGINT, stop_children)
-    signal.signal(signal.SIGTERM, stop_children)
+        # children override the default signal handlers
+        signal.signal(signal.SIGINT, stop_children)
+        signal.signal(signal.SIGTERM, stop_children)
 
-    server = tornado.httpserver.HTTPServer(app, ssl_options={
-        'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
-    server.add_sockets(sockets)
-    app.initialize_motor()
-    if process2.task_id() == 0:
-        tornado.ioloop.IOLoop.instance().run_sync(app.scruffy)
-        tornado.ioloop.IOLoop.instance().run_sync(app.check_heartbeats)
-        tornado.ioloop.IOLoop.instance().run_sync(app.register)
-        frequency = tornado.options.options['check_heart_frequency_in_ms']
-        pulse = tornado.ioloop.PeriodicCallback(app.check_heartbeats,
-                                                frequency)
-        pulse.start()
-        tornado.ioloop.PeriodicCallback(app.scruffy, 3000).start()
-    tornado.ioloop.IOLoop.instance().start()
+        server = tornado.httpserver.HTTPServer(app, ssl_options={
+            'certfile': cert_path, 'keyfile': key_path, 'ca_certs': ca_path})
+        server.add_sockets(sockets)
+        app.initialize_motor()
+        if tornado.process.task_id() == 0:
+            tornado.ioloop.IOLoop.instance().run_sync(app.scruffy)
+            tornado.ioloop.IOLoop.instance().run_sync(app.check_heartbeats)
+            tornado.ioloop.IOLoop.instance().run_sync(app.register)
+            frequency = tornado.options.options['check_heart_frequency_in_ms']
+            pulse = tornado.ioloop.PeriodicCallback(app.check_heartbeats,
+                                                    frequency)
+            pulse.start()
+            tornado.ioloop.PeriodicCallback(app.scruffy, 3000).start()
+        tornado.ioloop.IOLoop.instance().start()
+    except SystemExit as e:
+        print('! parent shutting down...')
+        app.db.shutdown()
+        sys.exit()
