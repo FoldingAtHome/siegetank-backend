@@ -349,9 +349,6 @@ class SCVStatusHandler(BaseHandler):
         """
         self.set_status(400)
         body = {}
-
-        print('SCV STATUS HANDLER INVOKED', SCV.members(self.db))
-
         for scv_name in SCV.members(self.db):
             cursor = SCV(scv_name, self.db)
             body[scv_name] = {}

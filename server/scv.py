@@ -1166,13 +1166,11 @@ class SCV(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def register(self):
         """ Register the SCV in MDB. """
-        print('REGISTERING', self.name)
         cursor = self.motor.servers.scvs
         yield cursor.update({'_id': self.name},
                             {'_id': self.name,
                              'password': self.password,
                              'host': self.external_host}, upsert=True)
-        print('OK-----')
 
     def __init__(self, name, external_host, redis_options,
                  mongo_options=None, streams_folder='streams'):
@@ -1288,15 +1286,14 @@ def stop_children(sig, frame):
 
     # wait for all the locks to expire
     deadline = time.time() + 10
-    io_loop = tornado.ioloop.IOLoop.instance()
 
     def stop_loop():
-        now = time.time()
-        if now < deadline and app.db.zrange('locks', 0, -1):
-            io_loop.add_timeout(now + 1, stop_loop)
+        if time.time() < deadline and app.db.zrange('locks', 0, -1):
+            time.sleep(1)
+            tornado.ioloop.IOLoop.instance().add_callback_from_signal(stop_loop)
         else:
             app.shutdown()
-
+ 
     stop_loop()
 
 
