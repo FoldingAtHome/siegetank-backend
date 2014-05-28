@@ -27,10 +27,12 @@ import time
 import bcrypt
 import io
 import signal
+import sys
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import CommonHandler
 from server.apollo import Entity
+from server import process2
 
 
 class SCV(Entity):
@@ -789,16 +791,49 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             yield self.fetch(scv_name, '/')
 
 
+def stop_parent(sig, frame):
+    print('Waiting for children to terminate ...')
+    for pid in process2.children.keys():
+        os.waitpid(pid, 0)
+    print('Shutting down redis ...')
+    app.db.shutdown()
+    # exit() is required here so parent doesn't go back to fork_processes()
+    sys.exit(0)
+
+
+def stop_children(sig, frame):
+    print('-> stopping children', process2.task_id())
+    # stop accepting new requests
+    server.stop()
+
+    # wait for all the locks to expire
+    deadline = time.time() + 10
+    io_loop = tornado.ioloop.IOLoop.instance()
+
+    def stop_loop():
+        now = time.time()
+        if now < deadline and app.db.zrange('locks', 0, -1):
+            io_loop.add_timeout(now + 1, stop_loop)
+        else:
+            app.shutdown()
+
+    stop_loop()
+
+
 def start():
+
+    global server
+    global app
+
     extra_options = {'allowed_core_keys': set}
     config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                '..', 'cc.conf')
     configure_options(config_file, extra_options)
     options = tornado.options.options
-    instance = CommandCenter(name=options.name,
-                             external_host=options.external_host,
-                             redis_options=options.redis_options,
-                             mongo_options=options.mongo_options)
+    app = CommandCenter(name=options.name,
+                        external_host=options.external_host,
+                        redis_options=options.redis_options,
+                        mongo_options=options.mongo_options)
     ssl_opts = None
     if options.ssl_certfile or options.ssl_key or options.ssl_ca_certs:
         cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -812,20 +847,24 @@ def start():
             'keyfile': key_path,
             'ca_certs': ca_path
         }
-    server = tornado.httpserver.HTTPServer(instance, ssl_options=ssl_opts)
-    def graceful_stop(signal_number=None, stack_frame=None):
-        if tornado.process.task_id() == 0:
-            print('Shutting down the CC ...')
-            server.stop()
-        time.sleep(10)
-        instance.shutdown()
-    signal.signal(signal.SIGINT, graceful_stop)
-    signal.signal(signal.SIGTERM, graceful_stop)
-    server.bind(options.internal_http_port)
-    server.start(0)
-    instance.initialize_motor()
+
+
+    sockets = tornado.netutil.bind_sockets(options.internal_http_port)
+
+    signal.signal(signal.SIGINT, stop_parent)
+    signal.signal(signal.SIGTERM, stop_parent)
+
+    process2.fork_processes(0)
+
+    signal.signal(signal.SIGINT, stop_children)
+    signal.signal(signal.SIGTERM, stop_children)
+
+    server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_opts)
+    server.add_sockets(sockets)
+
+    app.initialize_motor()
     if tornado.process.task_id() == 0:
-        tornado.ioloop.IOLoop.instance().add_callback(instance._check_scvs)
-        pulse = tornado.ioloop.PeriodicCallback(instance._check_scvs, 5000)
+        tornado.ioloop.IOLoop.instance().add_callback(app._check_scvs)
+        pulse = tornado.ioloop.PeriodicCallback(app._check_scvs, 5000)
         pulse.start()
     tornado.ioloop.IOLoop.instance().start()
