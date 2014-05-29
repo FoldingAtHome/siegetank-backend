@@ -66,7 +66,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
             self.scvs.append(prop)
         self.cc_host = '127.0.0.1:7654'
         self.cc = cc.CommandCenter(name='goliath',
-                                   external_host=self.cc_host,
                                    redis_options=redis_options,
                                    mongo_options=mongo_options)
         self.cc.initialize_motor()

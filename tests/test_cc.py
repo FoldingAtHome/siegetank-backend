@@ -47,7 +47,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     def get_app(self):
         redis_options = {'port': 3828, 'logfile': os.devnull}
         self.cc = cc.CommandCenter(name='test_cc',
-                                   external_host='localhost',
                                    redis_options=redis_options,
                                    mongo_options=self.mongo_options)
         self.cc.initialize_motor()
