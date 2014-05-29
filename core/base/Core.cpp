@@ -137,15 +137,6 @@ static bool is_domain(const string &host) {
         return true;
 }
 
-static string parse_error(string body) {
-    Poco::JSON::Parser parser;
-    Poco::Dynamic::Var result = parser.parse(body);
-    Poco::JSON::Object::Ptr object = result.extract<Poco::JSON::Object::Ptr>();
-    string error(object->get("error").convert<std::string>());
-    parser.reset();
-    return error;
-}
-
 void Core::assign(const string &cc_uri,
                   const string &donor_token,
                   const string &target_id) {
@@ -181,10 +172,7 @@ void Core::assign(const string &cc_uri,
     if(response.getStatus() != 200) {
         /*
         cout << "BAD STATUS CODE" << response.getStatus() << endl;
-        string reason = parse_error(content_stream.rdbuf());
-        stringstream error;
-        error << "Could not get an assignment from CC, reason: ";
-        error << reason << endl;
+        cout << content_stream.rdbuf() << endl;
         */
         cout << response.getStatus() << endl;
         throw std::runtime_error("Bad assignment");
@@ -320,22 +308,26 @@ void Core::sendCheckpoint(const map<string, string> &files,
 }
 
 void Core::stopStream(string err_msg) {
-    Poco::Net::HTTPRequest request("PUT", "/core/stop");
-    string message;
-    message += "{";
-    if(err_msg.length() > 0) {
-        cout << "stopping stream with error: " << err_msg << endl;
-        string b64_error(encode_b64(err_msg));
-        message += "\"error\": \"" + b64_error + "\"";
-    }
-    message += "}";
-    request.set("Authorization", core_token_);
-    request.setContentLength(message.length());
-    session_->sendRequest(request) << message;
-    Poco::Net::HTTPResponse response;
-    session_->receiveResponse(response);
-    if(response.getStatus() != 200) {
-        throw std::runtime_error("Core::stopStream bad status code");
+    try {
+        Poco::Net::HTTPRequest request("PUT", "/core/stop");
+        string message;
+        message += "{";
+        if(err_msg.length() > 0) {
+            cout << "stopping stream with error: " << err_msg << endl;
+            string b64_error(encode_b64(err_msg));
+            message += "\"error\": \"" + b64_error + "\"";
+        }
+        message += "}";
+        request.set("Authorization", core_token_);
+        request.setContentLength(message.length());
+        session_->sendRequest(request) << message;
+        Poco::Net::HTTPResponse response;
+        session_->receiveResponse(response);
+        if(response.getStatus() != 200) {
+            throw std::runtime_error("Core::stopStream bad status code");
+        }
+    } catch (std::exception) {
+        // do nothing
     }
     delete session_;
     session_ = NULL;

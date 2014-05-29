@@ -260,7 +260,6 @@ void OpenMMCore::startStream(const string &cc_uri,
     changemode(0);
 }
 
-
 void OpenMMCore::cleanUp() {
     cout << "cleaning up" << endl;
     delete ref_context_;
@@ -278,8 +277,8 @@ void OpenMMCore::cleanUp() {
 void OpenMMCore::stopStream(string error_msg) {
     cout << "stopping stream" << endl;
     flushCheckpoint();
-    Core::stopStream(error_msg);
     cleanUp();
+    Core::stopStream(error_msg);
 }
 
 void OpenMMCore::flushCheckpoint() {
