@@ -730,7 +730,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 cursor.hset('password', scv_pass, pipeline=pipe)
                 pipe.execute()
 
-    def __init__(self, name, external_host, redis_options, mongo_options):
+    def __init__(self, name, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
         super(CommandCenter, self).__init__([
             (r'/engines/keys', EngineKeysHandler),
@@ -809,7 +809,6 @@ def start():
     configure_options(config_file, extra_options)
     options = tornado.options.options
     app = CommandCenter(name=options.name,
-                        external_host=options.external_host,
                         redis_options=options.redis_options,
                         mongo_options=options.mongo_options)
     ssl_opts = None

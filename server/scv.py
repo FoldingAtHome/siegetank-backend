@@ -1288,13 +1288,13 @@ def stop_children(sig, frame):
     deadline = time.time() + 10
 
     def stop_loop():
-        if time.time() < deadline and app.db.zrange('locks', 0, -1):
-            time.sleep(1)
-            tornado.ioloop.IOLoop.instance().add_callback_from_signal(stop_loop)
+        now = time.time()
+        if now < deadline and app.db.zrange('locks', 0, -1):
+            tornado.ioloop.IOLoop.instance().add_timeout(now+1, stop_loop)
         else:
             app.shutdown()
  
-    stop_loop()
+    tornado.ioloop.IOLoop.instance().add_callback_from_signal(stop_loop)
 
 
 def start():
