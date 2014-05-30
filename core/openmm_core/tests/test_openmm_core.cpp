@@ -16,5 +16,6 @@ void test_openmm_core() {
 }
 
 int main() {
+    OpenMMCore::registerComponents();
     test_openmm_core();
 }
