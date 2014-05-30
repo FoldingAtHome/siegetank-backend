@@ -390,16 +390,16 @@ void OpenMMCore::main() {
             }
 
 #ifdef FAH_CORE
-            if(current_step % 10 == 0) {
+            if(current_step % 100 == 0) {
                 wu_dir = "00";
-                mkdir(wu_dir.c_str(), 0755);
-                string info_path = "./"+wu_dir+"/wu_info.dat";
+                //mkdir(wu_dir.c_str(), 0755);
+                string info_path = "./"+wu_dir+"/wuinfo_01.dat";
                 ofstream file(info_path.c_str(), ios::binary);
                 uint32_t unitType = 101;     ///< UNIT_FAH (101) for Folding@home work units
                 char unitName[80] = "Streaming"; ///< Protein name
-                uint32_t framesTotal = 10000;  ///< Total # frames
-                uint32_t framesDone = current_step % framesTotal;   ///< # Frames complete
-                uint32_t frameSteps = steps_per_frame_;   ///< # Dynamic steps per frame
+                uint32_t framesTotal = steps_per_frame;  ///< Total # frames
+                uint32_t framesDone = current_step % steps_per_frame;   ///< # Frames complete
+                uint32_t frameSteps = 1;   ///< # Dynamic steps per frame
                 char reserved[416] = "";
                 file.write((char *)&unitType, sizeof(unitType));
                 file.write((char *)&unitName, 80);

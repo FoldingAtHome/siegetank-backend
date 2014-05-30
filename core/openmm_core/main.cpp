@@ -254,16 +254,21 @@ int main(int argc, const char * argv[]) {
         }
     }
 
-    double delay_in_sec = 1;
+    int delay_in_sec = 1;
     ExitSignal::init();
     OpenMMCore::registerComponents();
 
     const string engine = "openmm";
     while(!ExitSignal::shouldExit()) {
         try {
-            OpenMMCore core(engine, "70ac3a36-6921-4ddb-997d-6b76f2fa7341", properties);
+            OpenMMCore core(engine,
+                            "70ac3a36-6921-4ddb-997d-6b76f2fa7341",
+                            properties);
+#ifdef FAH_CORE
+            opt.get("-dir")->getString(core.wu_dir);
+#endif
             sleep(delay_in_sec);
-            delay_in_sec = delay_in_sec * 3;
+            delay_in_sec = min(delay_in_sec * 3, 600);
             core.startStream(cc_uri, donor_token, target_id);
             delay_in_sec = 1;
             core.main();
