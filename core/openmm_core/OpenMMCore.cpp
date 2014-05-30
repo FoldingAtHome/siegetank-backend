@@ -45,6 +45,28 @@ extern "C" void registerCudaPlatform();
     extern "C" void registerCpuPmeKernelFactories();
 #endif
 
+
+void OpenMMCore::registerComponents() {
+    registerSerializationProxies();
+#ifdef OPENMM_CPU
+    registerCpuPlatform();
+    #ifdef USE_PME_PLUGIN
+        registerCpuPmeKernelFactories();
+    #endif
+    #define PLATFORM_NAME "CPU"
+#elif OPENMM_CUDA
+    registerCudaPlatform();
+    #define PLATFORM_NAME "CUDA"
+    platform_name_ = "CUDA";
+#elif OPENMM_OPENCL
+    registerOpenCLPlatform();
+    #define PLATFORM_NAME "OpenCL"
+#else
+    BAD DEFINE
+#endif
+}
+
+
 OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> properties) :
     Core(engine, core_key),
     checkpoint_send_interval_(6000),
@@ -55,27 +77,23 @@ OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> prope
     core_intg_(NULL),
     shared_system_(NULL),
     properties_(properties) {
-    registerSerializationProxies();
-#ifdef OPENMM_CPU
-    registerCpuPlatform();
-    #ifdef USE_PME_PLUGIN
-        registerCpuPmeKernelFactories();
-    #endif
-    platform_name_ = "CPU";
-#elif OPENMM_CUDA
-    registerCudaPlatform();
-    platform_name_ = "CUDA";
-#elif OPENMM_OPENCL
-    registerOpenCLPlatform();
-    platform_name_ = "OpenCL";
-#else
-    BAD DEFINE
-#endif
+
+        cout << "\n\nconstructing new core\n\n" << endl;
+
 }
 
 OpenMMCore::~OpenMMCore() {
-    cleanUp();
-    // renable proper keyboard input
+    cout << "cleaning up" << endl;
+    delete ref_context_;
+    ref_context_ = NULL;
+    delete core_context_;
+    core_context_ = NULL;
+    delete ref_intg_;
+    ref_intg_ = NULL;
+    delete core_intg_;
+    core_intg_ = NULL;
+    delete shared_system_;
+    shared_system_ = NULL;
     changemode(0);
 }
 
@@ -245,7 +263,7 @@ void OpenMMCore::startStream(const string &cc_uri,
         OpenMM::Platform::getPlatformByName("Reference"));
     cout << "core..." << flush;
     core_context_ = new OpenMM::Context(*shared_system_, *core_intg_,
-        OpenMM::Platform::getPlatformByName(platform_name_), properties_);
+        OpenMM::Platform::getPlatformByName(PLATFORM_NAME), properties_);
     cout << "ok";
     ref_context_->setState(*initial_state);
     core_context_->setState(*initial_state);
@@ -260,24 +278,10 @@ void OpenMMCore::startStream(const string &cc_uri,
     changemode(0);
 }
 
-void OpenMMCore::cleanUp() {
-    cout << "cleaning up" << endl;
-    delete ref_context_;
-    ref_context_ = NULL;
-    delete core_context_;
-    core_context_ = NULL;
-    delete ref_intg_;
-    ref_intg_ = NULL;
-    delete core_intg_;
-    core_intg_ = NULL;
-    delete shared_system_;
-    shared_system_ = NULL;
-}
-
 void OpenMMCore::stopStream(string error_msg) {
     cout << "stopping stream" << endl;
+    cout << "sending last checkpoint" << endl;
     flushCheckpoint();
-    cleanUp();
     Core::stopStream(error_msg);
 }
 
@@ -404,5 +408,4 @@ void OpenMMCore::main() {
         stopStream(e.what());
         cout << e.what() << endl;
     }
-
 }

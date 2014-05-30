@@ -122,6 +122,9 @@ Core::Core(string engine, std::string core_key) :
     core_key_(core_key),
     session_(NULL) {
 
+
+        cout << "\n\nconstructing base core\n\n" << endl;
+
 }
 
 Core::~Core() {
@@ -242,6 +245,9 @@ void Core::startStream(const string &cc_uri,
 
 void Core::sendFrame(const map<string, string> &files, 
     int frame_count, bool gzip) const {
+
+    std::cout << "sending frame" << std::flush;
+
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
     stringstream frame_count_str;
     frame_count_str << frame_count;
@@ -267,7 +273,9 @@ void Core::sendFrame(const map<string, string> &files,
     message += "}}";
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
+    cout << "start fSendRequest()" << endl;
     session_->sendRequest(request) << message;
+    cout << "end fSendRequest()" << endl;
     Poco::Net::HTTPResponse response;
     session_->receiveResponse(response);
     if(response.getStatus() != 200) {
@@ -277,6 +285,9 @@ void Core::sendFrame(const map<string, string> &files,
 
 void Core::sendCheckpoint(const map<string, string> &files, 
     bool gzip) const {
+
+    std::cout << "sending checkpoint" << std::flush;
+
 
     Poco::Net::HTTPRequest request("PUT", "/core/checkpoint");
     string message;
@@ -299,7 +310,9 @@ void Core::sendCheckpoint(const map<string, string> &files,
     message += "}}";
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
+    cout << "start cSendRequest()" << endl;
     session_->sendRequest(request) << message;
+    cout << "end cSendRequest()" << endl;
     Poco::Net::HTTPResponse response;
     session_->receiveResponse(response);
     if(response.getStatus() != 200) {
@@ -308,29 +321,23 @@ void Core::sendCheckpoint(const map<string, string> &files,
 }
 
 void Core::stopStream(string err_msg) {
-    try {
-        Poco::Net::HTTPRequest request("PUT", "/core/stop");
-        string message;
-        message += "{";
-        if(err_msg.length() > 0) {
-            cout << "stopping stream with error: " << err_msg << endl;
-            string b64_error(encode_b64(err_msg));
-            message += "\"error\": \"" + b64_error + "\"";
-        }
-        message += "}";
-        request.set("Authorization", core_token_);
-        request.setContentLength(message.length());
-        session_->sendRequest(request) << message;
-        Poco::Net::HTTPResponse response;
-        session_->receiveResponse(response);
-        if(response.getStatus() != 200) {
-            throw std::runtime_error("Core::stopStream bad status code");
-        }
-    } catch (std::exception) {
-        // do nothing
+    Poco::Net::HTTPRequest request("PUT", "/core/stop");
+    string message;
+    message += "{";
+    if(err_msg.length() > 0) {
+        cout << "stopping stream with error: " << err_msg << endl;
+        string b64_error(encode_b64(err_msg));
+        message += "\"error\": \"" + b64_error + "\"";
     }
-    delete session_;
-    session_ = NULL;
+    message += "}";
+    request.set("Authorization", core_token_);
+    request.setContentLength(message.length());
+    session_->sendRequest(request) << message;
+    Poco::Net::HTTPResponse response;
+    session_->receiveResponse(response);
+    if(response.getStatus() != 200) {
+        throw std::runtime_error("Core::stopStream bad status code");
+    }
 }
 
 void Core::sendHeartbeat() const {

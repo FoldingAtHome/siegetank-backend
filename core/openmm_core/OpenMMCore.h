@@ -36,6 +36,9 @@ public:
 
     virtual void stopStream(std::string error_msg="");
 
+    /* initialize all the platforms and serialization proxies */
+    static void registerComponents();
+
 protected:
     /* check the step and determine if we need to 1) write frame/send frame, 
     or 2) send a checkpoint */
@@ -69,7 +72,6 @@ private:
     int checkpoint_send_interval_;
     int heartbeat_interval_;
     int start_time_;
-    std::string platform_name_;
     std::string last_checkpoint_;
     OpenMM::Context* ref_context_;
     OpenMM::Context* core_context_;
