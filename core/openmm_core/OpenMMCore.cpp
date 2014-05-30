@@ -27,6 +27,7 @@
 #include <iomanip>
 #include <ctime>
 #include <sstream>
+#include <fstream>
 #include <OpenMM.h>
 
 #include "XTCWriter.h"
@@ -34,6 +35,12 @@
 #include "kbhit.h"
 #include "StateTests.h"
 #include "ExitSignal.h"
+
+#ifdef FAH_CORE
+
+#include <sys/stat.h>
+
+#endif
 
 using namespace std;
 
@@ -383,7 +390,25 @@ void OpenMMCore::main() {
             }
 
 #ifdef FAH_CORE
-            // write wuinfo_01.dat
+            if(current_step % 10 == 0) {
+                wu_dir = "00";
+                mkdir(wu_dir.c_str(), 0755);
+                string info_path = "./"+wu_dir+"/wu_info.dat";
+                ofstream file(info_path.c_str(), ios::binary);
+                uint32_t unitType = 101;     ///< UNIT_FAH (101) for Folding@home work units
+                char unitName[80] = "Streaming"; ///< Protein name
+                uint32_t framesTotal = 10000;  ///< Total # frames
+                uint32_t framesDone = current_step % framesTotal;   ///< # Frames complete
+                uint32_t frameSteps = steps_per_frame_;   ///< # Dynamic steps per frame
+                char reserved[416] = "";
+                file.write((char *)&unitType, sizeof(unitType));
+                file.write((char *)&unitName, 80);
+                file.write((char *)&framesTotal, sizeof(framesTotal));
+                file.write((char *)&framesDone, sizeof(framesDone));
+                file.write((char *)&frameSteps, sizeof(frameSteps));
+                file.write((char *)&reserved, 416);
+                file.close();
+            }   
 #endif
 
             if(ExitSignal::shouldExit()) {

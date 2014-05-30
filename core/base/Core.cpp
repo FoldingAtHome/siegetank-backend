@@ -41,6 +41,7 @@
 #include <stdexcept>
 #include <algorithm>
 #include <locale>
+#include <cstdlib>
 
 #include <ctime>
 
@@ -174,11 +175,11 @@ void Core::assign(const string &cc_uri,
     istream &content_stream = cc_session.receiveResponse(response);
 
     if(response.getStatus() == 401) {
-        cout << "core is outdated" << endl;
+        cout << "core is outdated" << endl; 
 #ifdef FAH_CORE
-        system.exit(0x110);
+        exit(0x110);
 #else
-        system.exit(1);
+        exit(1);
 #endif
     } else if(response.getStatus() != 200) {
 

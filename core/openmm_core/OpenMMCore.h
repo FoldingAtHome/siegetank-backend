@@ -40,7 +40,7 @@ public:
     static void registerComponents();
 
 #ifdef FAH_CORE    
-    std::string dir;
+    std::string wu_dir;
 #endif
 
 protected:
