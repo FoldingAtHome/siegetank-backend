@@ -268,7 +268,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def test_assign_bad_core_key(self):
         self._post_target(self.cc_host)
-        self._assign(self.cc_host, core_key='garbage', expected_code=400)
+        self._assign(self.cc_host, core_key='garbage', expected_code=401)
 
     def test_assign_donor(self):
         #content = self._add_user()

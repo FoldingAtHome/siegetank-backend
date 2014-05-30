@@ -33,6 +33,7 @@ from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import CommonHandler
 from server.apollo import Entity
 
+
 class SCV(Entity):
     prefix = 'scv'
     fields = {'host': str,  # http request url (verify based on if IP or not)
@@ -201,7 +202,8 @@ class CoreAssignHandler(BaseHandler):
                 }
 
             :status 200: OK
-            :status 400: Bad request
+            :status 400: Error
+            :status 401: Unauthorized Core
 
         """
         # core authentication
@@ -220,7 +222,7 @@ class CoreAssignHandler(BaseHandler):
             document = results.next_object()
             keys.append(document['_id'])
         if key not in keys:
-            self.error('Bad engine key')
+            self.error('Bad engine key', code=401)
 
         self.set_status(400)
         content = json.loads(self.request.body.decode())
@@ -230,7 +232,7 @@ class CoreAssignHandler(BaseHandler):
             query = yield cursor.find_one({'token': donor_token},
                                           fields=['_id'])
             if not query:
-                self.error('bad donor token')
+                self.error('Bad donor token')
             user = query['_id']
         else:
             user = None
@@ -243,9 +245,9 @@ class CoreAssignHandler(BaseHandler):
                                             'shards': 1,
                                             })
             if core_engine not in result['engines']:
-                self.error('core engine not allowed for this target')
+                self.error('Core engine not allowed for this target')
             if not result['shards']:
-                self.error('target specified has no shards')
+                self.error('Target specified has no shards')
             shards = result['shards']
         else:
             results = cursor.find({'engines': {'$in': [core_engine]},
@@ -794,7 +796,7 @@ def stop_parent(sig, frame):
 def stop_children(sig, frame):
     print('-> stopping children', tornado.process.task_id())
     # stop accepting new requests
-    server.stop()
+    tornado.ioloop.IOLoop.instance().add_callback_from_signal(server.stop)
     app.shutdown()
 
 

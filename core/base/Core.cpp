@@ -172,7 +172,17 @@ void Core::assign(const string &cc_uri,
     cc_session.sendRequest(request) << body;
     Poco::Net::HTTPResponse response;
     istream &content_stream = cc_session.receiveResponse(response);
-    if(response.getStatus() != 200) {
+
+    if(response.getStatus() == 401) {
+        cout << "core is outdated" << endl;
+#ifdef FAH_CORE
+        system.exit(0x110);
+#else
+        system.exit(1);
+#endif
+    } else if(response.getStatus() != 200) {
+
+
         /*
         cout << "BAD STATUS CODE" << response.getStatus() << endl;
         cout << content_stream.rdbuf() << endl;

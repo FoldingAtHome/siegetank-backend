@@ -61,8 +61,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         if keys != ['password']:
             self.scv.db.flushdb()
-            self.scv.shutdown_redis()
-            raise Exception('REDIS is not clean', keys)
+            self.scv.db.shutdown()
+            raise Exception('Redis database is not clean', keys)
 
     def _download(self, stream_id, filename):
         headers = {'Authorization': self.auth_token}

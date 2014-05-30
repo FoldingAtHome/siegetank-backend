@@ -39,6 +39,10 @@ public:
     /* initialize all the platforms and serialization proxies */
     static void registerComponents();
 
+#ifdef FAH_CORE    
+    std::string dir;
+#endif
+
 protected:
     /* check the step and determine if we need to 1) write frame/send frame, 
     or 2) send a checkpoint */
@@ -78,6 +82,8 @@ private:
     OpenMM::Integrator* ref_intg_;
     OpenMM::Integrator* core_intg_;
     OpenMM::System* shared_system_;
+
+
 
 };
 

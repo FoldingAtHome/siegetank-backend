@@ -381,6 +381,11 @@ void OpenMMCore::main() {
                               current_step/steps_per_frame_,
                               current_step);
             }
+
+#ifdef FAH_CORE
+            // write wuinfo_01.dat
+#endif
+
             if(ExitSignal::shouldExit()) {
                 changemode(0);
                 break;

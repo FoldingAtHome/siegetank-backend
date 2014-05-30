@@ -131,6 +131,32 @@ int main(int argc, const char * argv[]) {
         "Donor's access token",
         "--donor_token");
 
+#ifdef FAH_CORE
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "FAHClient directory",
+        "-dir");
+
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "GPU Vendor (either NVIDIA or AMD)",
+        "-gpu-vendor");
+
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "GPU Index",
+        "-gpu");
+#endif
+
 #ifdef OPENMM_OPENCL
     opt.add(
         "",
@@ -159,6 +185,15 @@ int main(int argc, const char * argv[]) {
     // not implemented
 #endif 
     opt.parse(argc, argv);
+
+#ifdef FAH_CORE
+
+    // todo: map -gpu and -gpu-vendor to -platformId and -deviceId (if OpenCL)
+
+    // todo: map -gpu and -gpu-vendor to -deviceId (if CUDA)
+
+#endif
+
     if(opt.isSet("-h")) {
         std::string usage;
         opt.getUsage(usage);
@@ -173,6 +208,7 @@ int main(int argc, const char * argv[]) {
         write_spoiler(cout);
     }
     map<string, string> properties;
+
 #ifdef OPENMM_OPENCL
     if(opt.isSet("--devices")) {
         cout << endl;

@@ -1282,7 +1282,7 @@ def stop_parent(sig, frame):
 def stop_children(sig, frame):
     print('-> stopping children', tornado.process.task_id())
     # stop accepting new requests
-    server.stop()
+    #server.stop()
 
     # wait for all the locks to expire
     deadline = time.time() + 10
@@ -1293,7 +1293,9 @@ def stop_children(sig, frame):
             tornado.ioloop.IOLoop.instance().add_timeout(now+1, stop_loop)
         else:
             app.shutdown()
- 
+
+    tornado.ioloop.IOLoop.instance().add_callback_from_signal(server.stop)
+
     tornado.ioloop.IOLoop.instance().add_callback_from_signal(stop_loop)
 
 
