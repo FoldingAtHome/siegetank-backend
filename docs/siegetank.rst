@@ -3,22 +3,19 @@ Siegetank Python API
 
 .. autosummary::
 
-    siegetank.base.generate_token
     siegetank.base.login
     siegetank.base.Stream
     siegetank.base.Target
-    siegetank.base.generate_token
     siegetank.base.refresh_scvs
     siegetank.base.add_target
-    siegetank.base.get_targets
+    siegetank.base.list_targets
 
 .. automodule:: siegetank.base
 
     .. automethod:: siegetank.base.login
-    .. automethod:: siegetank.base.generate_token
     .. automethod:: siegetank.base.refresh_scvs
     .. automethod:: siegetank.base.add_target
-    .. automethod:: siegetank.base.get_targets
+    .. automethod:: siegetank.base.list_targets
 
     .. autoclass:: Stream
 
@@ -30,50 +27,53 @@ Siegetank Python API
         .. automethod:: Stream.reload_info
         .. attribute:: Stream.id
 
-            The id of the stream.
+            id of the stream. Returns ``string``.
 
         .. attribute:: Stream.active
 
-            A bool denoting if the stream is active or not.
+            If a core is currently processing the stream. Returns ``bool``.
 
         .. attribute:: Stream.frames
 
-            Number of frames completed on the stream.
+            Number of frames completed on the stream. Returns ``int``.
 
         .. attribute:: Stream.status
 
-            Status of the stream.
+            Status of the stream. Returns ``str``.
 
         .. attribute:: Stream.error_count
 
-            Number of times the stream has errored.
+            Number of times the stream has errored. Returns ``int``.
 
     .. autoclass:: Target
 
         .. automethod:: Target.delete
         .. automethod:: Target.add_stream
-        .. automethod:: Target.reload_streams
         .. automethod:: Target.reload_info
         .. attribute:: Target.id
 
-            The id of the target.
+            id of the target. Returns ``str``.
 
         .. attribute:: Target.options
 
-            A dictionary of options defined for the target.
+            Options defined for the target. Returns ``dict``.
 
         .. attribute:: Target.creation_date
 
-            Time for when the target was created, defined in seconds since epoch.
+            When the target was created, defined in seconds since epoch. Returns ``float``.
 
         .. attribute:: Target.shards
 
-            The shards used by the target
+            The shards used by the target. Returns ``list`` of ``str``.
+
+        .. attribute:: Target.streams
+
+            List of streams in the target
 
         .. attribute:: Target.engines
 
-            Engines used by the target
+            Engines used by the target. Returns ``list`` of ``str``.
 
         .. attribute:: Target.weight
 
-            Weight of the target relative to other targets owned by you.
+            Weight of the target relative to other targets owned by you. Returns ``int``.

@@ -3,16 +3,6 @@ SCV REST API
 
 .. automodule:: server.scv
 
-Core Methods
-------------
-These methods must be authenticated using a core token
-
-.. autosimple:: CoreStartHandler.get
-.. autosimple:: CoreFrameHandler.put
-.. autosimple:: CoreCheckpointHandler.put
-.. autosimple:: CoreStopHandler.put
-.. autosimple:: CoreHeartbeatHandler.post
-
 Manager Methods
 ---------------
 
@@ -30,3 +20,13 @@ Misc Methods
 
 .. autosimple:: AliveHandler.get
 .. autosimple:: ActiveStreamsHandler.get
+
+Core Methods
+------------
+These methods must be authenticated using a core token
+
+.. autosimple:: CoreStartHandler.get
+.. autosimple:: CoreFrameHandler.put
+.. autosimple:: CoreCheckpointHandler.put
+.. autosimple:: CoreStopHandler.put
+.. autosimple:: CoreHeartbeatHandler.post

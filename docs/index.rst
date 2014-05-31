@@ -11,11 +11,11 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   deployment
-   architecture
+   tutorial
    cc
    scv
-   siegetank
+   deployment
+   architecture
 
 Indices and tables
 ==================

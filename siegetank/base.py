@@ -28,7 +28,7 @@ scvs = dict()
 last_scvs_refresh = 0
 
 
-def login(cc, token):
+def login(token, cc='cc.proteneer.com'):
     """ Login to a particular command center using your token. """
     url = 'https://'+cc+'/users/verify'
     headers = {'Authorization': token}
@@ -40,7 +40,6 @@ def login(cc, token):
     global login_cc
     login_cc = cc
     refresh_scvs()
-
 
 def require_login(method):
     """ Decorator for methods that require logging in. """
@@ -122,7 +121,6 @@ class Stream(Base):
         self._error_count = None
         self._active = None
         scv_name = stream_id.split(':')[1]
-        refresh_scvs()
         global scvs
         uri = scvs[scv_name]['host']
         super(Stream, self).__init__(uri)
@@ -365,7 +363,7 @@ class Target(Base):
             print(reply.text)
             raise Exception('Bad status code')
         else:
-            return json.loads(reply.text)['stream_id']
+            return Stream(json.loads(reply.text)['stream_id'])
 
     def reload_info(self):
         """ Reload the target's information """
@@ -387,8 +385,8 @@ class Target(Base):
 
     @property
     def streams(self):
-        """ Get the set of streams in this target """
-        self._streams = set()
+        """ Get the list of streams in this target. """
+        streams = []
         self.reload_info()
         global scvs
         for scv in self.shards:
@@ -398,8 +396,8 @@ class Target(Base):
                 print(reply.status_code, reply.content)
                 raise Exception('Failed to load streams from SCV: '+scv)
             for stream_id in reply.json()['streams']:
-                self._streams.add(Stream(stream_id))
-        return self._streams
+                streams.append(Stream(stream_id))
+        return streams
 
     @property
     def options(self):
@@ -447,6 +445,7 @@ def add_target(options, engines, weight=1, stage='private'):
     :param stage: str, stage of the target, allowed values are 'disabled',
         'private', 'public'
     :param weight: int, the weight of the target relative to your other targets
+
     """
     body = {}
     body['options'] = options
@@ -471,7 +470,7 @@ load_stream = Stream
 
 
 @require_login
-def get_targets():
+def list_targets():
     """ Return a list of targets. """
     global login_cc
     url = 'https://'+login_cc+'/targets'
@@ -479,7 +478,7 @@ def get_targets():
     if reply.status_code != 200:
         raise Exception('Cannot list targets')
     target_ids = reply.json()['targets']
-    targets = set()
+    targets = []
     for target_id in target_ids:
-        targets.add(Target(target_id))
+        targets.append(Target(target_id))
     return targets

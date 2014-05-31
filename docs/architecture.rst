@@ -1,5 +1,5 @@
 Architectural Overview
-----------------------
+======================
 
 .. image:: images/images.001.jpg
 

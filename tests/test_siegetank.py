@@ -46,7 +46,7 @@ class TestSiegeTank(unittest.TestCase):
         time.sleep(2)
 
         result = tests.utils.add_user(manager=True)
-        siegetank.login(cc_uri, result['token'])
+        siegetank.login(result['token'], '127.0.0.1:8980')
 
     def tearDown(self):
         try:
@@ -137,8 +137,6 @@ class TestSiegeTank(unittest.TestCase):
                  'state.xml.gz.b64': encoded_state}
         siegetank.base.refresh_scvs()
 
-        print('DEBUG:', siegetank.base.scvs)
-
         random_scv = random.choice(list(siegetank.base.scvs.keys()))
         for i in range(3):
             target.add_stream(files, random_scv)
@@ -190,7 +188,7 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.weight, weight)
         self.assertAlmostEqual(target.creation_date, creation_time, places=0)
         target_ids = set()
-        for k in siegetank.get_targets():
+        for k in siegetank.list_targets():
             target_ids.add(k.id)
         self.assertEqual(target_ids, {target.id})
         encoded_state = 'some_binary1'
@@ -200,8 +198,6 @@ class TestSiegeTank(unittest.TestCase):
                  'integrator.xml.gz.b64': encoded_intg,
                  'state.xml.gz.b64': encoded_state}
         siegetank.base.refresh_scvs()
-
-        print('DEBUG', siegetank.base.scvs)
 
         random_scv = random.choice(list(siegetank.base.scvs.keys()))
         for i in range(20):
@@ -243,4 +239,4 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.weight, weight)
 
         target.delete()
-        self.assertEqual(siegetank.get_targets(), set())
+        self.assertEqual(siegetank.list_targets(), [])

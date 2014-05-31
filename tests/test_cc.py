@@ -316,7 +316,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         target_id = result['target_id']
         options = result['options']
         # update using a valid target_id
-        new_engines = ['openmm', 'ocorecpu', 'test_engine']
+        new_engines = ['onetwo', 'threefour', 'fivesix']
         body = {
             'stage': 'public',
             'engines': new_engines,

@@ -96,9 +96,9 @@ class TargetUpdateHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "stage": "disabled", private", "beta", "public"  //optional
-                    "engines": ["openmm", "openmm_cluster"]  //optional
-                    "weight": 2 // optional
+                    "stage": "private",  //optional
+                    "engines": ["openmm", "openmm_cluster"],  //optional
+                    "weight": 2, // optional
                     "options": {
                         "description": "omgwtfbbq", // optional
                         "title": "DHFR",
@@ -107,20 +107,20 @@ class TargetUpdateHandler(BaseHandler):
                     } // optional
                 }
 
-                .. note:: modifying ``stage`` only affects future assignments.
-                    If you wish to stop the streams, you must explicitly stop
-                    them.
+            .. note:: modifying ``stage`` only affects future assignments.
+                If you wish to stop the streams, you must explicitly stop
+                them. Allowed ``stages`` are disabled, private, and public
 
-                .. note:: generally you want to avoid manually modifying the
-                    ``shards`` field. It should only modified when an SCV is
-                    permanently disabled for whatever reason. If you detach
-                    an SCV, then you are manually responsible for the cleanup
-                    unless you re-attach it.
+            .. note:: generally you want to avoid manually modifying the
+                ``shards`` field. It should only modified when an SCV is
+                permanently disabled for whatever reason. If you detach
+                an SCV, then you are manually responsible for the cleanup
+                unless you re-attach it.
 
-                .. note:: fields in ``options`` will be updated if present,
-                    otherwise a new field will be added. Note that it is not
-                    possible to delete fields inside ``options``, so you must
-                    take care that the names are correct.
+            .. note:: fields in ``options`` will be updated if present,
+                otherwise a new field will be added. Note that it is not
+                possible to delete fields inside ``options``, so you must
+                take care that the names are correct.
 
             **Example reply**
 
@@ -169,15 +169,13 @@ class CoreAssignHandler(BaseHandler):
 
             Assign a stream from an SCV to a core.
 
-            The assignment algorithm is:
+            The assignment algorithm proceeds by identifying all compatible
+            targets given the core's engine. The managers responsible for these
+            targets is identified. A manager is chosen based on his weight
+            relative to the weights of other managers. One of his targets is
+            chosen based on the target's relative weight.
 
-            1. Each user who is a manager has a weight.
-            2. The set of users who have targets that match the core's engine
-                is determined.
-            3. A manager is chosen based on his weight relative to others.
-            4. One of his targets is chosen based on his target's weights
-
-            :reqheader Authorization: core's authentication key
+            :reqheader Authorization: Engine key
 
             **Example request**
 
@@ -335,7 +333,7 @@ class SCVStatusHandler(BaseHandler):
         """
         .. http:put:: /scv/status
 
-            Return the status of all scvs managed by the command center.
+            Return the status of all SCVs as seen by this CC.
 
             **Example response**
 
@@ -370,7 +368,7 @@ class TargetInfoHandler(BaseHandler):
         """
         .. http:get:: /targets/info/:target_id
 
-            Get detailed information about a target
+            Get detailed information about a target.
 
             **Example reply**
 
@@ -409,7 +407,7 @@ class TargetDeleteHandler(BaseHandler):
         .. http:put:: /targets/delete/:target_id
 
             Delete a target from the Command Center. You must delete all the
-            streams for the target to succeed.
+            streams from the target to succeed.
 
             This will not affect mongo's community database in order to
             preserve statistics.
