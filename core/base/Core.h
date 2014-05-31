@@ -21,6 +21,7 @@
 #include <map>
 #include <ostream>
 #include <sstream>
+#include <iostream>
 
 #include "picojson.h"
 
@@ -35,12 +36,14 @@
 class Core {
 public:
     // checkpoint_send_interval is in number of times per day (user config)
-    Core(std::string engine, std::string core_key);
+    Core(std::string engine, std::string core_key, std::ostream& log = std::cout);
 
     ~Core();
 
     /* Main MD loop */
     virtual void main();
+  
+    std::ostream &logStream;
 
 protected:
     /* Start the stream and fetch files. options is a JSON string. */

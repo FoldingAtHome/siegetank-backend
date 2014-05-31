@@ -118,13 +118,14 @@ static string decode_gz_b64(const string &encoded_string) {
     return decode_gz(decode_b64(encoded_string));
 }
 
-Core::Core(string engine, std::string core_key) :
+Core::Core(string engine, std::string core_key, std::ostream& log) :
     engine_(engine),
     core_key_(core_key),
+    logStream(log),
     session_(NULL) {
 
 
-        cout << "\n\nconstructing base core\n\n" << endl;
+        logStream << "\n\nconstructing base core\n\n" << endl;
 
 }
 
@@ -144,7 +145,7 @@ static bool is_domain(const string &host) {
 void Core::assign(const string &cc_uri,
                   const string &donor_token,
                   const string &target_id) {
-    cout << "assignStart" << endl;
+    logStream << "assignStart" << endl;
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(getHost(cc_uri))) {
         verify_mode = Poco::Net::Context::VERIFY_RELAXED;
@@ -154,12 +155,12 @@ void Core::assign(const string &cc_uri,
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
         Poco::Net::Context::CLIENT_USE, "", 
         verify_mode, 9, true);
-    cout << "connecting to cc..." << flush;
-    cout << getHost(cc_uri) << " " << getPort(cc_uri) << endl;
+    logStream << "connecting to cc..." << flush;
+    logStream << getHost(cc_uri) << " " << getPort(cc_uri) << endl;
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
                                              context);
-    cout << "assigning core to a stream..." << flush;
+    logStream << "assigning core to a stream..." << flush;
     Poco::Net::HTTPRequest request("POST", "/core/assign");
     string body;
     body += "{";
@@ -175,7 +176,7 @@ void Core::assign(const string &cc_uri,
     istream &content_stream = cc_session.receiveResponse(response);
 
     if(response.getStatus() == 401) {
-        cout << "core is outdated" << endl; 
+        logStream << "core is outdated" << endl; 
 #ifdef FAH_CORE
         exit(0x110);
 #else
@@ -185,10 +186,10 @@ void Core::assign(const string &cc_uri,
 
 
         /*
-        cout << "BAD STATUS CODE" << response.getStatus() << endl;
-        cout << content_stream.rdbuf() << endl;
+        logStream << "BAD STATUS CODE" << response.getStatus() << endl;
+        logStream << content_stream.rdbuf() << endl;
         */
-        cout << response.getStatus() << endl;
+        logStream << response.getStatus() << endl;
         throw std::runtime_error("Bad assignment");
     }
     picojson::value json_value;
@@ -209,13 +210,13 @@ void Core::assign(const string &cc_uri,
 void Core::startStream(const string &cc_uri,
                        const string &donor_token,
                        const string &target_id) {
-    cout << "b-startStream" << endl;
+    logStream << "b-startStream" << endl;
     if(session_ != NULL) {
         delete session_;
         session_ = NULL;
     }
     assign(cc_uri, donor_token, target_id);
-    cout << "Preparing to start stream..." << endl;
+    logStream << "Preparing to start stream..." << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");
     request.set("Authorization", core_token_);
     session_->sendRequest(request);
@@ -257,7 +258,7 @@ void Core::startStream(const string &cc_uri,
 void Core::sendFrame(const map<string, string> &files, 
     int frame_count, bool gzip) const {
 
-    std::cout << "sending frame" << std::flush;
+    logStream << "sending frame" << std::flush;
 
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
     stringstream frame_count_str;
@@ -284,9 +285,9 @@ void Core::sendFrame(const map<string, string> &files,
     message += "}}";
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    cout << "start fSendRequest()" << endl;
+    logStream << "start fSendRequest()" << endl;
     session_->sendRequest(request) << message;
-    cout << "end fSendRequest()" << endl;
+    logStream << "end fSendRequest()" << endl;
     Poco::Net::HTTPResponse response;
     session_->receiveResponse(response);
     if(response.getStatus() != 200) {
@@ -297,8 +298,7 @@ void Core::sendFrame(const map<string, string> &files,
 void Core::sendCheckpoint(const map<string, string> &files, 
     bool gzip) const {
 
-    std::cout << "sending checkpoint" << std::flush;
-
+    logStream << "sending checkpoint" << std::flush;
 
     Poco::Net::HTTPRequest request("PUT", "/core/checkpoint");
     string message;
@@ -321,9 +321,9 @@ void Core::sendCheckpoint(const map<string, string> &files,
     message += "}}";
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    cout << "start cSendRequest()" << endl;
+    logStream << "start cSendRequest()" << endl;
     session_->sendRequest(request) << message;
-    cout << "end cSendRequest()" << endl;
+    logStream << "end cSendRequest()" << endl;
     Poco::Net::HTTPResponse response;
     session_->receiveResponse(response);
     if(response.getStatus() != 200) {
@@ -336,7 +336,7 @@ void Core::stopStream(string err_msg) {
     string message;
     message += "{";
     if(err_msg.length() > 0) {
-        cout << "stopping stream with error: " << err_msg << endl;
+        logStream << "stopping stream with error: " << err_msg << endl;
         string b64_error(encode_b64(err_msg));
         message += "\"error\": \"" + b64_error + "\"";
     }

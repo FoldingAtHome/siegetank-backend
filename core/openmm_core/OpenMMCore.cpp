@@ -16,10 +16,10 @@
 // ./Configure darwin64-x86_64-cc -noshared
 // g++ -I ~/poco/include Core.cpp ~/poco/lib/libPoco* /usr/local/ssl/lib/lib*
 // Linux:
-// g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/home/yutong/poco152_install/include -L/home/yutong/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMMCUDA_static /usr/lib/nvidia-current/libcuda.so /usr/local/cuda/lib64/libcufft.so -lOpenMMCPU_static -lOpenMMPME_static -L/home/yutong/fftw_install/lib/ -lfftw3f -lfftw3f_threads -lOpenMM_static; ./a.out 
+// g++ -I/home/yutong/openmm_install/include -I/usr/local/ssl/include -I/home/yutong/poco152_install/include -L/home/yutong/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPologStreamil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/home/yutong/openmm_install/lib -L/home/yutong/openmm_install/lib/plugins -lOpenMMOpenCL_static /usr/lib/nvidia-current/libOpenCL.so -lOpenMMCUDA_static /usr/lib/nvidia-current/libcuda.so /usr/local/cuda/lib64/libcufft.so -lOpenMMCPU_static -lOpenMMPME_static -L/home/yutong/fftw_install/lib/ -lfftw3f -lfftw3f_threads -lOpenMM_static; ./a.out 
 
 // Linux:
-// g++ -I/Users/yutongzhao/openmm_install/include -I/usr/local/ssl/include -I/users/yutongzhao/poco152_install/include -L/users/yutongzhao/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPocoUtil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/Users/yutongzhao/openmm_install/lib -lOpenMMCPU_static -L/Users/yutongzhao/openmm_install/lib/plugins -lOpenMM_static; ./a.out 
+// g++ -I/Users/yutongzhao/openmm_install/include -I/usr/local/ssl/include -I/users/yutongzhao/poco152_install/include -L/users/yutongzhao/poco152_install/lib -L/usr/local/ssl/lib/ Core.cpp -lpthread -lPocoNetSSL -lPocoCrypto -lssl -lcrypto -lPologStreamil -lPocoJSON -ldl -lPocoXML -lPocoNet -lPocoFoundation -L/Users/yutongzhao/openmm_install/lib -lOpenMMCPU_static -L/Users/yutongzhao/openmm_install/lib/plugins -lOpenMM_static; ./a.out 
 
 //  ./configure --static --prefix=/home/yutong/poco152_install --omit=Data/MySQL,Data/ODBC
 
@@ -36,12 +36,6 @@
 #include "StateTests.h"
 #include "ExitSignal.h"
 
-#ifdef FAH_CORE
-
-#include <sys/stat.h>
-
-#endif
-
 using namespace std;
 
 extern "C" void registerSerializationProxies();
@@ -51,7 +45,6 @@ extern "C" void registerCudaPlatform();
 #ifdef USE_PME_PLUGIN
     extern "C" void registerCpuPmeKernelFactories();
 #endif
-
 
 void OpenMMCore::registerComponents() {
     registerSerializationProxies();
@@ -73,9 +66,8 @@ void OpenMMCore::registerComponents() {
 #endif
 }
 
-
-OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> properties) :
-    Core(engine, core_key),
+OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> properties, std::ostream &logStream) :
+    Core(engine, core_key, logStream),
     checkpoint_send_interval_(6000),
     heartbeat_interval_(60),
     ref_context_(NULL),
@@ -85,12 +77,12 @@ OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> prope
     shared_system_(NULL),
     properties_(properties) {
 
-        cout << "\n\nconstructing new core\n\n" << endl;
+    logStream << "\n\nconstructing new core\n\n" << endl;
 
 }
 
 OpenMMCore::~OpenMMCore() {
-    cout << "cleaning up" << endl;
+    logStream << "cleaning up" << endl;
     delete ref_context_;
     ref_context_ = NULL;
     delete core_context_;
@@ -138,7 +130,7 @@ void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
     vector<string> forceGroupNames;
     forceGroupNames = setupForceGroups(sys);
     for(int i=0;i<forceGroupNames.size();i++) {
-        cout << "    Group " << i << ": " << forceGroupNames[i] << endl;
+        logStream << "    Group " << i << ": " << forceGroupNames[i] << endl;
     }
     */
     for(int i=0; i<sys->getNumForces(); i++) {
@@ -147,7 +139,7 @@ void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
             OpenMM::AndersenThermostat &ATForce = dynamic_cast<OpenMM::AndersenThermostat &>(force);
             ATForce.setRandomNumberSeed(randomSeed);
             /*
-            cout << "Found AndersenThermostat @ " << ATForce.getDefaultTemperature() << " (default) Kelvin, " 
+            logStream << "Found AndersenThermostat @ " << ATForce.getDefaultTemperature() << " (default) Kelvin, " 
                        << ATForce.getDefaultCollisionFrequency() << " (default) collision frequency. " << endl; 
             */
             continue;
@@ -156,7 +148,7 @@ void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
             OpenMM::MonteCarloBarostat &MCBForce = dynamic_cast<OpenMM::MonteCarloBarostat &>(force);
             MCBForce.setRandomNumberSeed(randomSeed);
             /*
-            cout << "Found MonteCarloBarostat @ " << MCBForce.getDefaultPressure() << " (default) Bar, " << MCBForce.getTemperature() 
+            logStream << "Found MonteCarloBarostat @ " << MCBForce.getDefaultPressure() << " (default) Bar, " << MCBForce.getTemperature() 
                        << " Kelvin, " << MCBForce.getFrequency() << " pressure change frequency." << endl; 
             */    
             continue;
@@ -166,7 +158,7 @@ void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
         } catch(const std::bad_cast &bc) {}
     }
     int numAtoms = sys->getNumParticles();
-    cout << "System size: " << numAtoms << " atoms, " << sys->getNumForces() << " types of forces." << std::endl;
+    logStream << "System size: " << numAtoms << " atoms, " << sys->getNumForces() << " types of forces." << std::endl;
 }
 
 
@@ -237,7 +229,7 @@ static void status_header(ostream &out) {
 void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
                              const string &target_id) {
-    cout << "d-startStream" << endl;
+    logStream << "d-startStream" << endl;
     start_time_ = time(NULL);
     Core::startStream(cc_uri, donor_token, target_id);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
@@ -264,14 +256,14 @@ void OpenMMCore::startStream(const string &cc_uri,
     }
     int random_seed = time(NULL);
     setupSystem(shared_system_, random_seed);
-    cout << "\r                                                             " << flush;
-    cout << "\rcreating contexts: reference... " << flush;
+    logStream << "\r                                                             " << flush;
+    logStream << "\rcreating contexts: reference... " << flush;
     ref_context_ = new OpenMM::Context(*shared_system_, *ref_intg_,
         OpenMM::Platform::getPlatformByName("Reference"));
-    cout << "core..." << flush;
+    logStream << "core..." << flush;
     core_context_ = new OpenMM::Context(*shared_system_, *core_intg_,
         OpenMM::Platform::getPlatformByName(PLATFORM_NAME), properties_);
-    cout << "ok";
+    logStream << "ok";
     ref_context_->setState(*initial_state);
     core_context_->setState(*initial_state);
     checkState(*initial_state);
@@ -286,8 +278,8 @@ void OpenMMCore::startStream(const string &cc_uri,
 }
 
 void OpenMMCore::stopStream(string error_msg) {
-    cout << "stopping stream" << endl;
-    cout << "sending last checkpoint" << endl;
+    logStream << "stopping stream" << endl;
+    logStream << "sending last checkpoint" << endl;
     flushCheckpoint();
     Core::stopStream(error_msg);
 }
@@ -370,35 +362,25 @@ float OpenMMCore::nsPerDay(long long steps_completed) const {
 }
 
 void OpenMMCore::main() {
-    cout << "main" << endl;
+    logStream << "main" << endl;
     try {
         long long current_step = 0;
         changemode(1);
-        status_header(cout);
+        status_header(logStream);
 
         double next_checkpoint = time(NULL) + checkpoint_send_interval_;
         double next_heartbeat = time(NULL) + heartbeat_interval_;
 
         while(true) {
-            if(current_step % 10 == 0) {
-                update_status(target_id_,
-                              stream_id_,
-                              timePerFrame(current_step),
-                              nsPerDay(current_step),
-                              current_step/steps_per_frame_,
-                              current_step);
-            }
-
 #ifdef FAH_CORE
-            if(current_step % 100 == 0) {
-                wu_dir = "00";
+            if(current_step % 200 == 0) {
                 //mkdir(wu_dir.c_str(), 0755);
                 string info_path = "./"+wu_dir+"/wuinfo_01.dat";
                 ofstream file(info_path.c_str(), ios::binary);
                 uint32_t unitType = 101;     ///< UNIT_FAH (101) for Folding@home work units
                 char unitName[80] = "Streaming"; ///< Protein name
-                uint32_t framesTotal = steps_per_frame;  ///< Total # frames
-                uint32_t framesDone = current_step % steps_per_frame;   ///< # Frames complete
+                uint32_t framesTotal = steps_per_frame_;  ///< Total # frames
+                uint32_t framesDone = current_step % steps_per_frame_;   ///< # Frames complete
                 uint32_t frameSteps = 1;   ///< # Dynamic steps per frame
                 char reserved[416] = "";
                 file.write((char *)&unitType, sizeof(unitType));
@@ -408,16 +390,24 @@ void OpenMMCore::main() {
                 file.write((char *)&frameSteps, sizeof(frameSteps));
                 file.write((char *)&reserved, 416);
                 file.close();
-            }   
+            } 
+#else
+           if(current_step % 10 == 0) {
+                update_status(target_id_,
+                              stream_id_,
+                              timePerFrame(current_step),
+                              nsPerDay(current_step),
+                              current_step/steps_per_frame_,
+                              current_step);
+            }
 #endif
-
             if(ExitSignal::shouldExit()) {
                 changemode(0);
                 break;
             }
             if(kbhit()) {
                 if('c' == char(getchar())) {
-                    cout << "\rsending checkpoint" << flush;
+                    logStream << "\rsending checkpoint" << flush;
                     flushCheckpoint();
                 }
             }
@@ -436,6 +426,6 @@ void OpenMMCore::main() {
         stopStream();
     } catch(exception &e) {
         stopStream(e.what());
-        cout << e.what() << endl;
+        logStream << e.what() << endl;
     }
 }

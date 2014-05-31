@@ -367,19 +367,6 @@ class Target(Base):
         else:
             return json.loads(reply.text)['stream_id']
 
-    def reload_streams(self):
-        """ Reload the target's set of streams """
-        self._streams = set()
-        global scvs
-        for scv in self.shards:
-            host = scvs[scv]['host']
-            reply = self._get('/targets/streams/'+self.id, host=host)
-            if reply.status_code != 200:
-                print(reply.status_code, reply.content)
-                raise Exception('Failed to load streams from SCV: '+scv)
-            for stream_id in reply.json()['streams']:
-                self._streams.add(Stream(stream_id))
-
     def reload_info(self):
         """ Reload the target's information """
         reply = self._get('/targets/info/'+self.id)
@@ -401,7 +388,17 @@ class Target(Base):
     @property
     def streams(self):
         """ Get the set of streams in this target """
-        self.reload_streams()
+        self._streams = set()
+        self.reload_info()
+        global scvs
+        for scv in self.shards:
+            host = scvs[scv]['host']
+            reply = self._get('/targets/streams/'+self.id, host=host)
+            if reply.status_code != 200:
+                print(reply.status_code, reply.content)
+                raise Exception('Failed to load streams from SCV: '+scv)
+            for stream_id in reply.json()['streams']:
+                self._streams.add(Stream(stream_id))
         return self._streams
 
     @property

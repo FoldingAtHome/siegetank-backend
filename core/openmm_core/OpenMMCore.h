@@ -18,6 +18,7 @@
 #include "Core.h"
 #include <OpenMM.h>
 #include <sstream>
+#include <iostream>
 #include <map>
 #include <string>
 
@@ -25,7 +26,8 @@ class OpenMMCore : public Core {
 public:
     OpenMMCore(std::string engine,
                std::string core_key,
-               std::map<std::string, std::string> properties = std::map<std::string, std::string>());
+               std::map<std::string, std::string> properties = std::map<std::string, std::string>(),
+               std::ostream &logStream = std::cout);
     ~OpenMMCore();
 
     virtual void main();
@@ -34,7 +36,7 @@ public:
                              const std::string &donor_token = "",
                              const std::string &target_id = "");
 
-    virtual void stopStream(std::string error_msg="");
+    virtual void stopStream(std::string error_msg = "");
 
     /* initialize all the platforms and serialization proxies */
     static void registerComponents();
@@ -82,8 +84,6 @@ private:
     OpenMM::Integrator* ref_intg_;
     OpenMM::Integrator* core_intg_;
     OpenMM::System* shared_system_;
-
-
 
 };
 

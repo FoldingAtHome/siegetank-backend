@@ -11,18 +11,20 @@ list(REMOVE_ITEM OpenMMCoreSources main.cpp)
 
 set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
-set(BUILD_FAH_CORE OFF CACHE BOOLEAN "Whether or not to build as a FAHCore")
+set(BUILD_FAH_CORE OFF CACHE BOOL "Whether or not to build as a FAHCore")
 
-if(BUILD_FAH_CORE)
-    add_definitions(-DFAH_CORE)
-endif()
-
-set(CORE_VERSION 8 CACHE STRING "Core Version")
+set(CORE_VERSION 9 CACHE STRING "Core Version")
 add_definitions(-DCORE_VERSION=${CORE_VERSION})
 
 enable_testing()
 
-set(CORE_NAME ocore_${CORE_TYPE}_v${CORE_VERSION})
+if(BUILD_FAH_CORE)
+    add_definitions(-DFAH_CORE)
+    set(CORE_NAME ocore_${CORE_TYPE}_v${CORE_VERSION}_fah)
+else()
+    set(CORE_NAME ocore_${CORE_TYPE}_v${CORE_VERSION})
+endif()
+
 add_executable(${CORE_NAME} main.cpp)
 
 if(CORE_TYPE STREQUAL "CPU")

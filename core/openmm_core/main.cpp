@@ -18,6 +18,7 @@
 
 #include <string>
 #include <iostream>
+#include <fstream>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -25,14 +26,67 @@
     #include <unistd.h>
 #endif
 
+using namespace std;
+
 #ifdef OPENMM_OPENCL 
 #include "gpuinfo.h"
+#ifdef FAH_CORE
+#include <CL/cl.h>
+static string guessPlatformId() {
+    string platformId;
+    cl_platform_id platforms[100];
+    cl_uint platforms_n = 0;
+    clGetPlatformIDs(100, platforms, &platforms_n);
+    for (unsigned i=0; i<platforms_n; i++) {
+        char buffer[10240];
+        clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR, 10240, buffer, NULL);
+        string VENDOR(buffer);
+        if((VENDOR.find("NVIDIA") != string::npos) || (VENDOR.find("Advanced Micro Devices") != string::npos)) {
+            stringstream b;
+            b << i;
+            platformId = b.str();
+        }
+    }
+    if(platformId.size() != 1) {
+        throw(std::runtime_error(string("Bad platformId size.\n")+platformId));
+    }
+    return platformId;
+}
+
+static string getPlatformId(const string& gpuvendor) {
+    string substr;
+    if(gpuvendor.compare("amd") == 0) {
+        substr = "Advanced Micro Devices";
+    } else if(gpuvendor.compare("ati") == 0) {
+        substr = "Advanced Micro Devices";
+    } else if(gpuvendor.compare("nvidia") == 0) {
+        substr = "NVIDIA";
+    } else {
+        throw(std::runtime_error("Bad gpu-vendor flag passed"));
+    }
+    string platformId;
+    cl_platform_id platforms[100];
+    cl_uint platforms_n = 0;
+    clGetPlatformIDs(100, platforms, &platforms_n);
+    for (unsigned i=0; i<platforms_n; i++) {
+        char buffer[10240];
+        clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR, 10240, buffer, NULL);
+        string VENDOR(buffer);
+        if(VENDOR.find(substr) != string::npos) {
+            stringstream b;
+            b << i;
+            platformId = b.str();
+        }
+    }
+    if(platformId.size() != 1) {
+        throw(std::runtime_error(string("Bad platformId size.\n")+platformId));
+    }
+    return platformId;
+}
+#endif // #ifdef FAH_CORE
 #elif OPENMM_CUDA
 #include "gpuinfo.h"
 #endif
-
-using namespace std;
-
 
 static void write_spoiler(ostream &outstream) {
     outstream << "                                          O              O                     " << std::endl;
@@ -145,11 +199,11 @@ int main(int argc, const char * argv[]) {
         0,
         1,
         0,
-        "GPU Vendor (either NVIDIA or AMD)",
+        "GPU Vendor (either nvidia or amd)",
         "-gpu-vendor");
 
     opt.add(
-        "",
+        "0",
         0,
         1,
         0,
@@ -184,55 +238,67 @@ int main(int argc, const char * argv[]) {
 #elif OPENMM_CUDA
     // not implemented
 #endif 
+
     opt.parse(argc, argv);
-
-#ifdef FAH_CORE
-
-    // todo: map -gpu and -gpu-vendor to -platformId and -deviceId (if OpenCL)
-
-    // todo: map -gpu and -gpu-vendor to -deviceId (if CUDA)
-
-#endif
 
     if(opt.isSet("-h")) {
         std::string usage;
         opt.getUsage(usage);
         std::cout << usage;
-        return 1;
+        return 0;
     }
     if(opt.isSet("--version")) {
         std::cout << CORE_VERSION << endl;
-        return 1;
+        return 0;
     }
     if(!opt.isSet("--nospoiler")) {
         write_spoiler(cout);
     }
-    map<string, string> properties;
+
+    map<string, string> contextProperties;
 
 #ifdef OPENMM_OPENCL
+#ifdef FAH_CORE
+    string platformId;
+    string gpu_vendor;
+    opt.get("-gpu-vendor")->getString(gpu_vendor);
+    if(gpu_vendor == "VENDOR_NOT_SET") {
+        platformId = guessPlatformId();
+        cout << "guessing platformId.." << platformId << endl;
+    } else {
+        platformId = getPlatformId(gpu_vendor);
+        cout << "found on platformId " << platformId << endl;
+    }
+    string dIndex;
+    opt.get("-gpu")->getString(dIndex);
+    contextProperties["OpenCLDeviceIndex"] = dIndex[0];
+    contextProperties["OpenCLPlatformIndex"] = platformId;
+    contextProperties["OpenCLPrecision"] = "single";
+#else
     if(opt.isSet("--devices")) {
         cout << endl;
         Util::listOpenCLDevices();
-        return 0;
+        return 1;
     }
     if(opt.isSet("--platformId") != opt.isSet("--deviceId")) {
         cout << "You must either specify both platformId and deviceId, or specify neither" << endl;
-        return 0;
+        return 1;
     }
     if(opt.isSet("--platformId")) {
         string pid;
         opt.get("--platformId")->getString(pid);
-        properties["OpenCLPlatformIndex"] = pid;
+        contextProperties["OpenCLPlatformIndex"] = pid;
     }
     if(opt.isSet("--deviceId")) {
         string did;
         opt.get("--deviceId")->getString(did);
         if(did.find(",") != string::npos) {
             cout << "Using multiple GPUs to run the same simulation is not currently supported" << endl;
-            return 0;
+            return 1;
         };
-        properties["OpenCLDeviceIndex"] = did;
+        contextProperties["OpenCLDeviceIndex"] = did;
     }
+#endif 
 #endif
 
     string cc_uri;
@@ -261,11 +327,25 @@ int main(int argc, const char * argv[]) {
     const string engine = "openmm";
     while(!ExitSignal::shouldExit()) {
         try {
+
+// OMFG
+#ifdef FAH_CORE
+            string wu_dir;
+            cout << wu_dir << endl;
+            opt.get("-dir")->getString(wu_dir);
+            string logpath("./"+wu_dir+"/logfile_01.txt");
+            ofstream logfile(logpath.c_str(), std::ios::binary);
+#endif
             OpenMMCore core(engine,
                             "70ac3a36-6921-4ddb-997d-6b76f2fa7341",
-                            properties);
+                            contextProperties
 #ifdef FAH_CORE
-            opt.get("-dir")->getString(core.wu_dir);
+                            ,
+                            logfile
+#endif
+                            );
+#ifdef FAH_CORE
+            core.wu_dir = wu_dir;
 #endif
             sleep(delay_in_sec);
             delay_in_sec = min(delay_in_sec * 3, 600);
