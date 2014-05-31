@@ -48,6 +48,10 @@ class TestSiegeTank(unittest.TestCase):
         result = tests.utils.add_user(manager=True)
         siegetank.login(result['token'], '127.0.0.1:8980')
 
+        mdb = pymongo.MongoClient()
+        for db_name in mdb.database_names():
+            mdb.drop_database(db_name)
+
     def tearDown(self):
         try:
             os.killpg(self.pid1.pid, signal.SIGTERM)
@@ -60,9 +64,9 @@ class TestSiegeTank(unittest.TestCase):
             print(e)
             pass
         time.sleep(1)
-        mdb = pymongo.MongoClient()
         for data_folder in glob.glob('*_data'):
             shutil.rmtree(data_folder)
+        mdb = pymongo.MongoClient()
         for db_name in mdb.database_names():
             mdb.drop_database(db_name)
 
