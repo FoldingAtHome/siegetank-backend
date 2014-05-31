@@ -34,6 +34,8 @@ dependencies:
     - "../poco152_install"
 
 test:
+  override:
+    - nosetests -x -v --nocapture
   post:
     - ./tests/start_services
     - cd core/build; make test;

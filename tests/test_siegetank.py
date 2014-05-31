@@ -45,12 +45,12 @@ class TestSiegeTank(unittest.TestCase):
         cc_uri = '127.0.0.1:8980'
         time.sleep(2)
 
-        result = tests.utils.add_user(manager=True)
-        siegetank.login(result['token'], '127.0.0.1:8980')
-
         mdb = pymongo.MongoClient()
         for db_name in mdb.database_names():
             mdb.drop_database(db_name)
+
+        result = tests.utils.add_user(manager=True)
+        siegetank.login(result['token'], '127.0.0.1:8980')
 
     def tearDown(self):
         try:
@@ -95,7 +95,6 @@ class TestSiegeTank(unittest.TestCase):
         def remove_local_seed_file(stream_id, filename):
             stream_dir = os.path.join('sync_data', stream_id)
             os.remove(os.path.join(stream_dir, 'files', filename))
-
 
         def are_dir_trees_equal(dir1, dir2):
             """

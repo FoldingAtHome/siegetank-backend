@@ -41,6 +41,7 @@ def login(token, cc='cc.proteneer.com'):
     login_cc = cc
     refresh_scvs()
 
+
 def require_login(method):
     """ Decorator for methods that require logging in. """
     @functools.wraps(method)
@@ -72,6 +73,7 @@ def refresh_scvs():
 
 
 class Base:
+
     def __init__(self, uri):
         self.uri = uri
 
