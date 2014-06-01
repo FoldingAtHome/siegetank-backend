@@ -21,7 +21,6 @@ To add a target, you must provide it with a dictionary of options (which differ 
     opts = {'description': 'Benchmark Protein',
             'steps_per_frame': 50000}
     target = siegetank.add_target(options=opts, engines=['openmm'])
-    > <target 1740a921-923c-4518-b1f5-a6e964418614>
 
 A target object has a bunch of options you can query at any time. You will use this target later on to add streams to it.
 
@@ -49,35 +48,36 @@ To load your target later on from its id:
 
 .. sourcecode::python
 
-    siegetank.load_target('1740a921-923c-4518-b1f5-a6e964418614')
-    > <target 1740a921-923c-4518-b1f5-a6e964418614>
+    target = siegetank.load_target('1740a921-923c-4518-b1f5-a6e964418614')
+
+To delete the target (only if you've removed all of its streams):
+
+.. sourcecode::python
+
+    target.delete()
 
 Querying SCVs
 -------------
 
-The SCV is the main workhorse backend server, they are where the binary data for streams reside. SCVs are owned by different groups, so please make sure you have permission from them before adding your streams to them.
+The SCV is the main workhorse backend server, which stores binary data for streams. SCVs are owned by different groups, so please make sure you have permission from them before adding your streams to them.
 
 To get a dictionary of scvs and their status:
 
 .. sourcecode:: python
 
     siegetank.scvs
-    > {
-        'proline': {
+    > {'proline': {
             'host': 'proline.stanford.edu:443',
-            'online': True
-            },
+            'online': True},
         'vspg11': {
             'host': 'vspg11.stanford.edu:443',
-            'online': True
-            }
-       }
+            'online': True}}
 
 Adding Streams
 --------------
 
-A stream is defined by a set of files and a particular SCV it resides on. The
-set of files to use depends on the particular engine of interest. The files must be encoded properly. As an example, OpenMM files must be gzipped (note: zlib is not the same thing as gzip) and base64 encoded.
+A stream is defined by a dict of files and a particular SCV it resides on. The
+set of files to use depends on the particular engine of interest. The files must be encoded properly prior to submission. As an example, OpenMM based cores expect files that are gzipped and base64 encoded, with the names ``system.xml.gz.b64``, ``state.xml.gz.b64``, and ``integrator.xml.gz.b64``.
 
 .. sourcecode:: python
 
@@ -104,7 +104,9 @@ set of files to use depends on the particular engine of interest. The files must
     stream = target.add_stream(files=data, scv='vspg11')
     > <stream 6918e316-5c6f-425d-8c1e-902f4b0ba144:vspg11 s:OK f:0>
 
-The s: indicates if the stream is OK or not, and f:0 indicates the number of frames. You can view a list of properties of the stream.
+The s: indicates if the stream is OK or not, and f:0 indicates the number of frames.
+
+To get more information about the recently added stream:
 
 .. sourcecode:: python
 
