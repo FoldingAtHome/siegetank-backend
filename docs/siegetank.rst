@@ -54,6 +54,10 @@ Siegetank Python API
 
             id of the target. Returns ``str``.
 
+        .. attribute:: Target.owner
+
+            Owner of the target the target. Returns ``str``.
+
         .. attribute:: Target.options
 
             Options defined for the target. Returns ``dict``.

@@ -4,7 +4,7 @@
 from distutils.core import setup
 
 setup(name='siegetank',
-      version='0.1',
+      version='0.2',
       description='Siegetank Python Driver',
       author='Yutong Zhao',
       author_email='proteneer@gmail.com',
