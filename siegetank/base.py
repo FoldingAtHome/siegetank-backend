@@ -299,6 +299,7 @@ class Target(Base):
         self._streams = None
         self._weight = None
         self._stage = None
+        self._owner = None
         super(Target, self).__init__(login_cc)
 
     def __repr__(self):
@@ -379,6 +380,7 @@ class Target(Base):
         self._engines = info['engines']
         self._weight = info['weight']
         self._stage = info['stage']
+        self._owner = info['owner']
 
     @property
     def id(self):
@@ -407,6 +409,13 @@ class Target(Base):
         if not self._options:
             self.reload_info()
         return self._options
+
+    @property
+    def owner(self):
+        """ Get the owner of this target. """
+        if not self._owner:
+            self.reload_info()
+        return self._owner
 
     @property
     def creation_date(self):

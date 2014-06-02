@@ -375,7 +375,7 @@ class TargetInfoHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "owner": "diwakar@gmail.com",
+                    "owner": "dshukla",
                     "creation_date": 1392784469,
                     "stage": "beta",
                     "shards": ["raynor", "zeratul"],

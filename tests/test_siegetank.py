@@ -186,6 +186,7 @@ class TestSiegeTank(unittest.TestCase):
                                            stage='public',
                                            weight=weight,
                                            )
+        self.assertEqual(target.owner, 'proteneer')
         self.assertEqual(target.options, options)
         self.assertEqual(target.engines, engines)
         self.assertEqual(target.weight, weight)
