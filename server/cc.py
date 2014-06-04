@@ -182,7 +182,6 @@ class CoreAssignHandler(BaseHandler):
             .. sourcecode:: javascript
 
                 {
-                    "engine": "openmm_50_opencl",
                     "donor_token": "token", // optional
                     "target_id": "target_id" // optional
                 }
@@ -211,16 +210,12 @@ class CoreAssignHandler(BaseHandler):
             self.error('missing Authorization header', code=401)
             return self.set_status(401)
         content = json.loads(self.request.body.decode())
-        core_engine = content['engine']
-        query = {'engine': {'$in': [core_engine]}}
         cursor = self.motor.engines.keys
-        keys = []
-        results = cursor.find(query, {'_id': 1})
-        while (yield results.fetch_next):
-            document = results.next_object()
-            keys.append(document['_id'])
-        if key not in keys:
+
+        result = yield cursor.find_one({'_id': key}, fields=['engine'])
+        if not result:
             self.error('Bad engine key', code=401)
+        core_engine = result['engine']
 
         self.set_status(400)
         content = json.loads(self.request.body.decode())
