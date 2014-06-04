@@ -118,8 +118,7 @@ static string decode_gz_b64(const string &encoded_string) {
     return decode_gz(decode_b64(encoded_string));
 }
 
-Core::Core(string engine, std::string core_key, std::ostream& log) :
-    engine_(engine),
+Core::Core(std::string core_key, std::ostream& log) :
     core_key_(core_key),
     logStream(log),
     session_(NULL) {
@@ -165,10 +164,10 @@ void Core::assign(const string &cc_uri,
     string body;
     body += "{";
     if(donor_token.length() > 0)
-        body += "\"donor_token\": \""+donor_token+"\",";
+        body += "\"donor_token\": \""+donor_token+"\"";
     if(target_id.length() > 0)
-        body += "\"target_id\": \""+target_id+"\",";
-    body += "\"engine\": \""+engine_+"\"}";
+        body += ", \"target_id\": \""+target_id+"\"";
+    body += "}";
     request.set("Authorization", core_key_);
     request.setContentLength(body.length());
     cc_session.sendRequest(request) << body;

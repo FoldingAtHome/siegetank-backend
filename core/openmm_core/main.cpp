@@ -324,7 +324,6 @@ int main(int argc, const char * argv[]) {
     ExitSignal::init();
     OpenMMCore::registerComponents();
 
-    const string engine = "openmm";
     while(!ExitSignal::shouldExit()) {
         try {
 
@@ -336,8 +335,8 @@ int main(int argc, const char * argv[]) {
             string logpath("./"+wu_dir+"/logfile_01.txt");
             ofstream logfile(logpath.c_str(), std::ios::binary);
 #endif
-            OpenMMCore core(engine,
-                            "70ac3a36-6921-4ddb-997d-6b76f2fa7341",
+            cout << "start constructor" << endl;
+            OpenMMCore core("70ac3a36-6921-4ddb-997d-6b76f2fa7341",
                             contextProperties
 #ifdef FAH_CORE
                             ,
@@ -347,6 +346,7 @@ int main(int argc, const char * argv[]) {
 #ifdef FAH_CORE
             core.wu_dir = wu_dir;
 #endif
+            cout << "sleeping for " << delay_in_sec << " seconds.." << endl;
             sleep(delay_in_sec);
             delay_in_sec = min(delay_in_sec * 3, 600);
             core.startStream(cc_uri, donor_token, target_id);

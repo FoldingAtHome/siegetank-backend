@@ -36,7 +36,7 @@
 class Core {
 public:
     // checkpoint_send_interval is in number of times per day (user config)
-    Core(std::string engine, std::string core_key, std::ostream& log = std::cout);
+    Core(std::string core_key, std::ostream& log = std::cout);
 
     ~Core();
 
@@ -91,7 +91,6 @@ private:
     std::string options_;
 
     Poco::Net::HTTPSClientSession* session_;
-    const std::string engine_;
     const std::string core_key_;
     void assign(const std::string &cc_host,
                 const std::string &donor_token,

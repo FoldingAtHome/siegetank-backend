@@ -66,8 +66,8 @@ void OpenMMCore::registerComponents() {
 #endif
 }
 
-OpenMMCore::OpenMMCore(string engine, string core_key, map<string, string> properties, std::ostream &logStream) :
-    Core(engine, core_key, logStream),
+OpenMMCore::OpenMMCore(string core_key, map<string, string> properties, std::ostream &logStream) :
+    Core(core_key, logStream),
     checkpoint_send_interval_(6000),
     heartbeat_interval_(60),
     ref_context_(NULL),

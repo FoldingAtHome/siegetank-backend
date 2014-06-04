@@ -24,8 +24,7 @@
 
 class OpenMMCore : public Core {
 public:
-    OpenMMCore(std::string engine,
-               std::string core_key,
+    OpenMMCore(std::string core_key,
                std::map<std::string, std::string> properties = std::map<std::string, std::string>(),
                std::ostream &logStream = std::cout);
     ~OpenMMCore();

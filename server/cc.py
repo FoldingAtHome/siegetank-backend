@@ -209,6 +209,7 @@ class CoreAssignHandler(BaseHandler):
         except:
             self.error('missing Authorization header', code=401)
             return self.set_status(401)
+
         content = json.loads(self.request.body.decode())
         cursor = self.motor.engines.keys
 
@@ -216,7 +217,6 @@ class CoreAssignHandler(BaseHandler):
         if not result:
             self.error('Bad engine key', code=401)
         core_engine = result['engine']
-
         self.set_status(400)
         content = json.loads(self.request.body.decode())
         if 'donor_token' in content:
@@ -229,10 +229,8 @@ class CoreAssignHandler(BaseHandler):
             user = query['_id']
         else:
             user = None
-        core_engine = content['engine']
         cursor = self.motor.data.targets
         if 'target_id' in content:
-            print('A')
             target_id = content['target_id']
             result = yield cursor.find_one({'_id': target_id},
                                            {'engines': 1,
@@ -244,7 +242,6 @@ class CoreAssignHandler(BaseHandler):
                 self.error('Target specified has no shards')
             shards = result['shards']
         else:
-            print('B')
             results = cursor.find({'engines': {'$in': [core_engine]},
                                    'stage': 'public'},
                                   {'owner': 1,

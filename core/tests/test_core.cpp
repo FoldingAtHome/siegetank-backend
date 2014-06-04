@@ -56,7 +56,7 @@ void testStartStream(string donor_token="", string target_id="") {
     if(key.length() == 0) {
         cout << "warning testStartStream has no core_keys" << endl;
     }
-    Core core("openmm", key);
+    Core core(key);
     string uri("127.0.0.1:8980");
     core.startStream(uri, donor_token, target_id);
     map<string, string> &stream_files = core.files_;
