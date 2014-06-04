@@ -179,6 +179,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
             body['target_id'] = target_id
         reply = self.fetch(host, '/core/assign', method='POST',
                            body=json.dumps(body), headers=core_headers)
+        print(reply.body.decode())
         self.assertEqual(reply.code, expected_code)
         return json.loads(reply.body.decode())
 
@@ -271,12 +272,29 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self._assign(self.cc_host, core_key='garbage', expected_code=401)
 
     def test_assign_donor(self):
-        #content = self._add_user()
         token = self.auth_token
         target_id = self._post_target(self.cc_host)['target_id']
         self._post_stream(target_id)
         self._assign(self.cc_host, donor_token=token)
         self._assign(self.cc_host, donor_token='garbage', expected_code=400)
+
+    def test_assign_no_shards(self):
+        content = self._post_target(self.cc_host)
+        target_id = content['target_id']
+        options = content['options']
+        self._assign(self.cc_host, target_id, expected_code=400)
+        self._assign(self.cc_host, expected_code=400)
+
+    def test_assign_multiple_managers(self):
+        # post using the proteneer account
+        content = self._post_target(self.cc_host)
+        target_id = content['target_id']
+        for i in range(10):
+            self._post_stream(target_id)
+        # joebob has no targets
+        tests.utils.add_user(user='joebob', manager=True, admin=True)
+        for i in range(10):
+            self._assign(self.cc_host)
 
     def test_assign_weight(self):
         weights = {}

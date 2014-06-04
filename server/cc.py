@@ -232,6 +232,7 @@ class CoreAssignHandler(BaseHandler):
         core_engine = content['engine']
         cursor = self.motor.data.targets
         if 'target_id' in content:
+            print('A')
             target_id = content['target_id']
             result = yield cursor.find_one({'_id': target_id},
                                            {'engines': 1,
@@ -243,6 +244,7 @@ class CoreAssignHandler(BaseHandler):
                 self.error('Target specified has no shards')
             shards = result['shards']
         else:
+            print('B')
             results = cursor.find({'engines': {'$in': [core_engine]},
                                    'stage': 'public'},
                                   {'owner': 1,
@@ -267,7 +269,8 @@ class CoreAssignHandler(BaseHandler):
             results = cursor.find(fields={'_id': 1, 'weight': 1})
             while (yield results.fetch_next):
                 document = results.next_object()
-                owner_weights[document['_id']] = document['weight']
+                if document['_id'] in owner_weights:
+                    owner_weights[document['_id']] = document['weight']
 
             def weighted_sample(d):
                 keys = list(d.keys())
