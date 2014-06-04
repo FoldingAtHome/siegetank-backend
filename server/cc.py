@@ -269,6 +269,7 @@ class CoreAssignHandler(BaseHandler):
             results = cursor.find(fields={'_id': 1, 'weight': 1})
             while (yield results.fetch_next):
                 document = results.next_object()
+                # add this owner iff he's a matching owner
                 if document['_id'] in owner_weights:
                     owner_weights[document['_id']] = document['weight']
 
