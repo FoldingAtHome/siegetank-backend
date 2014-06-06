@@ -1253,9 +1253,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 body = {
                     'engine': engine,
                     'user': user,
-                    'start_time': start_time,
-                    'end_time': end_time,
-                    'frames': frames,
+                    'start_time': float(start_time),
+                    'end_time': float(end_time),
+                    'frames': int(frames),
                     'stream': stream_id
                 }
                 cursor = motor.MotorCollection(self.motor.stats, target_id)
