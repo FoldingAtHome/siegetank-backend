@@ -1239,23 +1239,23 @@ class SCV(BaseServerMixin, tornado.web.Application):
         action = self.db.register_script(script)
         result = action(keys=[stream_id])
         if result:
-            frames = result[0]
+            frames = int(result[0])
             user = result[1]
-            start_time = result[2]
+            start_time = float(result[2])
             engine = result[3]
             target_id = result[4]
-            end_time = time.time()
+            end_time = float(time.time())
             stream_path = os.path.join(self.streams_folder, stream_id)
             buffer_path = os.path.join(stream_path, 'buffer_files')
             if os.path.exists(buffer_path):
                 shutil.rmtree(buffer_path)
-            if frames:
+            if frames > 0:
                 body = {
                     'engine': engine,
                     'user': user,
-                    'start_time': float(start_time),
-                    'end_time': float(end_time),
-                    'frames': int(frames),
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'frames': frames,
                     'stream': stream_id
                 }
                 cursor = motor.MotorCollection(self.motor.stats, target_id)
