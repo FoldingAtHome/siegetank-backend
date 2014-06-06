@@ -530,6 +530,7 @@ class TargetsHandler(BaseHandler):
         # verify request #
         #----------------#
         engines = content['engines']
+
         if 'stage' in content:
             if content['stage'] in ['disabled', 'private', 'public']:
                 stage = content['stage']

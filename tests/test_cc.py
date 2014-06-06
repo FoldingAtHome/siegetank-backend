@@ -22,6 +22,7 @@ import json
 import time
 import random
 import pymongo
+import uuid
 
 import server.cc as cc
 import tests.utils
@@ -75,16 +76,15 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     #         self.mdb.users.admins.insert(db_body)
     #     return result
 
-    def _post_target(self, auth, expected_code=200):
+    def _post_target(self, auth, expected_code=200, engines=None):
+        if engines is None:
+            engines = ['openmm_opencl', 'openmm_cuda']
         headers = {'Authorization': auth}
         options = {
             'description': "Diwakar and John's top secret project",
             'steps_per_frame': 50000
         }
-        body = {
-            'engines': ['openmm_opencl', 'openmm_cuda'],
-            'options': options
-            }
+        body = {'engines': engines, 'options': options}
         reply = self.fetch('/targets', method='POST', headers=headers,
                            body=json.dumps(body))
         self.assertEqual(reply.code, expected_code)

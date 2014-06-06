@@ -24,6 +24,7 @@ import logging
 import signal
 import functools
 import sys
+import motor
 
 import tornado.escape
 import tornado.ioloop
@@ -1232,7 +1233,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
             local target_id = redis.call('hget', 'stream:'..stream_id, 'target')
             local frames = redis.call('hget', 'stream:'..stream_id, 'frames')
             redis.call('zadd', 'target:'..target_id..':queue', frames, stream_id)
-            return {tf, us, st, en}
+            return {tf, us, st, en, target_id}
         end
         """
         action = self.db.register_script(script)
@@ -1242,6 +1243,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
             user = result[1]
             start_time = result[2]
             engine = result[3]
+            target_id = result[4]
             end_time = time.time()
             stream_path = os.path.join(self.streams_folder, stream_id)
             buffer_path = os.path.join(stream_path, 'buffer_files')
@@ -1256,7 +1258,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
                     'frames': frames,
                     'stream': stream_id
                 }
-                cursor = self.motor.stats.fragments
+                cursor = motor.MotorCollection(self.motor.stats, target_id)
                 attempts = 0
                 while(attempts < 3):
                     try:
