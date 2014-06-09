@@ -37,7 +37,7 @@ import tornado.gen
 import tornado.netutil
 import tornado.process
 
-from server.common import BaseServerMixin, configure_options, CommonHandler
+from server.common import BaseServerMixin, configure_options, CommonHandler, kill_children
 from server.apollo import Entity, zset, relate
 
 
@@ -68,6 +68,7 @@ class Target(Entity):
     fields = {'queue': zset(str)}  # queue of inactive streams
 
 relate(Target, 'streams', {Stream}, 'target')
+
 
 class BaseHandler(CommonHandler):
 
@@ -112,7 +113,6 @@ class BaseHandler(CommonHandler):
         """
 
         action = self.db.register_script(script)
-        start_time = time.time()
         attempts = 0
         while(True):
             result = action(keys=[token, time.time()])
@@ -128,6 +128,7 @@ class BaseHandler(CommonHandler):
                 stream_id = result
                 unlock = functools.partial(self.application.release_lock, stream_id)
                 return stream_id, unlock
+
 
 def authenticate_cc(method):
     """ Decorator for handlers that require the incoming request's remote_ip
@@ -1279,7 +1280,8 @@ tornado.options.define('check_heart_frequency_in_ms', default=1000, type=int)
 
 
 def stop_parent(sig, frame):
-    pass
+    kill_children()
+
 
 def stop_children(sig, frame):
     print('-> stopping children', tornado.process.task_id())
@@ -1297,8 +1299,8 @@ def stop_children(sig, frame):
             app.shutdown()
 
     tornado.ioloop.IOLoop.instance().add_callback_from_signal(server.stop)
-
     tornado.ioloop.IOLoop.instance().add_callback_from_signal(stop_loop)
+#    sys.exit(0)
 
 
 def start():
@@ -1306,6 +1308,8 @@ def start():
                                '..', 'scv.conf')
     configure_options(config_file)
     options = tornado.options.options
+
+    print('starting SCV on pid', os.getpid())
 
     global app
     global server
@@ -1324,14 +1328,13 @@ def start():
     sockets = tornado.netutil.bind_sockets(options.internal_http_port)
 
     # parent handles signals differently
-    signal.signal(signal.SIGINT, stop_parent)
     signal.signal(signal.SIGTERM, stop_parent)
+    signal.signal(signal.SIGINT, stop_parent)
 
     try:
         tornado.process.fork_processes(0)
 
         # children override the default signal handlers
-        signal.signal(signal.SIGINT, stop_children)
         signal.signal(signal.SIGTERM, stop_children)
 
         server = tornado.httpserver.HTTPServer(app, ssl_options={
@@ -1348,7 +1351,8 @@ def start():
             pulse.start()
             tornado.ioloop.PeriodicCallback(app.scruffy, 3000).start()
         tornado.ioloop.IOLoop.instance().start()
-    except SystemExit as e:
+    except SystemExit:
         print('! parent shutting down...')
         app.db.shutdown()
+        print('redis connection')
         sys.exit()

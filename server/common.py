@@ -25,8 +25,18 @@ import motor
 import tornado.options
 import tornado.web
 import logging
+import psutil
+import signal
 
 from pymongo.read_preferences import ReadPreference
+
+
+def kill_children():
+    p = psutil.Process(os.getpid())
+    child_pid = p.get_children(recursive=True)
+    for pid in child_pid:
+        if pid.name() == p.name():
+            os.kill(pid.pid, signal.SIGTERM)
 
 
 def is_domain(url):

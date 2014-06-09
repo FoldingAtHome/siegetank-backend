@@ -46,13 +46,13 @@ To get a list of your targets later on:
 
 To load your target later on from its id:
 
-.. sourcecode::python
+.. sourcecode:: python
 
     target = siegetank.load_target('1740a921-923c-4518-b1f5-a6e964418614')
 
-To delete the target (only if you've removed all of its streams):
+To delete the target (only allowed if you've removed all of its streams):
 
-.. sourcecode::python
+.. sourcecode:: python
 
     target.delete()
 

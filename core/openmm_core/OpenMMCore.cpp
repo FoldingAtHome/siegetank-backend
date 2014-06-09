@@ -234,6 +234,7 @@ void OpenMMCore::startStream(const string &cc_uri,
     Core::startStream(cc_uri, donor_token, target_id);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
     OpenMM::State *initial_state;
+    cout << "start deserialization" << endl;
     if(files_.find("system.xml") != files_.end()) {
         istringstream system_stream(files_["system.xml"]);
         shared_system_ = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);

@@ -120,7 +120,7 @@ int main(int argc, const char * argv[]) {
 
     opt.overview = "Folding@Home OpenMM Core";
     opt.syntax = "ocore [OPTIONS]";
-    opt.example = "ocore --cc https://127.0.0.1:8980/core/assign --checkpoint 600\n";
+    opt.example = "ocore --checkpoint 600\n";
 
     opt.add(
         "", // Default.
@@ -152,7 +152,7 @@ int main(int argc, const char * argv[]) {
     );
 
     opt.add(
-        "600", // Default.
+        "7200", // Default.
         0, // Required?
         1, // Number of args expected.
         0, // Delimiter if expecting multiple args.
@@ -175,6 +175,7 @@ int main(int argc, const char * argv[]) {
         1,
         0,
         "Fully qualified 36 digit target_id",
+        "--target",
         "--target_id");
 
     opt.add(
@@ -183,7 +184,8 @@ int main(int argc, const char * argv[]) {
         1,
         0,
         "Donor's access token",
-        "--donor_token");
+        "--donor_token",
+        "--token");
 
 #ifdef FAH_CORE
     opt.add(
