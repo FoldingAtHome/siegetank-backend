@@ -244,6 +244,9 @@ void OpenMMCore::startStream(const string &cc_uri,
     cout << "deserialized system" << endl;
     if(files_.find("state.xml") != files_.end()) {
         istringstream state_stream(files_["state.xml"]);
+        /***** DEBUG STATE *****/
+        ofstream debug_state(stream_id_+"_debug_state.xml", ios::binary);
+        debug_state.write(files_["state.xml"].c_str(), files_["state.xml"].size());
         initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
     } else {
         throw std::runtime_error("Cannot find state.xml");
