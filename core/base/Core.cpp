@@ -217,13 +217,15 @@ void Core::startStream(const string &cc_uri,
     assign(cc_uri, donor_token, target_id);
     logStream << "Preparing to start stream..." << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");
+    logStream << "1" << endl;
     request.set("Authorization", core_token_);
     session_->sendRequest(request);
     Poco::Net::HTTPResponse response;
+    cout << "receiving response..." << endl;
     istream &content_stream = session_->receiveResponse(response);
     if(response.getStatus() != 200)
         throw std::runtime_error("Could not start a stream from SCV");
-    logStream << "OK." << endl;
+    logStream << "OK Good." << endl;
     picojson::value json_value;
     content_stream >> json_value;
     string err = picojson::get_last_error();
