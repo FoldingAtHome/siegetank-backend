@@ -236,6 +236,10 @@ void Core::startStream(const string &cc_uri,
     picojson::value::object &json_object = json_value.get<picojson::object>();
     stream_id_ = json_object["stream_id"].get<string>();
     target_id_ = json_object["target_id"].get<string>();
+
+    cout << "stream id: " << stream_id_ << endl;
+    cout << "target id: " << target_id_ << endl;
+
     if(target_id.size() > 0 && target_id != target_id_) {
         throw std::runtime_error("FATAL: Specified target_id mismatch");
     }
