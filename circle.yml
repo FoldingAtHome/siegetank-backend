@@ -14,13 +14,7 @@ checkout:
 
 dependencies:
   pre:
-    - pip install tornado
-    - pip install requests
-    - pip install redis
-    - pip install bcrypt
-    - pip install pymongo==2.7
-    - pip install sphinx
-    - pip install motor==0.2
+    - pip install -r requirements.txt
     - cmake --version
     - if [[ ! -e poco-1.5.2-all ]]; then wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz && tar xvf poco-1.5.2-all.tar.gz; fi
     - cd poco-1.5.2-all && ./configure --no-samples --no-tests --static --prefix=/home/ubuntu/poco152_install --omit=Data/MySQL,Data/ODBC && make -j4 && make install;
