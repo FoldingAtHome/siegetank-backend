@@ -241,12 +241,14 @@ void OpenMMCore::startStream(const string &cc_uri,
     } else {
         throw std::runtime_error("Cannot find system.xml");
     }
+    cout << "deserialized system" << endl;
     if(files_.find("state.xml") != files_.end()) {
         istringstream state_stream(files_["state.xml"]);
         initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
     } else {
         throw std::runtime_error("Cannot find state.xml");
     }
+    cout << "deserialized state" << endl;
     if(files_.find("integrator.xml") != files_.end()) {
         istringstream core_integrator_stream(files_["integrator.xml"]);
         core_intg_ = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
@@ -255,7 +257,9 @@ void OpenMMCore::startStream(const string &cc_uri,
     } else {
         throw std::runtime_error("Cannot find integrator.xml");
     }
+    cout << "deserialized integrator" << endl;
     int random_seed = time(NULL);
+    cout << "start setting up system" << endl;
     setupSystem(shared_system_, random_seed);
     logStream << "\r                                                             " << flush;
     logStream << "\rcreating contexts: reference... " << flush;
