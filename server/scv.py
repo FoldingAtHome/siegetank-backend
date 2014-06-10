@@ -1352,7 +1352,6 @@ def start():
             tornado.ioloop.PeriodicCallback(app.scruffy, 3000).start()
         tornado.ioloop.IOLoop.instance().start()
     except SystemExit:
-        print('! parent shutting down...')
+        print('-> parent shutting down...')
         app.db.shutdown()
-        print('redis connection')
         sys.exit()
