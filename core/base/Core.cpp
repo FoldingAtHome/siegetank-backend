@@ -223,6 +223,7 @@ void Core::startStream(const string &cc_uri,
     istream &content_stream = session_->receiveResponse(response);
     if(response.getStatus() != 200)
         throw std::runtime_error("Could not start a stream from SCV");
+    logStream << "OK." << endl;
     picojson::value json_value;
     content_stream >> json_value;
     string err = picojson::get_last_error();
@@ -252,6 +253,7 @@ void Core::startStream(const string &cc_uri,
         files_[filename] = filedata;
     }
     options_ = json_object["options"].serialize();
+    cout << "json decode complete" << endl;
 }
 
 void Core::sendFrame(const map<string, string> &files, 

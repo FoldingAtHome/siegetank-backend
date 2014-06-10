@@ -30,7 +30,7 @@ import signal
 import sys
 
 from server.common import BaseServerMixin, is_domain, configure_options
-from server.common import CommonHandler
+from server.common import CommonHandler, kill_children
 from server.apollo import Entity
 
 
@@ -785,20 +785,22 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
 
 def stop_parent(sig, frame):
-    pass
+    kill_children()
 
 
 def stop_children(sig, frame):
     print('-> stopping children', tornado.process.task_id())
     # stop accepting new requests
     tornado.ioloop.IOLoop.instance().add_callback_from_signal(server.stop)
-    app.shutdown()
+    tornado.ioloop.IOLoop.instance().add_callback_from_signal(app.shutdown)
 
 
 def start():
 
     global server
     global app
+
+    print('starting CC on pid', os.getpid())
 
     extra_options = {'allowed_core_keys': set}
     config_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -830,7 +832,6 @@ def start():
     try:
         tornado.process.fork_processes(0)
 
-        signal.signal(signal.SIGINT, stop_children)
         signal.signal(signal.SIGTERM, stop_children)
 
         server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_opts)
