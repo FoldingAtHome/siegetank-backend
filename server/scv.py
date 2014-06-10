@@ -554,6 +554,7 @@ class CoreStartHandler(BaseHandler):
             Get files needed for the core to start an activated stream.
 
             :reqheader Authorization: core Authorization token
+            :resheader Content-MD5: MD5 hexdigest of the body
 
             **Example reply**
 
