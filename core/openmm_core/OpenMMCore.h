@@ -37,6 +37,9 @@ public:
 
     virtual void stopStream(std::string error_msg = "");
 
+    /* set the checkpoint interval */
+    void setCheckpointSendInterval(int interval);
+
     /* initialize all the platforms and serialization proxies */
     static void registerComponents();
 
@@ -57,9 +60,6 @@ protected:
 
     /* verify the openmm state */
     void checkState(const OpenMM::State &core_state) const;
-
-    /* set the checkpoint interval */
-    void setCheckpointSendInterval(int interval);
 
     /* set the heartbeat interval */
     void setHeartbeatInterval(int interval);

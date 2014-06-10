@@ -23,6 +23,7 @@ import glob
 import random
 import filecmp
 import pymongo
+import psutil
 
 import siegetank.base
 import tests.utils
@@ -53,16 +54,16 @@ class TestSiegeTank(unittest.TestCase):
         siegetank.login(result['token'], '127.0.0.1:8980')
 
     def tearDown(self):
-        try:
-            os.killpg(self.pid1.pid, signal.SIGTERM)
-        except Exception as e:
-            print(e)
-            pass
-        try:
-            os.killpg(self.pid2.pid, signal.SIGTERM)
-        except Exception as e:
-            print(e)
-            pass
+
+        pids = [self.pid1.pid, self.pid2.pid]
+        for pid in pids:
+            parent = psutil.Process(int(pid))
+            root_pid = 999999999
+            for child in parent.children():
+                root_pid = min(child.pid, root_pid)
+            print('killing', root_pid)
+            os.kill(int(root_pid), signal.SIGTERM)
+
         time.sleep(1)
         for data_folder in glob.glob('*_data'):
             shutil.rmtree(data_folder)

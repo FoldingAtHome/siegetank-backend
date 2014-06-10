@@ -622,6 +622,8 @@ class CoreStartHandler(BaseHandler):
         cursor = self.motor.data.targets
         result = yield cursor.find_one({'_id': target_id}, {'options': 1})
         reply['options'] = result['options']
+        self.set_header("Content-MD5",
+                        hashlib.md5(json.dumps(reply).encode()).hexdigest())
         self.set_status(200)
         return self.write(reply)
 
@@ -640,6 +642,7 @@ class CoreFrameHandler(BaseHandler):
             binary appendable. Files ending in .b64 or .gz are decoded
             automatically.
 
+            :reqheader Content-MD5: MD5 Sum of the body
             :reqheader Authorization: core Authorization token
 
             **Example request**
@@ -685,6 +688,9 @@ class CoreFrameHandler(BaseHandler):
         self.set_status(400)
         active_stream = ActiveStream(stream_id, self.db)
         frame_hash = hashlib.md5(self.request.body).hexdigest()
+        if frame_hash !=  self.request.headers.get('Content-MD5'):
+            unlock()
+            self.error('Checkpoint MD5 mismatch')
         if active_stream.hget('frame_hash') == frame_hash:
             unlock()
             return self.set_status(200)
@@ -732,6 +738,7 @@ class CoreCheckpointHandler(BaseHandler):
             safe. It is assumed that the checkpoint corresponds to the last
             frame of the buffered frames.
 
+            :reqheader Content-MD5: MD5 Sum of the body
             :reqheader Authorization: core Authorization token
 
             **Example Request**
@@ -771,6 +778,10 @@ class CoreCheckpointHandler(BaseHandler):
 
         self.set_status(400)
         stream_id, unlock = self.authenticate_core()
+        request_hash = hashlib.md5(self.request.body).hexdigest()
+        if request_hash != self.request.headers.get('Content-MD5'):
+            unlock()
+            self.error('Frame MD5 mismatch')
         content = json.loads(self.request.body.decode())
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)

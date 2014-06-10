@@ -42,10 +42,12 @@
 #include <algorithm>
 #include <locale>
 #include <cstdlib>
+#include <cstdio>
 
 #include <ctime>
 
 #include "Core.h"
+#include "md5.h"
 
 using namespace std;
 
@@ -116,6 +118,20 @@ static string decode_gz(const string &gzipped_string) {
 
 static string decode_gz_b64(const string &encoded_string) {
     return decode_gz(decode_b64(encoded_string));
+}
+
+static string compute_md5(const string &binary_string) {
+    md5_state_s state;
+    md5_init(&state);
+    md5_append(&state, reinterpret_cast<const unsigned char *>(&binary_string[0]), binary_string.size());
+    unsigned char digest[16] = "";
+    md5_finish(&state, digest);
+    char converted[16*2+1];
+    converted[33] = '\0'; 
+    for(int i=0; i < 16; i++) {
+        sprintf(&converted[i*2], "%02x", digest[i]);
+    }
+    return converted;
 }
 
 Core::Core(std::string core_key, std::ostream& log) :
@@ -225,9 +241,20 @@ void Core::startStream(const string &cc_uri,
     istream &content_stream = session_->receiveResponse(response);
     if(response.getStatus() != 200)
         throw std::runtime_error("Could not start a stream from SCV");
+    // compute md5sum
+    cout << "verifying hash..." << endl;
+    string expected(response.get("Content-MD5"));
+    std::string data((std::istreambuf_iterator<char>(content_stream)),
+                     (std::istreambuf_iterator<char>()));
+    if(compute_md5(data) != expected) {
+        cout << compute_md5(data) << endl;
+        cout << expected << endl;
+        throw std::runtime_error("MD5 mismatch");
+    }
     logStream << "OK Good." << endl;
     picojson::value json_value;
-    content_stream >> json_value;
+    std::istringstream input(data);
+    input >> json_value;
     string err = picojson::get_last_error();
     if(!err.empty())
         throw(std::runtime_error("assign() picojson error"+err));
@@ -290,6 +317,7 @@ void Core::sendFrame(const map<string, string> &files,
         message += "\""+filedata+"\"";
     }
     message += "}}";
+    request.set("Content-MD5", compute_md5(message));
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
     logStream << "start fSendRequest()" << endl;
@@ -326,6 +354,7 @@ void Core::sendCheckpoint(const map<string, string> &files,
         message += "\""+filedata+"\"";
     }
     message += "}}";
+    request.set("Content-MD5", compute_md5(message));
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
     logStream << "start cSendRequest()" << endl;

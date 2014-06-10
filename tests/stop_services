@@ -3,14 +3,17 @@
 import os
 import signal
 import time
+import psutil
 
 pids = open('pids.log').read().split(' ')
 
 for pid in pids:
-    try:
-        os.killpg(int(pid), signal.SIGTERM)
-    except Exception:
-        pass
+    parent = psutil.Process(int(pid))
+    root_pid = 999999999
+    for child in parent.children():
+        root_pid = min(child.pid, root_pid)
+    print('killing', root_pid)
+    os.kill(int(root_pid), signal.SIGTERM)
 
 # avoid weird error where a file is being written while an rm rf is being
 # issued

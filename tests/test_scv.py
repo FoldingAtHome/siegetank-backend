@@ -68,6 +68,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         headers = {'Authorization': self.auth_token}
         reply = self.fetch('/streams/download/'+stream_id+'/'+filename,
                            headers=headers)
+        print(reply.body)
         self.assertEqual(reply.code, 200)
         return reply.body
 
@@ -146,6 +147,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         token = result['token']
         headers = {'Authorization': token}
         response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.headers['Content-MD5'],
+                         hashlib.md5(response.body).hexdigest())
         self.assertEqual(response.code, 200)
         content = json.loads(response.body.decode())
         self.assertEqual(content['stream_id'], stream_id)
@@ -154,18 +157,31 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         result['core_files'] = content['files']
         return result
 
-    def _add_frames(self, core_token, frame_bin=None):
-        headers = {'Authorization': core_token}
+    def _add_frames(self, core_token, frame_bin=None, count=None):
         if frame_bin is None:
             frame_bin = os.urandom(1024)
         body = {
             'files': {'frames.xtc.b64':
                       base64.b64encode(frame_bin).decode()},
             }
+        if count is not None:
+            body['frames'] = count
+        body = json.dumps(body)
+        headers = {'Authorization': core_token,
+                   'Content-MD5': hashlib.md5(body.encode()).hexdigest()} 
         response = self.fetch('/core/frame', headers=headers,
-                              body=json.dumps(body), method='PUT')
+                              body=body, method='PUT')
         self.assertEqual(response.code, 200)
         return frame_bin
+
+    def _add_checkpoint(self, core_token, filename, filebin):
+        body = json.dumps({'files': {filename:
+                                     filebin.decode()}})
+        headers = {'Authorization': core_token,
+                   'Content-MD5': hashlib.md5(body.encode()).hexdigest()}
+        response = self.fetch('/core/checkpoint', headers=headers,
+                              body=body, method='PUT')
+        self.assertEqual(response.code, 200)
 
     def test_post_stream(self):
         result = self._post_stream()
@@ -314,10 +330,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self._add_frames(token)
         checkpoint_bin = base64.b64encode(os.urandom(1024))
         replacement_filename = random.choice(list(files.keys()))
-        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
-        self.assertEqual(response.code, 200)
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
         # stop the stream
         headers = {'Authorization': token}
         response = self.fetch('/core/stop', headers=headers, method='PUT',
@@ -361,11 +374,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         # PUT a checkpoint
         replacement_filename = random.choice(list(files.keys()))
         checkpoint_bin = base64.b64encode(os.urandom(1024))
-        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
-
-        self.assertEqual(response.code, 200)
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
         self.assertEqual(stream.hget('frames'), n_frames)
         self.assertFalse(os.path.exists(buffer_folder))
@@ -386,9 +395,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         # PUT another checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
-        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
         self.assertFalse(os.path.exists(buffer_path))
         self.assertEqual(stream.hget('frames'), n_frames+more_frames)
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
@@ -401,8 +408,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
 
         # test idempotency of put checkpoint
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
         self.assertFalse(os.path.exists(buffer_path))
         self.assertEqual(stream.hget('frames'), n_frames+more_frames)
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
@@ -414,9 +420,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         # test idempotency of put frame
         frame_buffer = self._add_frames(token)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
-        response = self.fetch('/core/frame', headers=headers,
-                              body=json.dumps(body), method='PUT')
-        self.assertEqual(response.code, 200)
+        self._add_frames(token, frame_buffer)
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
         # make sure redis key size stays the same throughout
@@ -454,14 +458,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             frame_buffer += frame_bin
             count = random.randrange(1, 150)
             n_counts.append(count)
-            body = {
-                'frames': count,
-                'files': {'frames.xtc.b64':
-                          base64.b64encode(frame_bin).decode()}
-                }
-            response = self.fetch('/core/frame', headers=headers,
-                                  body=json.dumps(body), method='PUT')
-            self.assertEqual(response.code, 200)
+            self._add_frames(token, frame_bin, count)
 
         self.assertEqual(active_stream.hget('buffer_frames'), sum(n_counts))
         streams_dir = self.scv.streams_folder
@@ -472,10 +469,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         # add a checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
         replacement_filename = random.choice(list(files.keys()))
-        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
-        self.assertEqual(response.code, 200)
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
         self.assertEqual(stream.hget('frames'), sum(n_counts))
         self.assertFalse(os.path.exists(buffer_path))
@@ -590,7 +584,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         token = result['token']
         headers = {'Authorization': token}
         manager_headers = {'Authorization': self.auth_token}
-        
 
         frame_buffer = bytes()
         n_frames = 25
@@ -613,11 +606,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         # PUT a checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
         replacement_filename = random.choice(list(files.keys()))
-
-        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
-        self.assertEqual(response.code, 200)
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
 
         # Get info about the stream
         response = self.fetch('/streams/info/'+stream_id)
@@ -646,10 +635,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         # PUT a checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
-        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
-        self.assertEqual(response.code, 200)
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
 
         # download the frames
         data = self._download(stream_id, '50/frames.xtc')
@@ -744,13 +730,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         for count in range(n_frames):
             frame_bin = os.urandom(1024)
             frame_buffer += frame_bin
-            body = {
-                'files': {'frames.xtc.b64':
-                          base64.b64encode(frame_bin).decode()}
-                }
-            response = self.fetch('/core/frame', headers=headers,
-                                  body=json.dumps(body), method='PUT')
-            self.assertEqual(response.code, 200)
+            self._add_frames(token, frame_bin)
         self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
         streams_dir = self.scv.streams_folder
         buffer_path = os.path.join(streams_dir, stream_id, 'buffer_files',
@@ -760,10 +740,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         # PUT a checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
         random_file = random.choice(list(files.keys()))
-        body = {'files': {random_file: checkpoint_bin.decode()}}
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
-        self.assertEqual(response.code, 200)
+        self._add_checkpoint(token, random_file, checkpoint_bin)
 
         # STOP the stream
         response = self.fetch('/core/stop', headers=headers, method='PUT',
@@ -864,14 +841,10 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
 
         # PUT a checkpoint
-        checkpoint_bin = base64.b64encode(os.urandom(1460000))
+        checkpoint_bin = base64.b64encode(os.urandom(3460000))
         replacement_filename = random.choice(list(files.keys()))
-
-        body = {'files': {replacement_filename: checkpoint_bin.decode()}}
         start = time.time()
-        response = self.fetch('/core/checkpoint', headers=headers,
-                              body=json.dumps(body), method='PUT')
-        self.assertEqual(response.code, 200)
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
         self.assertTrue(total/n_frames < 0.050)
         self._delete_stream(stream_id)
 

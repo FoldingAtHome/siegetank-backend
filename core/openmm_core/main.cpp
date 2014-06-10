@@ -348,6 +348,7 @@ int main(int argc, const char * argv[]) {
 #ifdef FAH_CORE
             core.wu_dir = wu_dir;
 #endif
+            core.setCheckpointSendInterval(checkpoint_frequency);
             cout << "sleeping for " << delay_in_sec << " seconds.." << endl;
             sleep(delay_in_sec);
             delay_in_sec = min(delay_in_sec * 3, 600);
