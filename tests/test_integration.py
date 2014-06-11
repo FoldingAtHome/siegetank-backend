@@ -180,7 +180,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
             body['target_id'] = target_id
         reply = self.fetch(host, '/core/assign', method='POST',
                            body=json.dumps(body), headers=core_headers)
-        print(reply.body.decode())
         self.assertEqual(reply.code, expected_code)
         return json.loads(reply.body.decode())
 

@@ -68,7 +68,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         headers = {'Authorization': self.auth_token}
         reply = self.fetch('/streams/download/'+stream_id+'/'+filename,
                            headers=headers)
-        print(reply.body)
         self.assertEqual(reply.code, 200)
         return reply.body
 
