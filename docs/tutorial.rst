@@ -1,6 +1,8 @@
 Tutorial
 ===============
 
+.. note:: This tutorial assumes python3.3 or later is used.
+
 Begin by logging in with your token.
 
 .. sourcecode:: python
@@ -89,9 +91,10 @@ A stream is defined by a dict of files and a particular SCV it resides on. The s
     system_gz = requests.get(system_url).content
     integrator_gz = requests.get(integrator_url).content
 
-If you have your xml files on disk, use the built-in gzip module:
+If you have your xml files on disk, you can use the built-in gzip module:
 
-..sourcecode:: python
+.. sourcecode:: python
+
     import gzip
 
     system_gz = gzip.compress(open('my_system.xml', 'rb'))
@@ -141,8 +144,6 @@ To delete the stream:
 .. sourcecode:: python
 
     > stream.delete()
-
-Additional API documentation is available above.
 
 Testing Your Stream
 -------------------
