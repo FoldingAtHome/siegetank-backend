@@ -66,7 +66,11 @@ class TestSiegeTank(unittest.TestCase):
 
         time.sleep(1)
         for data_folder in glob.glob('*_data'):
-            shutil.rmtree(data_folder)
+            try:
+                shutil.rmtree(data_folder)
+            except:
+                print('Unable to remove', data_folder)
+                pass
         mdb = pymongo.MongoClient()
         for db_name in mdb.database_names():
             mdb.drop_database(db_name)
