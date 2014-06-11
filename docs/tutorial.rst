@@ -14,12 +14,11 @@ Creating Targets
 
 A target is a collection of streams with a common set of options.
 
-To add a target, you must provide it with a dictionary of options (which differ for each type of engine), and a list of engines you'd like to use. Optionally, you can configure the weight of target, which is relative to your other targets and determines how often this target is assigned. In addition, the default stage of the target is ``private``, which restricts access until you're ready to make it ``public``.
+To add a target, you must provide it with a dictionary of options (which differ for each type of `engine <engines.html>`_), and a list of engines you'd like to use. Optionally, you can configure the weight of target, which is relative to your other targets and determines how often this target is assigned. In addition, the default stage of the target is ``private``, which restricts access until you're ready to make it ``public``.
 
 .. sourcecode:: python
     
-    opts = {'description': 'Benchmark Protein',
-            'steps_per_frame': 50000}
+    opts = {'description': 'Benchmark Protein', 'steps_per_frame': 50000}
     target = siegetank.add_target(options=opts, engines=['openmm_601_opencl', 'openmm_601_cpu'])
 
 A target object has a bunch of options you can query at any time. You will use this target later on to add streams to it.
@@ -31,7 +30,7 @@ A target object has a bunch of options you can query at any time. You will use t
     target.creation_date
     > 1401560581.7190273,
     target.engines
-    > ['openmm']
+    > ['openmm_601_opencl', 'openmm_601_cpu']
     target.stage
     > 'private'
     target.weight
@@ -148,12 +147,12 @@ Additional API documentation is available above.
 Testing Your Stream
 -------------------
 
-You can download the latest pre-built, headless cores at http://www.stanford.edu/~yutongz/ocores/. These cores do not need a client to function. They are built for Ubuntu 14.04 and are linked against OpenMM 6.0.1, but has been reported to work in 12.04. Always get the latest version if possible.
+Before you change the stage of your target to public, you should do testing with pre-built cores (http://www.stanford.edu/~yutongz/ocores/). These cores do not need a client to function, and can be run as is. They are built for Ubuntu 12.04/14.04 and are linked against OpenMM 6.0.1. Always get the latest version if possible.
 
-By default, a target's stage is private. This means that only cores that explicitly specify your target's id can request a stream. To test, simply use:
+By default, a target's stage is private. This means that only cores that explicitly specify your target's id can be assigned. To test your private target, use:
 
 ..sourcecode:: bash
     
-    > ./ocore_xxx --target_id <your target's id>
+    > ./ocore_xxx --target <your target's id>
 
 to check if your target is functioning correctly.
