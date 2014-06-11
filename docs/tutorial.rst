@@ -152,7 +152,7 @@ Before you change the stage of your target to public, you should do testing with
 
 By default, a target's stage is private. This means that only cores that explicitly specify your target's id can be assigned. To test your private target, use:
 
-..sourcecode:: bash
+..  sourcecode:: bash
     
     > ./ocore_xxx --target <your target's id>
 
