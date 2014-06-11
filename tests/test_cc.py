@@ -76,13 +76,14 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     #         self.mdb.users.admins.insert(db_body)
     #     return result
 
-    def _post_target(self, auth, expected_code=200, engines=None):
+    def _post_target(self, auth, expected_code=200, engines=None, stage='private'):
         if engines is None:
             engines = ['openmm_opencl', 'openmm_cuda']
         headers = {'Authorization': auth}
         options = {
             'description': "Diwakar and John's top secret project",
-            'steps_per_frame': 50000
+            'steps_per_frame': 50000,
+            'stage': stage
         }
         body = {'engines': engines, 'options': options}
         reply = self.fetch('/targets', method='POST', headers=headers,
@@ -292,7 +293,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/targets')
         self.assertEqual(response.code, 200)
         targets = json.loads(response.body.decode())['targets']
-        self.assertEqual([target_id], targets)
+        self.assertEqual([], targets)
         # second manager posts a target
         result = self._post_target(token2)
         target_id2 = result['target_id']
@@ -300,7 +301,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         response = self.fetch('/targets')
         self.assertEqual(response.code, 200)
         targets = json.loads(response.body.decode())['targets']
-        self.assertEqual({target_id2, target_id}, set(targets))
+        self.assertEqual([], targets)
         # fetch with authorization
         response = self.fetch('/targets', headers=headers)
         self.assertEqual(response.code, 200)

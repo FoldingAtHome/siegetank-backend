@@ -431,8 +431,11 @@ class TargetsHandler(BaseHandler):
         """
         .. http:get:: /targets
 
-            Return a list of all the targets. If a manager is
-            authenticated, then only his set of targets will be returned.
+            Return a list of targets. If a manager's Authorization token is
+            provided, then only his set of targets will be returned. Otherwise,
+            a list of public targets will be returned.
+
+            :reqheader Authorization: Manager's authorization token (optional)
 
             **Example reply**
 
@@ -457,7 +460,7 @@ class TargetsHandler(BaseHandler):
             return self.write({'targets': targets})
         else:
             targets = []
-            results = cursor.find(field={'_id': 1})
+            results = cursor.find({'_id': 1, 'stage': 'public'}, {'_id': 1})
             while (yield results.fetch_next):
                 document = results.next_object()
                 targets.append(document['_id'])
