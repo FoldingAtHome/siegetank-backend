@@ -120,7 +120,7 @@ int main(int argc, const char * argv[]) {
 
     opt.overview = "Folding@Home OpenMM Core";
     opt.syntax = "ocore [OPTIONS]";
-    opt.example = "ocore --checkpoint 600\n";
+    opt.example = "ocore --checkpoint 3600\n";
 
     opt.add(
         "", // Default.

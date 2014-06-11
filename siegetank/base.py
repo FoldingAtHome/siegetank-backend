@@ -484,8 +484,10 @@ load_stream = Stream
 def list_targets():
     """ Return a list of targets. """
     global login_cc
+    global auth_token
     url = 'https://'+login_cc+'/targets'
-    reply = requests.get(url, verify=is_domain(login_cc))
+    headers = {'Authorization': auth_token}
+    reply = requests.get(url, verify=is_domain(login_cc), headers=headers)
     if reply.status_code != 200:
         raise Exception('Cannot list targets')
     target_ids = reply.json()['targets']
