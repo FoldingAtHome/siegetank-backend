@@ -582,9 +582,10 @@ class EngineKeysHandler(BaseHandler):
         .. http:post:: /engines/keys
 
             Add a new core key for the specified engine. The corresponding core
-            must identify itself using the token.
+            must identify itself using the token. A single engine can have
+            multiple core keys.
 
-            :reqheader Authorization: access token of an administrator
+            :reqheader Authorization: access token of an administrator.
 
             **Example request**
 
@@ -765,7 +766,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 if e.response:
                     body = io.BytesIO(e.response.body)
                 else:
-                    body = io.BytesIO('scv disabled')
+                    body = io.BytesIO(b'scv disabled')
                 if e.code == 599:
                     cursor.hincrby('fail_count', 1)
                 else:

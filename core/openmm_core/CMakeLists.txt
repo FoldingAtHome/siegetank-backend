@@ -13,25 +13,30 @@ set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
 set(BUILD_FAH_CORE OFF CACHE BOOL "Whether or not to build as a FAHCore")
 
-set(CORE_VERSION 11 CACHE STRING "Core Version")
+set(CORE_VERSION 14 CACHE STRING "Core Version")
 add_definitions(-DCORE_VERSION=${CORE_VERSION})
 
 enable_testing()
 
 if(BUILD_FAH_CORE)
     add_definitions(-DFAH_CORE)
-    set(CORE_NAME ocore_${CORE_TYPE}_v${CORE_VERSION}_fah)
+    set(CORE_NAME ocore_601_${CORE_TYPE}_v${CORE_VERSION}_fah)
 else()
-    set(CORE_NAME ocore_${CORE_TYPE}_v${CORE_VERSION})
+    set(CORE_NAME ocore_601_${CORE_TYPE}_v${CORE_VERSION})
 endif()
 
 add_executable(${CORE_NAME} main.cpp)
 
+set(CPU_ENGINE_KEY 62c42d7a-5fd9-4039-b0d9-904c8f420e0e)
+set(OPENCL_ENGINE_KEY 21d4473a-be16-41d4-8f1b-4ee32e6f7b4c)
+
 if(CORE_TYPE STREQUAL "CPU")
     set(ADDITIONAL_LIBRARIES ${FFTW_LIBRARIES})
+    add_definitions(-DENGINE_KEY="${CPU_ENGINE_KEY}")
     add_definitions(-DUSE_PME_PLUGIN)
     add_definitions(-DOPENMM_CPU)
 elseif(CORE_TYPE STREQUAL "OpenCL")
+    add_definitions(-DENGINE_KEY="${OPENCL_ENGINE_KEY}")
     find_package(OpenCL REQUIRED)
     message(STATUS "DEBUG!" ${OPENCL_INCLUDE_DIRS})
     include_directories(${OPENCL_INCLUDE_DIRS})

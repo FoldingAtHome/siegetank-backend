@@ -338,7 +338,7 @@ int main(int argc, const char * argv[]) {
             ofstream logfile(logpath.c_str(), std::ios::binary);
 #endif
             cout << "start constructor" << endl;
-            OpenMMCore core("70ac3a36-6921-4ddb-997d-6b76f2fa7341",
+            OpenMMCore core(ENGINE_KEY,
                             contextProperties
 #ifdef FAH_CORE
                             ,

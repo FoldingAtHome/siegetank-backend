@@ -20,7 +20,7 @@ To add a target, you must provide it with a dictionary of options (which differ 
     
     opts = {'description': 'Benchmark Protein',
             'steps_per_frame': 50000}
-    target = siegetank.add_target(options=opts, engines=['openmm'])
+    target = siegetank.add_target(options=opts, engines=['openmm_601_opencl', 'openmm_601_cpu'])
 
 A target object has a bunch of options you can query at any time. You will use this target later on to add streams to it.
 
@@ -76,8 +76,7 @@ To get a dictionary of scvs and their status:
 Adding Streams
 --------------
 
-A stream is defined by a dict of files and a particular SCV it resides on. The
-set of files to use depends on the particular engine of interest. The files must be encoded properly prior to submission. As an example, OpenMM based cores expect files that are gzipped and base64 encoded, with the names ``system.xml.gz.b64``, ``state.xml.gz.b64``, and ``integrator.xml.gz.b64``.
+A stream is defined by a dict of files and a particular SCV it resides on. The set of files to use depends on the particular engine of interest. The files must be encoded properly prior to submission. As an example, OpenMM based cores expect files that are gzipped and base64 encoded, with the names ``system.xml.gz.b64``, ``state.xml.gz.b64``, and ``integrator.xml.gz.b64``. The following shows an example using pre-generated and gzipped files.
 
 .. sourcecode:: python
 
@@ -87,13 +86,26 @@ set of files to use depends on the particular engine of interest. The files must
     state_url = 'http://web.stanford.edu/~yutongz/state.xml.gz'
     system_url = 'http://web.stanford.edu/~yutongz/system.xml.gz'
     integrator_url = 'http://web.stanford.edu/~yutongz/integrator.xml.gz'
+    state_gz = requests.get(state_url).content
+    system_gz = requests.get(system_url).content
+    integrator_gz = requests.get(integrator_url).content
+
+If you have your xml files on disk, use the built-in gzip module:
+
+..sourcecode:: python
+    import gzip
+
+    system_gz = gzip.compress(open('my_system.xml', 'rb'))
+    state_gz = gzip.compress(open('my_state.xml', 'rb'))
+    system_gz = gzip.compress(open('my_integrator.xml', 'rb'))
+
+Once you have your gzipped files, you need to apply a base64 encoding so they can be transferred via JSON.
+
+.. sourcecode:: python
+
     encoded_system = base64.b64encode(system_gz).decode()
     encoded_intg = base64.b64encode(integrator_gz).decode()
     encoded_state = base64.b64encode(state_gz).decode()
-
-.. note:: the slightly awkward base64.b64encode() followed by a decode() is a subtle python3 issue because b64encode() returns a ``bytes`` which must be converted to the unicode ``str``.
-
-.. sourcecode:: python
 
     data = {
         'system.xml.gz.b64': encoded_system,
@@ -104,9 +116,9 @@ set of files to use depends on the particular engine of interest. The files must
     stream = target.add_stream(files=data, scv='vspg11')
     > <stream 6918e316-5c6f-425d-8c1e-902f4b0ba144:vspg11 s:OK f:0>
 
-The s: indicates if the stream is OK or not, and f:0 indicates the number of frames.
+.. note:: the slightly awkward base64.b64encode() followed by a decode() is a subtle python3 issue because b64encode() returns a ``bytes`` which must be converted to the unicode ``str``.
 
-To get more information about the recently added stream:
+The stream descriptor looks like <stream xxxxx: s: OK f:0>, where s: indicates if the stream is OK or not, and f:0 indicates the number of frames. To get more information about the recently added stream:
 
 .. sourcecode:: python
 
@@ -132,3 +144,16 @@ To delete the stream:
     > stream.delete()
 
 Additional API documentation is available above.
+
+Testing Your Stream
+-------------------
+
+You can download the latest pre-built, headless cores at http://www.stanford.edu/~yutongz/ocores/. These cores do not need a client to function. They are built for Ubuntu 14.04 and are linked against OpenMM 6.0.1, but has been reported to work in 12.04. Always get the latest version if possible.
+
+By default, a target's stage is private. This means that only cores that explicitly specify your target's id can request a stream. To test, simply use:
+
+..sourcecode:: bash
+    
+    > ./ocore_xxx --target_id <your target's id>
+
+to check if your target is functioning correctly.

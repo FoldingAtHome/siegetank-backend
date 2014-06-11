@@ -89,6 +89,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         shutil.rmtree(self.cc.data_folder)
         for key in self.scvs:
             key['server'].stop()
+            key['app'].db.shutdown()
             key['app'].shutdown()
             shutil.rmtree(key['app'].data_folder)
 

@@ -177,13 +177,12 @@ void Core::assign(const string &cc_uri,
                                              context);
     logStream << "assigning core to a stream..." << flush;
     Poco::Net::HTTPRequest request("POST", "/core/assign");
-    string body;
-    body += "{";
+    picojson::object obj;
     if(donor_token.length() > 0)
-        body += "\"donor_token\": \""+donor_token+"\"";
+        obj["donor_token"] = picojson::value(donor_token);
     if(target_id.length() > 0)
-        body += ", \"target_id\": \""+target_id+"\"";
-    body += "}";
+        obj["target_id"] = picojson::value(target_id);
+    string body = picojson::value(obj).serialize();
     request.set("Authorization", core_key_);
     request.setContentLength(body.length());
     cc_session.sendRequest(request) << body;
@@ -205,6 +204,7 @@ void Core::assign(const string &cc_uri,
         logStream << content_stream.rdbuf() << endl;
         */
         logStream << response.getStatus() << endl;
+        logStream << content_stream.rdbuf() << endl;
         throw std::runtime_error("Bad assignment");
     }
     picojson::value json_value;
@@ -241,15 +241,17 @@ void Core::startStream(const string &cc_uri,
     istream &content_stream = session_->receiveResponse(response);
     if(response.getStatus() != 200)
         throw std::runtime_error("Could not start a stream from SCV");
-    // compute md5sum
-    cout << "verifying hash..." << endl;
-    string expected(response.get("Content-MD5"));
     std::string data((std::istreambuf_iterator<char>(content_stream)),
-                     (std::istreambuf_iterator<char>()));
-    if(compute_md5(data) != expected) {
-        cout << compute_md5(data) << endl;
-        cout << expected << endl;
-        throw std::runtime_error("MD5 mismatch");
+                 (std::istreambuf_iterator<char>()));
+    if(response.has("Content-MD5")) {
+        // compute md5sum
+        cout << "verifying hash..." << endl;
+        string expected(response.get("Content-MD5"));
+        if(compute_md5(data) != expected) {
+            cout << compute_md5(data) << endl;
+            cout << expected << endl;
+            throw std::runtime_error("MD5 mismatch");
+        }
     }
     logStream << "OK Good." << endl;
     picojson::value json_value;

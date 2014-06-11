@@ -479,6 +479,15 @@ def add_target(options, engines, weight=1, stage='private'):
 load_target = Target
 load_stream = Stream
 
+@require_login
+def list_engines():
+    global login_cc
+    global auth_token
+    url = 'https://'+login_cc+'/engines/keys'
+    headers = {'Authorization': auth_token}
+    reply = requests.get(url, verify=is_domain(login_cc), headers=headers)
+    if reply.status_code != 200:
+        raise Exception('Cannot get engines')
 
 @require_login
 def list_targets():
