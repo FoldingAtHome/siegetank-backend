@@ -97,9 +97,9 @@ If you have your xml files on disk, you can use the built-in gzip module:
 
     import gzip
 
-    system_gz = gzip.compress(open('my_system.xml', 'rb'))
-    state_gz = gzip.compress(open('my_state.xml', 'rb'))
-    system_gz = gzip.compress(open('my_integrator.xml', 'rb'))
+    system_gz = gzip.compress(open('my_system.xml', 'rb').read())
+    state_gz = gzip.compress(open('my_state.xml', 'rb').read())
+    system_gz = gzip.compress(open('my_integrator.xml', 'rb').read())
 
 Once you have your gzipped files, you need to apply a base64 encoding so they can be transferred via JSON.
 
