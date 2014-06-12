@@ -1,7 +1,7 @@
 Tutorial
 ===============
 
-.. note:: This tutorial assumes python3.3 or later is used.
+.. note:: This tutorial assumes python 3.3 or later is used.
 
 Begin by logging in with your token.
 
@@ -14,16 +14,14 @@ Begin by logging in with your token.
 Creating Targets
 ----------------
 
-A target is a collection of streams with a common set of options.
-
-To add a target, you must provide it with a dictionary of options (which differ for each type of `engine <engines.html>`_), and a list of engines you'd like to use. Optionally, you can configure the weight of target, which is relative to your other targets and determines how often this target is assigned. In addition, the default stage of the target is ``private``, which restricts access until you're ready to make it ``public``.
+To add a target, you must provide a dictionary of options (which differ for each `engine <engines.html>`_) along with a list of engines you'd like to use. Optionally, you can configure the weight of the target, which is relative to other targets owned by you. If target A has a weight of 2, and target B has a weight 1, then target A will be assigned twice as often as B. In addition, the default stage of the target is ``private``, which restricts access from public cores until you're ready to make it ``public``.
 
 .. sourcecode:: python
     
     opts = {'description': 'Benchmark Protein', 'steps_per_frame': 50000}
     target = siegetank.add_target(options=opts, engines=['openmm_601_opencl', 'openmm_601_cpu'])
 
-A target object has a bunch of options you can query at any time. You will use this target later on to add streams to it.
+A target also has a bunch of properties that you can query:
 
 .. sourcecode:: python
 
@@ -38,14 +36,14 @@ A target object has a bunch of options you can query at any time. You will use t
     target.weight
     > 1
 
-To get a list of your targets later on:
+To get a list of all your targets later on:
 
 .. sourcecode:: python
 
     siegetank.list_targets()
     > [<target 1740a921-923c-4518-b1f5-a6e964418614>]
 
-To load your target later on from its id:
+To load your target from its id:
 
 .. sourcecode:: python
 
@@ -60,9 +58,7 @@ To delete the target (only allowed if you've removed all of its streams):
 Querying SCVs
 -------------
 
-The SCV is the main workhorse backend server, which stores binary data for streams. SCVs are owned by different groups, so please make sure you have permission from them before adding your streams to them.
-
-To get a dictionary of scvs and their status:
+The SCV is the main workhorse backend server, which stores binary data for streams. SCVs are owned by different research groups, so please make sure you have permission from them before adding your streams to them. To get a dictionary of scvs and their status:
 
 .. sourcecode:: python
 
@@ -77,7 +73,7 @@ To get a dictionary of scvs and their status:
 Adding Streams
 --------------
 
-A stream is defined by a dict of files and a particular SCV it resides on. The set of files to use depends on the particular engine of interest. The files must be encoded properly prior to submission. As an example, OpenMM based cores expect files that are gzipped and base64 encoded, with the names ``system.xml.gz.b64``, ``state.xml.gz.b64``, and ``integrator.xml.gz.b64``. The following shows an example using pre-generated and gzipped files.
+A stream is defined by a dict of files and a particular SCV it resides on. The set of files to use depends on the particular engine of interest. The files must be encoded properly prior to submission. For example, OpenMM based cores expect XML files that are gzipped and base64 encoded, with the names ``system.xml.gz.b64``, ``state.xml.gz.b64``, and ``integrator.xml.gz.b64``. The following shows an example using pre-generated and gzipped files.
 
 .. sourcecode:: python
 
@@ -91,17 +87,17 @@ A stream is defined by a dict of files and a particular SCV it resides on. The s
     system_gz = requests.get(system_url).content
     integrator_gz = requests.get(integrator_url).content
 
-If you have your xml files on disk, you can use the built-in gzip module:
+If you have your XML files on disk, you can use the built-in gzip module:
 
 .. sourcecode:: python
 
     import gzip
 
-    system_gz = gzip.compress(open('my_system.xml', 'rb'))
-    state_gz = gzip.compress(open('my_state.xml', 'rb'))
-    system_gz = gzip.compress(open('my_integrator.xml', 'rb'))
+    system_gz = gzip.compress(open('my_system.xml', 'rb').read())
+    state_gz = gzip.compress(open('my_state.xml', 'rb').read())
+    system_gz = gzip.compress(open('my_integrator.xml', 'rb').read())
 
-Once you have your gzipped files, you need to apply a base64 encoding so they can be transferred via JSON.
+Once you've gzipped your files, apply a base64 encoding so they are JSON compatible.
 
 .. sourcecode:: python
 
@@ -118,7 +114,7 @@ Once you have your gzipped files, you need to apply a base64 encoding so they ca
     stream = target.add_stream(files=data, scv='vspg11')
     > <stream 6918e316-5c6f-425d-8c1e-902f4b0ba144:vspg11 s:OK f:0>
 
-.. note:: the slightly awkward base64.b64encode() followed by a decode() is a subtle python3 issue because b64encode() returns a ``bytes`` which must be converted to the unicode ``str``.
+.. note:: the slightly awkward base64.b64encode() followed by a decode() is a subtle python3 issue because b64encode() returns ``bytes`` which must be converted to the unicode ``str``.
 
 The stream descriptor looks like <stream xxxxx: s: OK f:0>, where s: indicates if the stream is OK or not, and f:0 indicates the number of frames. To get more information about the recently added stream:
 
@@ -156,7 +152,7 @@ By default, a target's stage is private, only cores that explicitly specify your
     
     > ./ocore_xxx --target <your target's id>
 
-to check if your target is functioning correctly.
+to check if your target is functioning correctly. A good, scalable way of testing your target is to launch cores on AWS EC2 g2.2xlarge spot instances to test GPUs, or c3.large spot instances to test CPUs.
 
 Analysis
 --------
