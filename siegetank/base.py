@@ -172,8 +172,7 @@ class Stream(Base):
 
     def sync(self, folder, sync_seeds=False):
         """ Sync the data for a given stream. This method performs an
-        incremental update and should be ran periodically. This method does not
-        fully check for rsync status.
+        incremental update and should be ran periodically.
 
         :param folder: str, the directory to sync the streams's data to.
         :param sync_seeds: str, whether or not to sync the initial files.

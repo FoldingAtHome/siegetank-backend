@@ -137,23 +137,56 @@ To load a stream for use later on:
 
 .. sourcecode:: python
 
-    > siegetank.load_stream('6918e316-5c6f-425d-8c1e-902f4b0ba144:vspg11')
+    stream = siegetank.load_stream('6918e316-5c6f-425d-8c1e-902f4b0ba144:vspg11')
 
 To delete the stream:
 
 .. sourcecode:: python
 
-    > stream.delete()
+    stream.delete()
 
 Testing Your Stream
 -------------------
 
-Before you change the stage of your target to public, you should do testing with pre-built cores (http://www.stanford.edu/~yutongz/ocores/). These cores do not need a client to function, and can be run as is. They are built for Ubuntu 12.04/14.04 and are linked against OpenMM 6.0.1. Always get the latest version if possible.
+Before you change the stage of your target to public, you should do testing with `pre-built cores <http://www.stanford.edu/~yutongz/ocores/>`_. These cores do not need a client to function, and can be run as is. They are built for Ubuntu 12.04/14.04 and are linked against OpenMM 6.0.1. Always get the latest version if possible.
 
-By default, a target's stage is private. This means that only cores that explicitly specify your target's id can be assigned. To test your private target, use:
+By default, a target's stage is private, only cores that explicitly specify your target's id can obtain its streams. To test your private target, use:
 
 ..  sourcecode:: bash
     
     > ./ocore_xxx --target <your target's id>
 
 to check if your target is functioning correctly.
+
+Analysis
+--------
+
+To retrieve the data for a given stream for analysis, an rsync-like API is provided. ``sync()`` incrementally fetches only the missing parts of stream data (as opposed to downloading everything in one go). It is highly recommended to sync and backup your data periodically (eg. once a day). Note that the onus of backing up the data is on the managers (though we do try our best to configure SCVs to use RAID6 hard drives).
+
+.. sourcecode:: python
+
+    data_folder = stream.id+'_data'
+    stream.sync(data_folder) 
+
+This will populate the folder with the stream's data. Let's look at the resulting folder:
+
+.. sourcecode:: python
+
+    import os
+
+    os.listdir(data_folder)
+    > ['2', '209', '38', '592']
+    # important: sort by actual integer values and not lexicographical ordering
+    sorted_folders = sorted(os.listdir('test_dir'), key=lambda value: int(value))
+    > ['2', '38', '209', '592']
+
+When storing the folder names, the stream is partitioned into the (open, closed] intervals: (0, 2](2, 38](38, 209](209, 592]. Each interval has a sub-folder called checkpoint_files that corresponds to the last frame. For OpenMM based targets, the ``frames.xtc`` file inside each folder can be binary appended to get a single xtc file.
+
+.. sourcecode:: python
+
+    concatenated_data = bytes()
+    for folder in sorted_folders:
+        frame_path = os.path.join(data_folder, folder, 'frames.xtc')
+        concatenated_data += open(frame_path, 'rb').read()
+
+.. note:: mdtraj supports loading in multiple xtc files via a list.

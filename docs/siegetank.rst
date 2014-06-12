@@ -25,6 +25,7 @@ Siegetank Python API
         .. automethod:: Stream.download
         .. automethod:: Stream.upload
         .. automethod:: Stream.reload_info
+        .. automethod:: Stream.sync
         .. attribute:: Stream.id
 
             id of the stream. Returns ``string``.
