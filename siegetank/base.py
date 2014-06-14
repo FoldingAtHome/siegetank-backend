@@ -77,7 +77,7 @@ class Base:
     def __init__(self, uri):
         self.uri = uri
 
-    def _get(self, path, host=None, headers=None):
+    def _get(self, path, host=None, headers=None, timeout=2):
         if headers is None:
             headers = {}
         headers['Authorization'] = auth_token
@@ -85,7 +85,7 @@ class Base:
             host = self.uri
         url = 'https://'+host+path
         return requests.get(url, headers=headers, verify=is_domain(self.uri),
-                            timeout=2)
+                            timeout=timeout)
 
     def _put(self, path, body=None, headers=None):
         if headers is None:
@@ -161,10 +161,10 @@ class Stream(Base):
     def download(self, filename):
         """ Download a file from the stream.
 
-        :param filename: name of the file. eg. '2/frames.xtc'.
+        :param filename: name of the file. eg. '2/checkpoint_files/state.xml.gz'
 
         """
-        reply = self._get('/streams/download/'+self.id+'/'+filename)
+        reply = self._get('/streams/download/'+self.id+'/'+filename, timeout=10)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -175,13 +175,15 @@ class Stream(Base):
         incremental update and should be ran periodically.
 
         :param folder: str, the directory to sync the streams's data to.
-        :param sync_seeds: str, whether or not to sync the initial files.
+        :param sync_seeds: bool, if we should sync the initial files
 
         """
         # this method could be made more general later on without hardcoding in
         # all the folder names.
         def missing(required_list, have_list):
             """ Order matters. """
+            required_list = [str(item) for item in required_list]
+            have_list = [str(item) for item in have_list]
             return list(set(required_list)-set(have_list))
 
         reply = self._get('/streams/sync/'+self.id)
@@ -193,19 +195,21 @@ class Stream(Base):
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        if sync_seeds:
-            required_files = content['seed_files']
-            seed_dir = os.path.join(folder, 'files')
-            if not os.path.exists(seed_dir):
-                os.makedirs(seed_dir)
-            existing_files = os.listdir(seed_dir)
-            for filename in missing(required_files, existing_files):
-                filedata = self.download(os.path.join('files', filename))
-                filepath = os.path.join(seed_dir, filename)
-                open(filepath, 'wb').write(filedata)
+        # if sync_seeds:
+        #     required_files = content['seed_files']
+        #     seed_dir = os.path.join(folder, 'files')
+        #     if not os.path.exists(seed_dir):
+        #         os.makedirs(seed_dir)
+        #     existing_files = os.listdir(seed_dir)
+        #     for filename in missing(required_files, existing_files):
+        #         filedata = self.download(os.path.join('files', filename))
+        #         filepath = os.path.join(seed_dir, filename)
+        #         open(filepath, 'wb').write(filedata)
 
         # find missing partitions
-        for partition in missing(content['partitions'], os.listdir(folder)):
+        num_partitions = len(content['partitions'])
+        for index, partition in enumerate(content['partitions']):
+            # print('\rsyncing '+str(index+1)+'/'+str(total_count), end="", flush=True)
             p_dir = os.path.join(folder, str(partition))
             if not os.path.exists(p_dir):
                 os.makedirs(p_dir)
@@ -213,15 +217,15 @@ class Stream(Base):
                 filedata = self.download(os.path.join(str(partition), frame_n))
                 filepath = os.path.join(p_dir, frame_n)
                 open(filepath, 'wb').write(filedata)
-            if 'checkpoint_files' in content:
-                c_dir = os.path.join(p_dir, str('checkpoint_files'))
-                if not os.path.exists(c_dir):
-                    os.makedirs(c_dir)
-                for check_n in missing(content['checkpoint_files'], os.listdir(c_dir)):
-                    filedata = self.download(os.path.join(str(partition),
-                                             'checkpoint_files', check_n))
-                    filepath = os.path.join(c_dir, check_n)
-                    open(filepath, 'wb').write(filedata)
+            # if 'checkpoint_files' in content:
+            #     c_dir = os.path.join(p_dir, str('checkpoint_files'))
+            #     if not os.path.exists(c_dir):
+            #         os.makedirs(c_dir)
+            #     for check_n in missing(content['checkpoint_files'], os.listdir(c_dir)):
+            #         filedata = self.download(os.path.join(str(partition),
+            #                                  'checkpoint_files', check_n))
+            #         filepath = os.path.join(c_dir, check_n)
+            #         open(filepath, 'wb').write(filedata)
 
     def upload(self, filename, filedata):
         """ Upload a file on the stream. The stream must be in the STOPPED
@@ -278,6 +282,16 @@ class Stream(Base):
         if not self._error_count:
             self.reload_info()
         return self._error_count
+
+    @property
+    def partitions(self):
+        """ Return a list of partitions for this stream. """
+        reply = self._get('/streams/sync/'+self.id)
+        if reply.status_code != 200:
+            print(reply.text)
+            raise Exception('Bad status code')
+        content = json.loads(reply.text)
+        return content['partitions']
 
 
 class Target(Base):

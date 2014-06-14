@@ -84,6 +84,7 @@ class TestSiegeTank(unittest.TestCase):
                 os.makedirs(p_dir)
                 open(os.path.join(p_dir, 'bin1'), 'wb').write(os.urandom(5987))
                 open(os.path.join(p_dir, 'bin2'), 'wb').write(os.urandom(9820))
+                
                 os.makedirs(os.path.join(p_dir, 'checkpoint_files'))
                 open(os.path.join(p_dir, 'checkpoint_files',
                      'cin1'), 'wb').write(os.urandom(2048))
@@ -101,32 +102,22 @@ class TestSiegeTank(unittest.TestCase):
             stream_dir = os.path.join('sync_data', stream_id)
             os.remove(os.path.join(stream_dir, 'files', filename))
 
-        def are_dir_trees_equal(dir1, dir2):
-            """
-            Compare two directories recursively. Files in each directory are
-            assumed to be equal if their names and contents are equal.
-
-            @param dir1: First directory path
-            @param dir2: Second directory path
-
-            @return: True if the directory trees are the same and
-                there were no errors while accessing the directories or files, 
-                False otherwise.
-           """
-
-            dirs_cmp = filecmp.dircmp(dir1, dir2)
-            if len(dirs_cmp.left_only) > 0 or len(dirs_cmp.right_only) > 0 or \
-                len(dirs_cmp.funny_files) > 0:
-                return False
-            (_, mismatch, errors) = filecmp.cmpfiles(
-                dir1, dir2, dirs_cmp.common_files, shallow=False)
-            if len(mismatch) > 0 or len(errors) > 0:
-                return False
-            for common_dir in dirs_cmp.common_dirs:
-                new_dir1 = os.path.join(dir1, common_dir)
-                new_dir2 = os.path.join(dir2, common_dir)
-                if not are_dir_trees_equal(new_dir1, new_dir2):
-                    return False
+        def are_frame_dirs_equal(given, expected):
+            """ Does not check for seed_files or checkpoint_files. """
+            for partition in os.listdir(expected):
+                if partition == 'files':
+                    continue
+                for frame_file in os.listdir(os.path.join(expected, partition)):
+                    if frame_file == 'checkpoint_files':
+                        continue
+                    print(partition, frame_file)
+                    bin1 = open(os.path.join(expected, partition, frame_file), 'rb')
+                    try:
+                        bin2 = open(os.path.join(given, partition, frame_file), 'rb')
+                    except:
+                        return False
+                    if bin1.read() != bin2.read():
+                        return False
             return True
 
         weight = 5
@@ -152,33 +143,27 @@ class TestSiegeTank(unittest.TestCase):
         stream = random.sample(target.streams, 1)[0]
         sync_dir = os.path.join('sync_data',stream.id)
         stream_dir = os.path.join('firebat_data', 'streams', stream.id)
-        stream.sync(sync_dir, sync_seeds=True)
-        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir)
+        self.assertTrue(are_frame_dirs_equal(sync_dir, stream_dir))
         add_partition(stream.id, [4, 9, 34, 493])
+        self.assertEqual(stream.partitions, [4, 9, 34, 493])
         # test stream sync
-        stream.sync(sync_dir, sync_seeds=True)
-        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir)
+        self.assertTrue(are_frame_dirs_equal(sync_dir, stream_dir))
         add_partition(stream.id, [589, 2098, 29038])
-        stream.sync(sync_dir, sync_seeds=True)
-        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        self.assertEqual(stream.partitions, [4, 9, 34, 493, 589, 2098, 29038])
+        stream.sync(sync_dir)
+        self.assertTrue(are_frame_dirs_equal(sync_dir, stream_dir))
         remove_local_partition(stream.id, 589)
-        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
-        stream.sync(sync_dir, sync_seeds=True)
-        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        self.assertFalse(are_frame_dirs_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir)
+        self.assertTrue(are_frame_dirs_equal(sync_dir, stream_dir))
         remove_local_partition(stream.id, 34, 'bin1')
-        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
-        stream.sync(sync_dir, sync_seeds=True)
-        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
-        remove_local_partition(stream.id, 4, 'checkpoint_files/cin1')
-        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
-        stream.sync(sync_dir, sync_seeds=True)
-        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
-        remove_local_seed_file(stream.id, 'system.xml.gz.b64')
-        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
-        stream.sync(sync_dir, sync_seeds=False)
-        self.assertFalse(are_dir_trees_equal(sync_dir, stream_dir))
-        stream.sync(sync_dir, sync_seeds=True)
-        self.assertTrue(are_dir_trees_equal(sync_dir, stream_dir))
+        self.assertFalse(are_frame_dirs_equal(sync_dir, stream_dir))
+        stream.sync(sync_dir)
+        self.assertTrue(are_frame_dirs_equal(sync_dir, stream_dir))
+        
+        shutil.rmtree(sync_dir)
 
     def test_add_target(self):
         options = {'description': 'siegetank_demo', 'steps_per_frame': 10000}

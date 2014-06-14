@@ -196,16 +196,15 @@ void Core::assign(const string &cc_uri,
 #else
         exit(1);
 #endif
-    } else if(response.getStatus() != 200) {
-
-
-        /*
-        logStream << "BAD STATUS CODE" << response.getStatus() << endl;
-        logStream << content_stream.rdbuf() << endl;
-        */
+    } else if(response.getStatus() == 400) {
         logStream << response.getStatus() << endl;
         logStream << content_stream.rdbuf() << endl;
-        throw std::runtime_error("Bad assignment");
+        throw std::runtime_error("Bad Assignment Request");
+    } else {
+        logStream << response.getStatus() << endl;
+        // In case of a bad connection (eg. 500), it is probably not safe to cout the content stream here.
+        //logStream << content_stream.rdbuf() << endl;
+        throw std::runtime_error("FATAL Assignment");
     }
     picojson::value json_value;
     content_stream >> json_value;
