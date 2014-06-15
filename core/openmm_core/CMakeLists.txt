@@ -13,7 +13,7 @@ set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
 set(BUILD_FAH_CORE OFF CACHE BOOL "Whether or not to build as a FAHCore")
 
-set(CORE_VERSION 14 CACHE STRING "Core Version")
+set(CORE_VERSION 15 CACHE STRING "Core Version")
 add_definitions(-DCORE_VERSION=${CORE_VERSION})
 
 enable_testing()
@@ -27,8 +27,8 @@ endif()
 
 add_executable(${CORE_NAME} main.cpp)
 
-set(CPU_ENGINE_KEY 62c42d7a-5fd9-4039-b0d9-904c8f420e0e)
-set(OPENCL_ENGINE_KEY 21d4473a-be16-41d4-8f1b-4ee32e6f7b4c)
+set(CPU_ENGINE_KEY 86f094c5-b76a-460e-9335-61eb0c76643b)
+set(OPENCL_ENGINE_KEY 3ca62f73-3979-4eb2-a302-d891ad75b70b)
 
 if(CORE_TYPE STREQUAL "CPU")
     set(ADDITIONAL_LIBRARIES ${FFTW_LIBRARIES})
