@@ -327,7 +327,7 @@ void OpenMMCore::checkFrameWrite(int current_step) {
         vector<vector<float> > box(3, vector<float>(3, 0));
         box[0][0] = a[0]; box[0][1] = a[1]; box[0][2] = a[2];
         box[1][0] = b[0]; box[1][1] = b[1]; box[1][2] = b[2];
-        box[2][0] = c[0]; box[2][1] = c[1]; box[2][2] = b[2];
+        box[2][0] = c[0]; box[2][1] = c[1]; box[2][2] = c[2];
         vector<OpenMM::Vec3> state_positions = state.getPositions();
         vector<vector<float> > positions(state_positions.size(),
                                          vector<float>(3,0));

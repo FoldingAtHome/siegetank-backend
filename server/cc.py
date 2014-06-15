@@ -152,6 +152,8 @@ class TargetUpdateHandler(BaseHandler):
         if 'options' in content:
             for key, value in content['options'].items():
                 payload['options.'+key] = value
+        if not payload:
+            self.error('Nothing to update')
         cursor = self.motor.data.targets
         result = yield cursor.update({'_id': target_id}, {'$set': payload})
         if result['updatedExisting']:
@@ -391,6 +393,8 @@ class TargetInfoHandler(BaseHandler):
         self.set_status(400)
         cursor = self.motor.data.targets
         info = yield cursor.find_one({'_id': target_id})
+        if not info:
+            self.error('Invalid target id')
         self.set_status(200)
         self.write(info)
 
@@ -762,7 +766,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             return reply
         except (tornado.httpclient.HTTPError, IOError) as e:
             if isinstance(e, tornado.httpclient.HTTPError):
-                code = e.code
                 if e.response:
                     body = io.BytesIO(e.response.body)
                 else:
@@ -772,11 +775,10 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 else:
                     cursor.hset('fail_count', 0)
             else:
-                code = 503
                 body = io.BytesIO(json.dumps({'error': 'scv down'}).encode())
                 cursor.hincrby('fail_count', 1)
             dummy = tornado.httpclient.HTTPRequest(uri)
-            reply = tornado.httpclient.HTTPResponse(dummy, code, buffer=body)
+            reply = tornado.httpclient.HTTPResponse(dummy, 400, buffer=body)
             return reply
 
     @tornado.gen.coroutine

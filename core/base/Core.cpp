@@ -189,7 +189,9 @@ void Core::assign(const string &cc_uri,
     Poco::Net::HTTPResponse response;
     istream &content_stream = cc_session.receiveResponse(response);
 
-    if(response.getStatus() == 401) {
+    if(response.getStatus() == 200) {
+        logStream << "Assignment succesful" << endl;
+    } else if(response.getStatus() == 401) {
         logStream << "core is outdated" << endl; 
 #ifdef FAH_CORE
         exit(0x110);
