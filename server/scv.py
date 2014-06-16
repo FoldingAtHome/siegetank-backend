@@ -994,7 +994,7 @@ class StreamUploadHandler(BaseHandler):
         """
         .. http:put:: /streams/upload/:stream_id/:filename
 
-            Upload a new file. This file must exist.
+            Upload a file for a given stream. Be very careful when using this.
 
             .. note:: Uploads do not support streaming, so you must take care
                 that the data sent does not exceed 10MB.
@@ -1015,12 +1015,10 @@ class StreamUploadHandler(BaseHandler):
         self.set_status(400)
         current_user = yield self.get_current_user()
         stream_owner = yield self.get_stream_owner(stream_id)
+        unlock = self.start_lock(stream_id)
         if stream_owner != current_user:
             return self.set_status(401)
         stream = Stream(stream_id, self.db)
-        if stream.hget('status') != 'STOPPED':
-            self.error('Stream must be stopped before upload')
-        # prevent files from leaking out
         streams_folder = self.application.streams_folder
         stream_dir = os.path.abspath(os.path.join(streams_folder, stream_id))
         requested_file = os.path.abspath(os.path.join(stream_dir, filename))
@@ -1028,13 +1026,16 @@ class StreamUploadHandler(BaseHandler):
             return
         if requested_file[0:len(stream_dir)] != stream_dir:
             return
-        if not os.path.exists(requested_file):
-            self.error('Requested file does not exist')
         md5 = self.request.headers.get('Content-MD5')
         if md5 != hashlib.md5(self.request.body).hexdigest():
             self.error('MD5 mismatch')
+        root = os.path.dirname(requested_file)
+        if not os.path.exists(root):
+            # this makes dirs recursively!
+            os.makedirs(root)
         with open(requested_file, 'wb') as f:
             f.write(self.request.body)
+        unlock()
         self.set_status(200)
 
 
