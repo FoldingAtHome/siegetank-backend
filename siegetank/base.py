@@ -352,19 +352,22 @@ class Target(Base):
             raise Exception('could not update target. Reason:'+reply.content)
         self.reload_info()
 
-    def add_stream(self, files, scv):
+    def add_stream(self, files, scv, tags=None):
         """ Add a stream to the target belonging to a particular scv.
 
         :param files: dict, filenames and binaries matching the core's
             requirements.
         :param scv: str, which particular SCV to add the stream to.
+        :param tags: dict, a dictionary of tag files to include, such as pdbs
 
         """
         assert isinstance(files, dict)
         body = {
-            "target_id": self.id,
-            "files": encode_files(files),
+            'target_id': self.id,
+            'files': files,
         }
+        if tags:
+            body['tags'] = tags
         if scv:
             global scvs
             global auth_token

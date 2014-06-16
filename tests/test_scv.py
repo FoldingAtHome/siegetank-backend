@@ -71,7 +71,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, 200)
         return reply.body
 
-    def _post_stream(self, target_id=None):
+    def _post_stream(self, target_id=None, tags=None):
         if target_id is None:
             target_id = str(uuid.uuid4())
             targets = self.mdb.data.targets
@@ -86,6 +86,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         body = {'target_id': target_id,
                 'files': files
                 }
+        if tags:
+            body['tags'] = tags
         headers = {'Authorization': self.auth_token}
         reply = self.fetch('/streams', method='POST', body=json.dumps(body),
                            headers=headers)
@@ -203,6 +205,20 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         cursor = self.mdb.data.targets
         result = cursor.find_one({'_id': target_id}, {'shards': 1})
         self.assertEqual(result['shards'], [self.scv.name])
+        self._delete_stream(stream_id)
+
+    def test_stream_tags(self):
+        tags = {
+            'pdb.gz.b64': 'random_tag_hehehe',
+            'inpcrd.gz.b64': 'random_ta3_hehe',
+        }
+        result = self._post_stream(tags=tags)
+        stream_id = result['stream_id']
+
+        for tag in tags:
+            binary = self._download(stream_id, 'tags/'+tag)
+            self.assertEqual(binary.decode(), tags[tag])
+
         self._delete_stream(stream_id)
 
     def test_delete_stream(self):

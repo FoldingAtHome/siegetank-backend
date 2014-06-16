@@ -24,6 +24,7 @@ import random
 import filecmp
 import pymongo
 import psutil
+import hashlib
 
 import siegetank.base
 import tests.utils
@@ -196,6 +197,11 @@ class TestSiegeTank(unittest.TestCase):
         random_scv = random.choice(list(siegetank.base.scvs.keys()))
         for i in range(20):
             target.add_stream(files, random_scv)
+
+        tags = {'pdb.gz.b64': hashlib.md5(os.urandom(1024)).hexdigest()}
+        for i in range(20):
+            stream = target.add_stream(files, random_scv, tags)
+
         stream = random.sample(target.streams, 1)[0]
 
         self.assertEqual(stream.status, 'OK')

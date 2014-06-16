@@ -326,13 +326,17 @@ class StreamsHandler(BaseHandler):
                 {
                     "target_id": "target_id",
                     "files": {"system.xml.gz.b64": "file1.b64",
-                              "integrator.xml.gz.b64": "file2.b64",
-                              "state.xml.gz.b64": "file3.b64"
-                              }
+                        "integrator.xml.gz.b64": "file2.b64",
+                        "state.xml.gz.b64": "file3.b64"
+                    }
+                    "tags": {
+                        "pdb.gz.b64": "file4.b64",
+                    } // optional
                 }
 
             .. note:: Binary files must be base64 encoded.
 
+            .. note:: tags are files that are not used by the core.
             **Example reply**
 
             .. sourcecode:: javascript
@@ -346,6 +350,7 @@ class StreamsHandler(BaseHandler):
 
         """
         self.set_status(400)
+
         current_user = yield self.get_current_user()
         if current_user is None:
             self.error('Invalid user', 401)
@@ -353,7 +358,7 @@ class StreamsHandler(BaseHandler):
             self.error('User is not a manager', 401)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
-        stream_files = content['files']
+        stream_files = content['files'] # important to put here for validation
         stream_id = str(uuid.uuid4())+':'+self.application.name
         unlock = self.start_lock(stream_id)
         script = """
@@ -379,9 +384,17 @@ class StreamsHandler(BaseHandler):
         files_dir = os.path.join(stream_dir, 'files')
         if not os.path.exists(files_dir):
             os.makedirs(files_dir)
-        for filename, binary in stream_files.items():
+        for filename, string_data in stream_files.items():
             with open(os.path.join(files_dir, filename), 'w') as handle:
-                handle.write(binary)
+                handle.write(string_data)
+        if 'tags' in content:
+            tags = content['tags']
+            tags_dir = os.path.join(stream_dir, 'tags')
+            if not os.path.exists(tags_dir):
+                os.makedirs(tags_dir)
+            for filename, string_data in tags.items():
+                with open(os.path.join(tags_dir, filename), 'w') as handle:
+                    handle.write(string_data)
         unlock()
 
         if is_new_target:
