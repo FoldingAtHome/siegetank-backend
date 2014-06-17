@@ -227,10 +227,11 @@ static void status_header(ostream &out) {
 
 void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
-                             const string &target_id) {
+                             const string &target_id,
+                             const string &proxy_string) {
     logStream << "d-startStream" << endl;
     start_time_ = time(NULL);
-    Core::startStream(cc_uri, donor_token, target_id);
+    Core::startStream(cc_uri, donor_token, target_id, proxy_string);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
     OpenMM::State *initial_state;
     cout << "start deserialization" << endl;

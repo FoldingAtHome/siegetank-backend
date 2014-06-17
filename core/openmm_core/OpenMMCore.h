@@ -33,7 +33,8 @@ public:
 
     virtual void startStream(const std::string &uri,
                              const std::string &donor_token = "",
-                             const std::string &target_id = "");
+                             const std::string &target_id = "",
+                             const std::string &proxy_string = "");
 
     virtual void stopStream(std::string error_msg = "");
 

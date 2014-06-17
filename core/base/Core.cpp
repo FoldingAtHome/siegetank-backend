@@ -134,14 +134,47 @@ static string compute_md5(const string &binary_string) {
     return converted;
 }
 
+static vector<string> delimit(const string& input, char token) {
+    vector<string> strings;
+    istringstream f(input);
+    string s;
+    while (getline(f, s, token)) {
+        strings.push_back(s);
+    }
+    return strings;
+}
+
+static void parse_host_and_port(const string& host_and_port, string &host, int &port) {
+    vector<string> host_info = delimit(host_and_port, ':');
+    if(host_info.size() == 1) {
+        throw runtime_error("Proxy port not specified");
+    }
+    host = host_info[0];
+    stringstream ss(host_info[1]);
+    ss >> port;
+}
+
+static void parse_proxy_string(const string &input_string, string &username, string &password, string &host, int &port) {
+    vector<string> result(delimit(input_string, '@'));
+    if(result.size() == 2) {
+        vector<string> user_info = delimit(result[0], ':');
+        username = user_info[0];
+        password = user_info[1];
+        parse_host_and_port(result[1], host, port);
+    } else if(result.size() == 1) {
+        username.clear();
+        password.clear();
+        parse_host_and_port(result[0], host, port);
+    } else {
+        throw runtime_error("Bad proxy string");
+    }
+}
+
 Core::Core(std::string core_key, std::ostream& log) :
     core_key_(core_key),
     logStream(log),
     session_(NULL) {
-
-
-        logStream << "\n\nconstructing base core\n\n" << endl;
-
+    logStream << "\n\nconstructing base core\n\n" << endl;
 }
 
 Core::~Core() {
@@ -159,7 +192,8 @@ static bool is_domain(const string &host) {
 
 void Core::assign(const string &cc_uri,
                   const string &donor_token,
-                  const string &target_id) {
+                  const string &target_id,
+                  const string &proxy_string) {
     logStream << "assignStart" << endl;
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(getHost(cc_uri))) {
@@ -175,6 +209,16 @@ void Core::assign(const string &cc_uri,
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
                                              context);
+
+    if(proxy_string.size() > 0) {
+        string proxy_user, proxy_pass, proxy_host;
+        int proxy_port;
+        parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
+        cc_session.setProxy(proxy_host, proxy_port);
+        if(proxy_user.size() > 0 && proxy_pass.size() > 0)
+            cc_session.setProxyCredentials(proxy_user, proxy_pass);
+    }
+
     logStream << "assigning core to a stream..." << flush;
     Poco::Net::HTTPRequest request("POST", "/core/assign");
     picojson::object obj;
@@ -221,17 +265,27 @@ void Core::assign(const string &cc_uri,
     core_token_ = json_object["token"].get<string>();
     session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
         poco_url.getPort(), context);
+
+    if(proxy_string.size() > 0) {
+        string proxy_user, proxy_pass, proxy_host;
+        int proxy_port;
+        parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
+        session_->setProxy(proxy_host, proxy_port);
+        if(proxy_user.size() > 0 && proxy_pass.size() > 0)
+            session_->setProxyCredentials(proxy_user, proxy_pass);
+    }
 }
 
 void Core::startStream(const string &cc_uri,
                        const string &donor_token,
-                       const string &target_id) {
+                       const string &target_id,
+                       const string &proxy_string) {
     logStream << "b-startStream" << endl;
     if(session_ != NULL) {
         delete session_;
         session_ = NULL;
     }
-    assign(cc_uri, donor_token, target_id);
+    assign(cc_uri, donor_token, target_id, proxy_string);
     logStream << "Preparing to start stream..." << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");
     logStream << "1" << endl;

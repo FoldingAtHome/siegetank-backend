@@ -187,6 +187,14 @@ int main(int argc, const char * argv[]) {
         "--donor_token",
         "--token");
 
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "Proxy string, [username:password@]host:port. Ex: localhost:8080, ytz:random_pass@localhost:8080",
+        "--proxy");
+
 #ifdef FAH_CORE
     opt.add(
         "",
@@ -308,18 +316,25 @@ int main(int argc, const char * argv[]) {
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
     string donor_token;
+
     if(opt.isSet("--donor_token")) {
         opt.get("--donor_token")->getString(donor_token);
         if(donor_token.length() != 36) {
             throw std::runtime_error("donor_token must be 36 characters");
         }
     }
+
     string target_id;
     if(opt.isSet("--target_id")) {
         opt.get("--target_id")->getString(target_id);
         if(target_id.length() != 36) {
             throw std::runtime_error("target_id must be 36 characters");
         }
+    }
+
+    string proxy_string;
+    if(opt.isSet("--proxy")) {
+        opt.get("--proxy")->getString(proxy_string);
     }
 
     int delay_in_sec = 1;
@@ -355,7 +370,7 @@ int main(int argc, const char * argv[]) {
             cout << "sleeping for " << delay_in_sec << " seconds.." << endl;
             sleep(delay_in_sec);
             delay_in_sec = min(delay_in_sec * 3, 600);
-            core.startStream(cc_uri, donor_token, target_id);
+            core.startStream(cc_uri, donor_token, target_id, proxy_string);
             delay_in_sec = 1;
             core.main();
         } catch(const exception &e) {

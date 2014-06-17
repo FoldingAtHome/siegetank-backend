@@ -49,7 +49,8 @@ protected:
     /* Start the stream and fetch files. options is a JSON string. */
     virtual void startStream(const std::string &cc_uri,
                              const std::string &donor_token = "",
-                             const std::string &target_id = "");
+                             const std::string &target_id = "",
+                             const std::string &proxy_string = "");
 
     /* Disengage the core from the stream and destroy the session */
     virtual void stopStream(std::string error_msg = "");
@@ -94,7 +95,8 @@ private:
     const std::string core_key_;
     void assign(const std::string &cc_host,
                 const std::string &donor_token,
-                const std::string &target_id);
+                const std::string &target_id,
+                const std::string &proxy = "");
 
 };
 
