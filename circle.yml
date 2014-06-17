@@ -21,7 +21,7 @@ dependencies:
     - if [[ ! -e ../openmm_install ]]; then wget http://www.stanford.edu/~yutongz/openmm_install.tar.gz; tar -xvf openmm_install.tar.gz -C ../; fi
     - wget http://www.stanford.edu/~yutongz/fftw_install.tar.gz
     - cd ../; tar xvf backend/fftw_install.tar.gz
-    - cd core && mkdir build && cd build && cmake ../ -DPOCO_ROOT="/home/ubuntu/fftw_install" -DPOCO_ROOT=/home/ubuntu/poco152_install -DOPENMM_ROOT=/home/ubuntu/openmm_install -DCMAKE_BUILD_TYPE=Release -DOPENCL_ROOT=/opt/intel/opencl-1.2-3.2.1.16712/ && make
+    - cd core && mkdir build && cd build && cmake ../ -DBUILD_OPENCL=OFF -DBUILD_CUDA=OFF -DPOCO_ROOT="/home/ubuntu/fftw_install" -DPOCO_ROOT=/home/ubuntu/poco152_install -DOPENMM_ROOT=/home/ubuntu/openmm_install -DCMAKE_BUILD_TYPE=Release -DOPENCL_ROOT=/opt/intel/opencl-1.2-3.2.1.16712/ && make
 
   cache_directories:
     - "poco-1.5.2-all"
