@@ -246,7 +246,21 @@ int main(int argc, const char * argv[]) {
         "List all OpenCL platforms and devices",
         "--devices");
 #elif OPENMM_CUDA
-    // not implemented
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "Which CUDA device to use",
+        "--deviceId");
+
+    opt.add(
+        "",
+        0,
+        0,
+        0,
+        "List all CUDA devices",
+        "--devices");
 #endif 
 
     opt.parse(argc, argv);
@@ -309,6 +323,21 @@ int main(int argc, const char * argv[]) {
         contextProperties["OpenCLDeviceIndex"] = did;
     }
 #endif 
+#elif OPENMM_CUDA
+    if(opt.isSet("--devices")) {
+        cout << endl;
+        Util::listCUDADevices();
+        return 1;
+    }
+    if(opt.isSet("--deviceId")) {
+        string did;
+        opt.get("--deviceId")->getString(did);
+        if(did.find(",") != string::npos) {
+            cout << "Using multiple GPUs to run the same simulation is not currently supported" << endl;
+            return 1;
+        };
+        contextProperties["CudaDeviceIndex"] = did;
+    }
 #endif
 
     string cc_uri;

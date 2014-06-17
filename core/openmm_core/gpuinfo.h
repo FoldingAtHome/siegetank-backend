@@ -7,6 +7,7 @@
 namespace Util {
 
 void listOpenCLDevices();
+void listCUDADevices();
 
 }
 
