@@ -34,7 +34,7 @@ void Util::listOpenCLDevices() {
     return;
 }
 #elif OPENMM_CUDA
-    #include <cuda.h>
+//    #include <cuda.h>
 /*
 #ifdef _WIN32
 #include <windows.h>

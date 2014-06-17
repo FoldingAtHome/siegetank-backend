@@ -57,7 +57,6 @@ void OpenMMCore::registerComponents() {
 #elif OPENMM_CUDA
     registerCudaPlatform();
     #define PLATFORM_NAME "CUDA"
-    platform_name_ = "CUDA";
 #elif OPENMM_OPENCL
     registerOpenCLPlatform();
     #define PLATFORM_NAME "OpenCL"
