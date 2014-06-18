@@ -897,7 +897,9 @@ class ActiveStreamsHandler(BaseHandler):
                         "stream_id_1": {
                             "user": None,
                             "start_time": 31875.3,
-                            "active_frames": 23
+                            "active_frames": 23,
+                            "buffer_frames": 3948,
+                            "engine": openmm_601_opencl
                         }
                     }
                 }
@@ -925,10 +927,12 @@ class ActiveStreamsHandler(BaseHandler):
                 start_time = active_stream.hget('start_time')
                 active_frames = active_stream.hget('total_frames')
                 buffer_frames = active_stream.hget('buffer_frames')
+                engine = active_stream.hget('engine')
                 reply[target][stream_id]['user'] = user
                 reply[target][stream_id]['start_time'] = start_time
                 reply[target][stream_id]['active_frames'] = active_frames
                 reply[target][stream_id]['buffer_frames'] = buffer_frames
+                reply[target][stream_id]['engine'] = engine
         self.write(reply)
 
 

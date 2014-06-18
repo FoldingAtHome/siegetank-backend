@@ -281,6 +281,11 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             self.assertEqual(tid, target_id)
             for sid in content[tid]:
                 self.assertEqual(sid, stream1)
+                self.assertTrue('user' in content[tid][sid])
+                self.assertTrue('start_time' in content[tid][sid])
+                self.assertEqual(content[tid][sid]['active_frames'], 0)
+                self.assertEqual(content[tid][sid]['buffer_frames'], 0)
+                self.assertEqual(content[tid][sid]['engine'], 'test_engine')
         new_stream1 = self._post_stream(target_id)['stream_id']
         new_stream2, token = self._activate_stream(target_id)
         self.assertEqual(new_stream1, new_stream2)
