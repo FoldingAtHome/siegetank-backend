@@ -708,6 +708,20 @@ class EngineKeysDeleteHandler(BaseHandler):
             self.error('engine key not found')
 
 
+class AliveHandler(BaseHandler):
+
+    def get(self):
+        """
+        .. http:get:: /
+
+            Used to check and see if the server is up.
+
+            :status 200: OK
+
+        """
+        self.set_status(200)
+
+
 class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     _max_ws_fails = 10
@@ -738,6 +752,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def __init__(self, name, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
         super(CommandCenter, self).__init__([
+            (r'/', AliveHandler),
             (r'/engines/keys', EngineKeysHandler),
             (r'/engines/keys/delete/(.*)', EngineKeysDeleteHandler),
             (r'/core/assign', CoreAssignHandler),
@@ -818,6 +833,7 @@ def start():
                         mongo_options=options.mongo_options)
     ssl_opts = None
     if options.ssl_certfile or options.ssl_key or options.ssl_ca_certs:
+        print("Enabling SSL ...")
         cert_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                  '..', options.ssl_certfile)
         key_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
