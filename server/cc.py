@@ -329,7 +329,7 @@ class SCVStatusHandler(BaseHandler):
 
     def get(self):
         """
-        .. http:put:: /scv/status
+        .. http:put:: /scvs/status
 
             Return the status of all SCVs as seen by this CC.
 
