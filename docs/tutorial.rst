@@ -114,7 +114,7 @@ Once you've gzipped your files, apply a base64 encoding so they are JSON compati
     stream = target.add_stream(files=data, scv='vspg11')
     > <stream 6918e316-5c6f-425d-8c1e-902f4b0ba144:vspg11 s:OK f:0>
 
-If you'd like to tag your stream with additional files (such as PDB files) that are not used by cores:
+If you'd like (and you should), you can tag your stream with additional files (such as PDB files) that are not used by cores:
 
 .. sourcecode:: python
 
