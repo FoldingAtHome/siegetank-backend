@@ -201,6 +201,8 @@ class TestSiegeTank(unittest.TestCase):
         tags = {'pdb.gz.b64': hashlib.md5(os.urandom(1024)).hexdigest()}
         for i in range(20):
             stream = target.add_stream(files, random_scv, tags)
+            self.assertEqual(stream.download('tags/pdb.gz.b64'),
+                             tags['pdb.gz.b64'].encode())
 
         stream = random.sample(target.streams, 1)[0]
 
