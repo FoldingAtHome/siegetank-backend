@@ -852,7 +852,8 @@ def start():
     signal.signal(signal.SIGTERM, stop_parent)
 
     try:
-        tornado.process.fork_processes(0)
+        # num_processes defaults to 0 if not specified
+        tornado.process.fork_processes(options.num_processes)
 
         signal.signal(signal.SIGTERM, stop_children)
 

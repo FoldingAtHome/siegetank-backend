@@ -210,4 +210,5 @@ def configure_options(config_file, extra_options=None):
     tornado.options.define('ssl_key', type=str, default='')
     tornado.options.define('ssl_ca_certs', type=str, default='')
     tornado.options.define('external_host', type=str)
+    tornado.options.define('num_processes', type=int, default=0)
     tornado.options.parse_config_file(config_file)
