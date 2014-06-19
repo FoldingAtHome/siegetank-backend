@@ -112,8 +112,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
     def _get_stream_id_from_token(self, token):
         return self.scv.db.get('auth_token:'+token+':active_stream')
 
-    def _activate_stream(self, target_id):
-        body = {'target_id': target_id, 'engine': 'test_engine'}
+    def _activate_stream(self, target_id, engine='test_engine'):
+        body = {'target_id': target_id, 'engine': engine}
         headers = {'Authorization': self.scv.password}
         reply = self.fetch('/streams/activate', method='POST',
                            body=json.dumps(body), headers=headers)
@@ -266,6 +266,28 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                                time.time()+increment, 1)
         self.assertEqual(self._get_stream_id_from_token(token), stream1)
         self._delete_stream(stream1)
+
+    def test_get_active_cores(self):
+        result = self._post_stream()
+        target_id = result['target_id']
+        stream1 = result['stream_id']
+
+        total_streams = [stream1]
+        for i in range(49):
+            total_streams.append(self._post_stream(target_id)['stream_id'])
+
+        for i in range(15):
+            self._activate_stream(target_id, engine='test1')
+        for i in range(10):
+            self._activate_stream(target_id, engine='test2')
+
+        reply = self.fetch('/active_cores', method='GET')
+        content = json.loads(reply.body.decode())
+        self.assertEqual(content['test1'], 15)
+        self.assertEqual(content['test2'], 10)
+
+        for stream_id in total_streams:
+            self._delete_stream(stream_id)
 
     def test_get_active_streams(self):
         tornado.options.options.heartbeat_increment = 10

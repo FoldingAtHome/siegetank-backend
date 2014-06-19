@@ -880,6 +880,39 @@ class CoreStopHandler(BaseHandler):
         unlock()
 
 
+class ActiveCoresHandler(BaseHandler):
+
+    def get(self):
+        """
+        .. http:get:: /active_cores
+
+            Get number of active cores on the scv.
+
+            ** Example Reply **
+
+            .. sourcecode:: javascript
+
+                {
+                    "openmm_601_opencl": 239,
+                    "openmm_601_cuda": 23,
+                    "openmm_601_cpu": 538
+                }
+
+            :status 200: OK
+
+        """
+        reply = dict()
+        for stream_id in ActiveStream.members(self.db):
+            active_stream = ActiveStream(stream_id, self.db)
+            engine = active_stream.hget('engine')
+            if engine not in reply:
+                reply[engine] = 1
+            else:
+                reply[engine] += 1
+        self.set_status(200)
+        self.write(reply)
+
+
 class ActiveStreamsHandler(BaseHandler):
 
     def get(self):
@@ -910,7 +943,6 @@ class ActiveStreamsHandler(BaseHandler):
                 core so far.
 
             :status 200: OK
-            :status 400: Bad request
 
         """
         reply = dict()
@@ -1216,6 +1248,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         self.password = self.db.get('password')
         super(SCV, self).__init__([
             (r'/', AliveHandler),
+            (r'/active_cores', ActiveCoresHandler),
             (r'/active_streams', ActiveStreamsHandler),
             (r'/streams', StreamsHandler),
             (r'/streams/activate', StreamActivateHandler),
