@@ -378,7 +378,7 @@ void OpenMMCore::main() {
 
         while(true) {
 #ifdef FAH_CORE
-            if(current_step % 200 == 0) {
+            if(current_step % 400 == 0) {
                 //mkdir(wu_dir.c_str(), 0755);
                 string info_path = "./"+wu_dir+"/wuinfo_01.dat";
                 ofstream file(info_path.c_str(), ios::binary);

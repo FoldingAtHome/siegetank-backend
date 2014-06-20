@@ -13,7 +13,7 @@ set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
 set(BUILD_FAH_CORE OFF CACHE BOOL "Whether or not to build as a FAHCore")
 
-set(CORE_VERSION 16 CACHE STRING "Core Version")
+set(CORE_VERSION 17 CACHE STRING "Core Version")
 add_definitions(-DCORE_VERSION=${CORE_VERSION})
 
 enable_testing()

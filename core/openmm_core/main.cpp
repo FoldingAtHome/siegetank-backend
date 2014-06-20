@@ -219,6 +219,14 @@ int main(int argc, const char * argv[]) {
         0,
         "GPU Index",
         "-gpu");
+
+    opt.add(
+        "0",
+        0,
+        1,
+        0,
+        "Lifeline of the parent process",
+        "-lifeline");
 #endif
 
 #ifdef OPENMM_OPENCL
@@ -369,6 +377,14 @@ int main(int argc, const char * argv[]) {
     int delay_in_sec = 1;
     ExitSignal::init();
     OpenMMCore::registerComponents();
+
+#ifdef FAH_CORE
+    if(opt.isSet("-lifeline")) {
+        int lifeline;
+        opt.get("-lifeline")->getInt(lifeline);
+        ExitSignal::setLifeline(lifeline);
+    }
+#endif
 
     while(!ExitSignal::shouldExit()) {
         try {

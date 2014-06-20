@@ -22,6 +22,7 @@ int main() {
 // input key.
 // if enable == false, then the terminal reverts to the standard behavior
 void changemode(bool enable) {
+#ifdef FAH_CORE
 #ifndef _WIN32
     struct termios old_state;
     tcgetattr(STDIN_FILENO, &old_state);
@@ -33,6 +34,7 @@ void changemode(bool enable) {
         new_state.c_lflag |= (ICANON | ECHO);
         tcsetattr(STDIN_FILENO, TCSANOW, &new_state);
     }
+#endif
 #endif
 }
  
