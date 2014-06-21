@@ -28,8 +28,10 @@
 #-----------------------
 if(DEFINED ENV{OPENMM_ROOT})
     set(OPENMM_ROOT $ENV{OPENMM_ROOT} CACHE PATH "Environment variable defining the root of OpenMM")
-else()
-    set(OPENMM_ROOT "$ENV{HOME}/openmm_install" CACHE PATH "Environment variable defining the root of OpenMM")
+elseif(UNIX)
+    set(OPENMM_ROOT "$ENV{HOME}/openmm_install" CACHE PATH "Where OpenMM is installed")
+elseif(WIN32)
+    set(OPENMM_ROOT "C:/Libs/openmm601" CACHE PATH "Where OpenMM is installed")    
 endif()
 
 set(OPENMM_LIBRARY_NAMES OpenMM_static OpenMMCPU_static OpenMMPME_static OpenMMCUDA_static OpenMMOpenCL_static)
@@ -37,6 +39,8 @@ set(OPENMM_LIBRARY_NAMES OpenMM_static OpenMMCPU_static OpenMMPME_static OpenMMC
 foreach(OPENMM_LIBRARY_NAME ${OPENMM_LIBRARY_NAMES})
     if(UNIX)
         set(OPENMM_STATIC_LIB "lib${OPENMM_LIBRARY_NAME}.a")
+    elseif(WIN32)
+        set(OPENMM_STATIC_LIB "${OPENMM_LIBRARY_NAME}.lib")
     endif()
     find_library(OPENMM_LIB_ID_${OPENMM_LIBRARY_NAME}
         NAMES ${OPENMM_STATIC_LIB}

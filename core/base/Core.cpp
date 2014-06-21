@@ -51,6 +51,32 @@
 
 using namespace std;
 
+static void read_cert_into_ctx(istream &some_stream, SSL_CTX *ctx) {
+    // Add a stream of PEM formatted certificate strings to the trusted store
+    // of the ctx.
+    string line;
+    string buffer;
+	int count = 0;
+    while(getline(some_stream, line)) {
+		buffer.append(line);
+        buffer.append("\n");
+        if(line.find("END CERTIFICATE") != string::npos ) {
+			BIO *bio;
+            X509 *certificate;
+            bio = BIO_new(BIO_s_mem());
+            BIO_puts(bio, buffer.c_str());
+            certificate = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+            if(certificate == NULL)
+                throw std::runtime_error("could not add certificate to trusted\
+                                          CAs");
+            X509_STORE* store = SSL_CTX_get_cert_store(ctx);
+            int result = X509_STORE_add_cert(store, certificate);
+            BIO_free(bio);
+            buffer = "";
+        }
+    }
+}
+
 static int getPort(const std::string &s, char delim=':') {
     std::vector<std::string> elems;
     std::stringstream ss(s);
@@ -204,6 +230,63 @@ void Core::assign(const string &cc_uri,
     Poco::Net::Context::Ptr context = new Poco::Net::Context(
         Poco::Net::Context::CLIENT_USE, "", 
         verify_mode, 9, true);
+	
+	SSL_CTX *ctx = context->sslContext();
+
+    // hacky as hell :)
+	{
+	    #include "certs_bundle_0.pem"
+		stringstream ss;
+		ss << ssl_string_0;
+		cout << "START READ" << endl;
+		read_cert_into_ctx(ss, ctx);
+	}
+
+	{
+		#include "certs_bundle_1.pem"
+		stringstream ss;
+		ss << ssl_string_1;
+		read_cert_into_ctx(ss, ctx);
+	}
+
+	{
+		#include "certs_bundle_2.pem"
+		stringstream ss;
+		ss << ssl_string_2;
+		read_cert_into_ctx(ss, ctx);
+	}
+
+	{
+		#include "certs_bundle_3.pem"
+		stringstream ss;
+		ss << ssl_string_3;
+		read_cert_into_ctx(ss, ctx);
+	}
+
+	{
+		#include "certs_bundle_4.pem"
+		stringstream ss;
+		ss << ssl_string_4;
+		read_cert_into_ctx(ss, ctx);
+	}
+
+	{
+		#include "certs_bundle_5.pem"
+		stringstream ss;
+		ss << ssl_string_5;
+		read_cert_into_ctx(ss, ctx);
+	}
+
+	{
+		#include "certs_bundle_6.pem"
+		;
+		stringstream ss;
+		ss << ssl_string_6;
+		read_cert_into_ctx(ss, ctx);
+	}
+
+
+
     logStream << "connecting to cc..." << flush;
     logStream << getHost(cc_uri) << " " << getPort(cc_uri) << endl;
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
@@ -219,9 +302,24 @@ void Core::assign(const string &cc_uri,
             cc_session.setProxyCredentials(proxy_user, proxy_pass);
     }
 
+
+
+
+
+
+
+	try {
+
+
+
+
+
+
+
+
     logStream << "assigning core to a stream..." << flush;
     Poco::Net::HTTPRequest request("POST", "/core/assign");
-    picojson::object obj;
+	picojson::object obj;
     if(donor_token.length() > 0)
         obj["donor_token"] = picojson::value(donor_token);
     if(target_id.length() > 0)
@@ -274,6 +372,22 @@ void Core::assign(const string &cc_uri,
         if(proxy_user.size() > 0 && proxy_pass.size() > 0)
             session_->setProxyCredentials(proxy_user, proxy_pass);
     }
+
+
+
+
+
+
+		} catch(Poco::Net::SSLException &se) {
+		cout << se.message() << endl;
+		cout << se.displayText() << endl;
+		throw;
+	}
+
+
+
+
+
 }
 
 void Core::startStream(const string &cc_uri,

@@ -12,6 +12,10 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
+#ifdef WIN32
+      #define NOMINMAX
+#endif
+
 #include "OpenMMCore.h"
 #include "ezOptionParser.h"
 #include "ExitSignal.h"
@@ -21,7 +25,12 @@
 #include <fstream>
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
     #include <windows.h>
+    void sleep(unsigned seconds)
+    {
+        Sleep(seconds*1000);
+    }
 #else
     #include <unistd.h>
 #endif
@@ -414,7 +423,7 @@ int main(int argc, const char * argv[]) {
             core.setCheckpointSendInterval(checkpoint_frequency);
             cout << "sleeping for " << delay_in_sec << " seconds.." << endl;
             sleep(delay_in_sec);
-            delay_in_sec = min(delay_in_sec * 3, 600);
+            delay_in_sec = min(delay_in_sec * 10, 600);
             core.startStream(cc_uri, donor_token, target_id, proxy_string);
             delay_in_sec = 1;
             core.main();
