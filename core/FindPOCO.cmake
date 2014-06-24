@@ -29,38 +29,45 @@
 if(DEFINED ENV{POCO_ROOT})
     set(POCO_ROOT $ENV{POCO_ROOT} CACHE PATH "Environment variable defining the root of POCO")
 else()
-    set(POCO_ROOT "$ENV{HOME}/poco152_install" CACHE PATH "Environment variable defining the root of POCO")
+    if(UNIX)
+        set(POCO_ROOT "$ENV{HOME}/poco152_install" CACHE PATH "Environment variable defining the root of POCO")
+    elseif(WIN32)
+        set(POCO_ROOT "C:/Libs/poco153/" CACHE PATH "Environment variable defining the root of POCO")
+    endif()
 endif()
 
-set(POCO_LIBRARY_NAMES PocoNetSSL PocoCrypto PocoUtil PocoJSON PocoXML PocoNet PocoFoundation)
+if(UNIX)
+    message(STATUS 'DISABLED')
+else()
+    set(POCO_LIBRARY_NAMES PocoNetSSLmt PocoCryptomt PocoUtilmt PocoJSONmt PocoXMLmt PocoNetmt PocoFoundationmt)
+endif()
 
 foreach(POCO_LIBRARY_NAME ${POCO_LIBRARY_NAMES})
     if(UNIX)
         set(POCO_STATIC_LIB "lib${POCO_LIBRARY_NAME}.a")
+    elseif(WIN32)
+        set(POCO_STATIC_LIB "${POCO_LIBRARY_NAME}.lib")
     endif()
     find_library(POCO_LIB_ID_${POCO_LIBRARY_NAME}
         NAMES ${POCO_STATIC_LIB}
         HINTS
-            ${POCO_ROOT}
             ${POCO_ROOT}/lib
-            $ENV{POCO_ROOT}
             $ENV{POCO_ROOT}/lib
         DOC "POCO static library"
     )
     mark_as_advanced(POCO_LIB_ID_${POCO_LIBRARY_NAME})
     set(POCO_LIBRARIES ${POCO_LIBRARIES} ${POCO_LIB_ID_${POCO_LIBRARY_NAME}})
+
+message(STATUS ${POCO_LIBRARIES})
+
 endforeach()
 mark_as_advanced(POCO_LIBRARIES)
 
 find_path(POCO_INCLUDE_DIRS
     NAMES Poco/Poco.h
     HINTS
-        ${POCO_ROOT}/api
         ${POCO_ROOT}/include
-        ${POCO_ROOT}
-        $ENV{POCO_ROOT}/api
         $ENV{POCO_ROOT}/include
-        $ENV{POCO_ROOT}
 )
 mark_as_advanced(POCO_INCLUDE_DIRS)
 

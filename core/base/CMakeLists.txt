@@ -4,8 +4,6 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Valid Options: Debug, Release, RelWithDebIfno" FORCE)
 endif()
 
-find_package(FFTW REQUIRED)
-find_package(OpenCL REQUIRED)
 find_package(Threads REQUIRED)
 
 file(GLOB CoreSources "*.cpp")

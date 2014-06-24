@@ -434,7 +434,7 @@ public:
     GELT, /* list[0] <= value < list[1] */
     GELE, /* list[0] <= value <= list[1] */
     GTLE, /* list[0] < value <= list[1] */
-    IN /* if value is in list */
+    FINAL_VALUE /* if value is in list */
   };
   
   enum TYPE { NOTYPE=0, S1, U1, S2, U2, S4, U4, S8, U8, F, D, T };
@@ -619,7 +619,7 @@ ezOptionValidator::ezOptionValidator(const char* _type, const char* _op, const c
             default: op = GT; break;
           } 
           break;
-        case 'i': op = IN;
+		case 'i': op = FINAL_VALUE;
           break;
         default:
           switch(_op[1]) {
@@ -797,7 +797,7 @@ bool ezOptionValidator::isValid(const std::string * valueAsString) {
       case NOTYPE: default: break;
     }
   } else {
-    if (op == IN) { 
+    if (op == FINAL_VALUE) { 
           int i=0;
       if (insensitive) {
         std::string valueAsStringLower(*valueAsString);
@@ -825,7 +825,7 @@ bool ezOptionValidator::isValid(const std::string * valueAsString) {
   U v;\
   ss >> v;\
   /* Check if within list. */ \
-  if (op == IN) { \
+  if (op == FINAL_VALUE) { \
     T * last = LIST + size;\
     return (last != std::find(LIST, last, v)); \
   } \
@@ -905,7 +905,7 @@ bool ezOptionValidator::isValid(const std::string * valueAsString) {
         return false;\
       }\
       break;\
-      case NOOP: case IN: default: break;\
+      case NOOP: case FINAL_VALUE: default: break;\
   } \
   }
   
