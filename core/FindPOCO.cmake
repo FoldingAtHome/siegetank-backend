@@ -37,7 +37,7 @@ else()
 endif()
 
 if(UNIX)
-    message(STATUS 'DISABLED')
+    set(POCO_LIBRARY_NAMES PocoNetSSL PocoCrypto PocoUtil PocoJSON PocoXML PocoNet PocoFoundation)
 else()
     set(POCO_LIBRARY_NAMES PocoNetSSLmt PocoCryptomt PocoUtilmt PocoJSONmt PocoXMLmt PocoNetmt PocoFoundationmt)
 endif()

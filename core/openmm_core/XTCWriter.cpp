@@ -4,7 +4,10 @@
 #include <stdexcept>
 #include <cstdio>
 #include <climits>
+
+#ifdef _WIN32
 #include <cstdint>
+#endif
 
 /* -*- mode: c; tab-width: 4; indent-tabs-mode: t; c-basic-offset: 4 -*- 
  *
