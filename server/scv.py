@@ -1193,7 +1193,8 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def scruffy(self):
-        """ Cleans up after streams with bad locks. """
+        """ Cleans up after streams with bad locks, and unrecorded stats """
+        # check for locks
         for stream_id in self.db.zrangebyscore('locks', 0, time.time()-3):
             message = 'Scruffy found a bad stream: '+stream_id
             logging.getLogger('tornado.application').critical(message)
@@ -1204,6 +1205,25 @@ class SCV(BaseServerMixin, tornado.web.Application):
             else:
                 yield self.deactivate_stream(stream_id)
             self.release_lock(stream_id)
+        
+        # check for unrecorded stats
+        while(True):
+            body = self.db.lpop('fragments')
+            if body:
+                try:
+                    # extract the target_id information
+                    fragment = json.loads(body)
+                    target_id = fragment['target_id']
+                    fragment.pop('target_id')
+                    cursor = motor.MotorCollection(self.motor.stats, target_id)
+                    yield cursor.insert(fragment)
+                except Exception as e:
+                    # mongo replicaset is still inaccessible, try later.
+                    self.db.rpush('fragments', body)
+                    break
+            else:
+                break
+
 
     def acquire_lock(self, resource):
         script = """
@@ -1279,7 +1299,9 @@ class SCV(BaseServerMixin, tornado.web.Application):
 
     @tornado.gen.coroutine
     def deactivate_stream(self, stream_id):
-        """ Deactivate a stream. """
+        """ Deactivate a stream and attempt to record stats for the stream. If
+            MongoDB is unavailable, the fragment is RPUSH'ed to a redis entry
+            called fragments (and cleaned up by scruffy). """
         script = """
         local stream_id = KEYS[1]
         if redis.call('sismember', 'active_streams', stream_id) == 0 then
@@ -1322,20 +1344,16 @@ class SCV(BaseServerMixin, tornado.web.Application):
                     'frames': frames,
                     'stream': stream_id
                 }
-                cursor = motor.MotorCollection(self.motor.stats, target_id)
-                attempts = 0
-                while(attempts < 3):
-                    try:
-                        yield cursor.insert(body)
-                        break
-                    except:
-                        yield tornado.gen.Task(
-                            tornado.ioloop.IOLoop.instance().add_timeout,
-                            time.time() + 5)
-                        attempts += 1
-                if attempts == 3:
-                    message = 'Could not record fragment: '+json.dumps(body)
-                    logging.getLogger('tornado.general').critical(message)
+                try:
+                    cursor = motor.MotorCollection(self.motor.stats, target_id)
+                    # mongo will manipulate this by adding an _id, so we need
+                    # to make a copy
+                    insertion_object = body
+                    yield cursor.insert(insertion_object)
+                except:
+                    print(body)
+                    body['target_id'] = target_id
+                    self.db.rpush('fragments', json.dumps(body))
 
 
 tornado.options.define('heartbeat_increment', default=900, type=int)

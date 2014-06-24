@@ -388,6 +388,51 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(core_files, files)
         self._delete_stream(stream_id)
 
+    def test_downed_mongo(self):
+        # a test to see what happens if the database goes down
+        result = self._core_start()
+        stream_id = result['stream_id']
+        files = result['files']
+        token = result['token']
+        headers = {'Authorization': token}
+
+        frame_buffer = bytes()
+        n_frames = 25
+        active_stream = scv.ActiveStream(stream_id, self.scv.db)
+        stream = scv.Stream(stream_id, self.scv.db)
+        frame_buffer += self._add_frames(token)
+        replacement_filename = random.choice(list(files.keys()))
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
+
+        # disable the MDB and make sure data is added to fragments
+        backup_db = self.scv.motor
+        self.scv.motor = None
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(self.scv.db.llen('fragments'), 1)
+
+        # run scruffy assuming db is down
+        self.io_loop.run_sync(self.scv.scruffy)
+        self.assertEqual(self.scv.db.llen('fragments'), 1)
+        fragment_info = json.loads(self.scv.db.lrange('fragments', 0, -1)[0])
+
+        # bring db backup
+        self.scv.motor = backup_db
+        self.io_loop.run_sync(self.scv.scruffy)
+        self.assertEqual(self.scv.db.llen('fragments'), 0)
+        target_id = fragment_info['target_id']
+        fragment_info.pop('target_id')
+        cursor = pymongo.collection.Collection(self.mdb.stats, target_id)
+        result = cursor.find_one(fragment_info)
+        result.pop('_id')
+        # make sure results are identical
+        self.assertEqual(fragment_info, result)
+
+        self._delete_stream(stream_id)
+        self.scv.db.delete('fragments')
+
     def test_core_frame(self):
         result = self._core_start()
         stream_id = result['stream_id']
