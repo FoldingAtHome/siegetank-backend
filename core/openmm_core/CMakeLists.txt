@@ -45,8 +45,6 @@ if(UNIX)
     set(OPENMM_CORE_DEPENDENCIES ${OPENMM_CORE_DEPENDENCIES} dl)    
 endif()
 
-message(STATUS "CORE DEPENDS:----------------" ${OPENMM_CORE_DEPENDENCIES})
-
 if(BUILD_CPU)
     find_package(FFTW REQUIRED)
     set(CPU_CORE_NAME ${CORE_NAME}_CPU_v${CORE_VERSION})

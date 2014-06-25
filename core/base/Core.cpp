@@ -233,7 +233,7 @@ void Core::assign(const string &cc_uri,
 	
 	SSL_CTX *ctx = context->sslContext();
 
-    // hacky as hell :)
+    // hacky as hell way to load certs:)
 	{
 	    #include "certs_bundle_0.pem"
 		stringstream ss;
@@ -285,10 +285,7 @@ void Core::assign(const string &cc_uri,
 		read_cert_into_ctx(ss, ctx);
 	}
 
-
-
     logStream << "connecting to cc..." << flush;
-    logStream << getHost(cc_uri) << " " << getPort(cc_uri) << endl;
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
                                              context);
@@ -302,92 +299,67 @@ void Core::assign(const string &cc_uri,
             cc_session.setProxyCredentials(proxy_user, proxy_pass);
     }
 
-
-
-
-
-
-
 	try {
+        logStream << "assigning core to a stream..." << flush;
+        Poco::Net::HTTPRequest request("POST", "/core/assign");
+    	picojson::object obj;
+        if(donor_token.length() > 0)
+            obj["donor_token"] = picojson::value(donor_token);
+        if(target_id.length() > 0)
+            obj["target_id"] = picojson::value(target_id);
+        string body = picojson::value(obj).serialize();
+        request.set("Authorization", core_key_);
+        request.setContentLength(body.length());
+        cc_session.sendRequest(request) << body;
+        Poco::Net::HTTPResponse response;
+        istream &content_stream = cc_session.receiveResponse(response);
 
+        if(response.getStatus() == 200) {
+            logStream << "Assignment succesful" << endl;
+        } else if(response.getStatus() == 401) {
+            logStream << "core is outdated" << endl; 
+    #ifdef FAH_CORE
+            exit(0x110);
+    #else
+            exit(1);
+    #endif
+        } else if(response.getStatus() == 400) {
+            logStream << response.getStatus() << endl;
+            logStream << content_stream.rdbuf() << endl;
+            throw std::runtime_error("Bad Assignment Request");
+        } else {
+            logStream << response.getStatus() << endl;
+            // In case of a bad connection (eg. 500), it is probably not safe to cout the content stream here.
+            //logStream << content_stream.rdbuf() << endl;
+            throw std::runtime_error("FATAL Assignment");
+        }
+        picojson::value json_value;
+        content_stream >> json_value;
+        string err = picojson::get_last_error();
+        if(!err.empty())
+            throw(std::runtime_error("assign() picojson error"+err));
+        if(!json_value.is<picojson::object>())
+            throw(std::runtime_error("no JSON object could be read"+err));
+        picojson::value::object &json_object = json_value.get<picojson::object>();
+        string ws_url(json_object["url"].get<string>());
+        Poco::URI poco_url(ws_url);
+        core_token_ = json_object["token"].get<string>();
+        session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
+            poco_url.getPort(), context);
 
-
-
-
-
-
-
-    logStream << "assigning core to a stream..." << flush;
-    Poco::Net::HTTPRequest request("POST", "/core/assign");
-	picojson::object obj;
-    if(donor_token.length() > 0)
-        obj["donor_token"] = picojson::value(donor_token);
-    if(target_id.length() > 0)
-        obj["target_id"] = picojson::value(target_id);
-    string body = picojson::value(obj).serialize();
-    request.set("Authorization", core_key_);
-    request.setContentLength(body.length());
-    cc_session.sendRequest(request) << body;
-    Poco::Net::HTTPResponse response;
-    istream &content_stream = cc_session.receiveResponse(response);
-
-    if(response.getStatus() == 200) {
-        logStream << "Assignment succesful" << endl;
-    } else if(response.getStatus() == 401) {
-        logStream << "core is outdated" << endl; 
-#ifdef FAH_CORE
-        exit(0x110);
-#else
-        exit(1);
-#endif
-    } else if(response.getStatus() == 400) {
-        logStream << response.getStatus() << endl;
-        logStream << content_stream.rdbuf() << endl;
-        throw std::runtime_error("Bad Assignment Request");
-    } else {
-        logStream << response.getStatus() << endl;
-        // In case of a bad connection (eg. 500), it is probably not safe to cout the content stream here.
-        //logStream << content_stream.rdbuf() << endl;
-        throw std::runtime_error("FATAL Assignment");
-    }
-    picojson::value json_value;
-    content_stream >> json_value;
-    string err = picojson::get_last_error();
-    if(!err.empty())
-        throw(std::runtime_error("assign() picojson error"+err));
-    if(!json_value.is<picojson::object>())
-        throw(std::runtime_error("no JSON object could be read"+err));
-    picojson::value::object &json_object = json_value.get<picojson::object>();
-    string ws_url(json_object["url"].get<string>());
-    Poco::URI poco_url(ws_url);
-    core_token_ = json_object["token"].get<string>();
-    session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
-        poco_url.getPort(), context);
-
-    if(proxy_string.size() > 0) {
-        string proxy_user, proxy_pass, proxy_host;
-        int proxy_port;
-        parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
-        session_->setProxy(proxy_host, proxy_port);
-        if(proxy_user.size() > 0 && proxy_pass.size() > 0)
-            session_->setProxyCredentials(proxy_user, proxy_pass);
-    }
-
-
-
-
-
-
-		} catch(Poco::Net::SSLException &se) {
+        if(proxy_string.size() > 0) {
+            string proxy_user, proxy_pass, proxy_host;
+            int proxy_port;
+            parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
+            session_->setProxy(proxy_host, proxy_port);
+            if(proxy_user.size() > 0 && proxy_pass.size() > 0)
+                session_->setProxyCredentials(proxy_user, proxy_pass);
+        }
+	} catch(Poco::Net::SSLException &se) {
 		cout << se.message() << endl;
 		cout << se.displayText() << endl;
 		throw;
 	}
-
-
-
-
-
 }
 
 void Core::startStream(const string &cc_uri,

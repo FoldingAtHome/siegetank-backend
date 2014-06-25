@@ -22,8 +22,9 @@ int main() {
 // and the terminal no longer waits for an enter even to process the
 // input key.
 // if enable == false, then the terminal reverts to the standard behavior
+// does nothing if we're using a fahcore
 void changemode(bool enable) {
-#ifdef FAH_CORE
+#ifndef FAH_CORE
     struct termios old_state;
     tcgetattr(STDIN_FILENO, &old_state);
     struct termios new_state = old_state;

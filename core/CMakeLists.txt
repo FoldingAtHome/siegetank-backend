@@ -13,8 +13,6 @@ if(WIN32)
 	set(OPENSSL_ROOT_DIR "C:/Libs/openssl")
 else()
 	set(OPENSSL_ROOT_DIR "/home/yutong/openssl_install")
-	# set(OPENSSL_CRYPTO_LIB "/home/yutong/openssl_install/lib/")
-	# set(OPENSSL_LIBRARIES 
 endif()
 
 find_package(OpenSSL2 REQUIRED)
