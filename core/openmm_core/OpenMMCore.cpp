@@ -25,6 +25,10 @@
 #include "StateTests.h"
 #include "ExitSignal.h"
 
+#ifdef _WIN32
+	#include <cstdint>
+#endif
+
 using namespace std;
 
 extern "C" void registerSerializationProxies();

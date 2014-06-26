@@ -3,10 +3,19 @@
 
 #include <signal.h>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#endif
+
 namespace ExitSignal {
 
 #ifdef FAH_CORE
-void setLifeline(pid_t pid);
+#ifdef _WIN32
+	void setLifeline(DWORD pid);
+#else
+	void setLifeline(pid_t pid);
+#endif
 #endif
 
 void init();
