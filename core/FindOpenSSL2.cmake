@@ -147,7 +147,53 @@ if(WIN32 AND NOT CYGWIN)
     set(SSL_EAY_LIBRARY_DEBUG "${SSL_EAY_DEBUG}")
     set(SSL_EAY_LIBRARY_RELEASE "${SSL_EAY_RELEASE}")
 
-    include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)
+    macro( _set_library_name basename GOOD BAD )
+    if( ${basename}_LIBRARY_${GOOD} AND NOT ${basename}_LIBRARY_${BAD} )
+        set( ${basename}_LIBRARY_${BAD} ${${basename}_LIBRARY_${GOOD}} )
+        set( ${basename}_LIBRARY ${${basename}_LIBRARY_${GOOD}} )
+        set( ${basename}_LIBRARIES ${${basename}_LIBRARY_${GOOD}} )
+    endif( ${basename}_LIBRARY_${GOOD} AND NOT ${basename}_LIBRARY_${BAD} )
+endmacro( _set_library_name )
+
+macro( select_library_configurations basename )
+    # if only the release version was found, set the debug to be the release
+    # version.
+    _set_library_name( ${basename} RELEASE DEBUG )
+    # if only the debug version was found, set the release value to be the
+    # debug value.
+    _set_library_name( ${basename} DEBUG RELEASE )
+    if (${basename}_LIBRARY_DEBUG AND ${basename}_LIBRARY_RELEASE )
+        # if the generator supports configuration types or CMAKE_BUILD_TYPE
+        # is set, then set optimized and debug options.
+        if( CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE )
+            set( ${basename}_LIBRARY 
+                optimized ${${basename}_LIBRARY_RELEASE}
+                debug ${${basename}_LIBRARY_DEBUG} )
+            set( ${basename}_LIBRARIES 
+                optimized ${${basename}_LIBRARY_RELEASE}
+                debug ${${basename}_LIBRARY_DEBUG} )
+        else( CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE )
+            # If there are no configuration types or build type, just use
+            # the release version
+            set( ${basename}_LIBRARY ${${basename}_LIBRARY_RELEASE} )
+            set( ${basename}_LIBRARIES ${${basename}_LIBRARY_RELEASE} )
+        endif( CMAKE_CONFIGURATION_TYPES OR CMAKE_BUILD_TYPE )
+    endif( ${basename}_LIBRARY_DEBUG AND ${basename}_LIBRARY_RELEASE )
+
+    set( ${basename}_LIBRARY ${${basename}_LIBRARY} CACHE FILEPATH 
+        "The ${basename} library" )
+
+    if( ${basename}_LIBRARY )
+        set( ${basename}_FOUND TRUE )
+    endif( ${basename}_LIBRARY )
+
+    mark_as_advanced( ${basename}_LIBRARY 
+        ${basename}_LIBRARY_RELEASE
+        ${basename}_LIBRARY_DEBUG
+    )
+endmacro( select_library_configurations )
+    
+    #include(${CMAKE_CURRENT_LIST_DIR}/SelectLibraryConfigurations.cmake)
     select_library_configurations(LIB_EAY)
     select_library_configurations(SSL_EAY)
 

@@ -36,6 +36,10 @@ endif()
 
 set(OPENMM_LIBRARY_NAMES OpenMM_static OpenMMCPU_static OpenMMPME_static OpenMMCUDA_static OpenMMOpenCL_static)
 
+if(WIN32)
+    set(OPENMM_LIBRARY_NAMES ${OPENMM_LIBRARY_NAMES} pthreadVC2_static_mt)
+endif()
+
 foreach(OPENMM_LIBRARY_NAME ${OPENMM_LIBRARY_NAMES})
     if(UNIX)
         set(OPENMM_STATIC_LIB "lib${OPENMM_LIBRARY_NAME}.a")

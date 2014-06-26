@@ -6,7 +6,7 @@ set(OPENCL_ROOT /usr/local/cuda CACHE PATH "OpenCL Directory")
 find_package(POCO REQUIRED)
 
 if(WIN32)
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
 endif()
 
 if(WIN32)
