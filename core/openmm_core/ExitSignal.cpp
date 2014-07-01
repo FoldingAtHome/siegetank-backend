@@ -66,5 +66,9 @@ void ExitSignal::init() {
 }
 
 bool ExitSignal::shouldExit() {
+#ifdef FAH_CORE
 	return pid_is_dead() || global_exit;
+#else
+	return global_exit;
+#endif
 }
