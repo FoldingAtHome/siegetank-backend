@@ -81,7 +81,7 @@ class TestSiegeTank(unittest.TestCase):
         def add_partition(stream_id, partitions):
             stream_dir = os.path.join('firebat_data', 'streams', stream_id)
             for i in partitions:
-                p_dir = os.path.join(stream_dir, str(i))
+                p_dir = os.path.join(stream_dir, str(i), '0')
                 os.makedirs(p_dir)
                 open(os.path.join(p_dir, 'bin1'), 'wb').write(os.urandom(5987))
                 open(os.path.join(p_dir, 'bin2'), 'wb').write(os.urandom(9820))
@@ -103,18 +103,17 @@ class TestSiegeTank(unittest.TestCase):
             stream_dir = os.path.join('sync_data', stream_id)
             os.remove(os.path.join(stream_dir, 'files', filename))
 
-        def are_frame_dirs_equal(given, expected):
+        def are_frame_dirs_equal(sync_dir, stream_dir):
             """ Does not check for seed_files or checkpoint_files. """
-            for partition in os.listdir(expected):
+            for partition in os.listdir(stream_dir):
                 if partition == 'files':
                     continue
-                for frame_file in os.listdir(os.path.join(expected, partition)):
+                for frame_file in os.listdir(os.path.join(stream_dir, partition, '0')):
                     if frame_file == 'checkpoint_files':
                         continue
-                    print(partition, frame_file)
-                    bin1 = open(os.path.join(expected, partition, frame_file), 'rb')
+                    bin1 = open(os.path.join(stream_dir, partition, '0', frame_file), 'rb')
                     try:
-                        bin2 = open(os.path.join(given, partition, frame_file), 'rb')
+                        bin2 = open(os.path.join(sync_dir, partition, frame_file), 'rb')
                     except:
                         return False
                     if bin1.read() != bin2.read():

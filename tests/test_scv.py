@@ -88,9 +88,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         for i in range(4):
             filename = hashlib.md5(os.urandom(1024)).hexdigest()
             files[filename] = hashlib.md5(os.urandom(1024)).hexdigest()
-        body = {'target_id': target_id,
-                'files': files
-                }
+        body = {'target_id': target_id, 'files': files}
         if tags:
             body['tags'] = tags
         headers = {'Authorization': self.auth_token}
