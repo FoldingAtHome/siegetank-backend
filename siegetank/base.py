@@ -207,14 +207,13 @@ class Stream(Base):
         #         open(filepath, 'wb').write(filedata)
 
         # find missing partitions
-        num_partitions = len(content['partitions'])
         for index, partition in enumerate(content['partitions']):
             # print('\rsyncing '+str(index+1)+'/'+str(total_count), end="", flush=True)
             p_dir = os.path.join(folder, str(partition))
             if not os.path.exists(p_dir):
                 os.makedirs(p_dir)
             for frame_n in missing(content['frame_files'], os.listdir(p_dir)):
-                filedata = self.download(os.path.join(str(partition), frame_n))
+                filedata = self.download(os.path.join(str(partition), frame_n, '0'))
                 filepath = os.path.join(p_dir, frame_n)
                 open(filepath, 'wb').write(filedata)
             # if 'checkpoint_files' in content:

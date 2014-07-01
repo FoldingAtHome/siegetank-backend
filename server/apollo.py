@@ -330,6 +330,13 @@ class Entity(metaclass=_entity_metaclass):
         return self._db.hincrby(self.prefix + ':' + self._id, field, count)
 
     @check_field
+    def hincrbyfloat(self, field, count):
+        """ Increment the field by count, field must be declared float """
+        if self.fields[field] != float:
+            raise TypeError('cannot call hincrbyfloat on a non-float field')
+        return self._db.hincrby(self.prefix + ':' + self._id, field, count)
+
+    @check_field
     @auto_pipeline
     def hset(self, field, value, pipeline=None):
         """ Set a hash field equal to value """

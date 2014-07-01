@@ -465,10 +465,10 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(active_stream.hget('buffer_frames'), 0)
         self.assertEqual(stream.hget('frames'), n_frames)
         self.assertFalse(os.path.exists(buffer_folder))
-        checkpoint_path = os.path.join(streams_dir, stream_id, str(n_frames),
+        checkpoint_path = os.path.join(streams_dir, stream_id, str(n_frames), '0',
                                        'checkpoint_files', replacement_filename)
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
-        frames_path = os.path.join(streams_dir, stream_id, str(n_frames),
+        frames_path = os.path.join(streams_dir, stream_id, str(n_frames), '0',
                                    'frames.xtc')
         self.assertEqual(frame_buffer, open(frames_path, 'rb').read())
 
@@ -490,7 +490,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                                           replacement_filename)
         self.assertTrue(isfile(initial_state_path))
         checkpoint_path = os.path.join(streams_dir, stream_id,
-                                       str(n_frames+more_frames),
+                                       str(n_frames+more_frames), '0',
                                        'checkpoint_files', replacement_filename)
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
 
@@ -696,7 +696,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(True, content['active'])
 
         # download the frames
-        data = self._download(stream_id, '25/frames.xtc')
+        data = self._download(stream_id, '25/0/frames.xtc')
         first_stack = data
         self.assertEqual(first_stack, frame_buffer)
 
@@ -709,7 +709,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         buffer_path = os.path.join(streams_dir, stream_id, 'buffer_frames.xtc')
 
         # download the frames
-        data = self._download(stream_id, '25/frames.xtc')
+        data = self._download(stream_id, '25/0/frames.xtc')
         self.assertEqual(data, old_buffer)
 
         # PUT a checkpoint
@@ -717,7 +717,7 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self._add_checkpoint(token, replacement_filename, checkpoint_bin)
 
         # download the frames
-        data = self._download(stream_id, '50/frames.xtc')
+        data = self._download(stream_id, '50/0/frames.xtc')
         second_stack = first_stack + data
         self.assertEqual(second_stack, frame_buffer)
 
@@ -887,15 +887,37 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(self.scv.db.smembers('active_streams'), set())
         self._delete_stream(stream_id)
 
+    def test_stream_inconsistency(self):
+        # see if scruffy can recover inconsistent streams
+        result = self._core_start()
+        stream_id = result['stream_id']
+        files = result['files']
+        token = result['token']
+
+        frame_bin = os.urandom(90000)
+        self._add_frames(token, frame_bin=frame_bin)
+        # PUT a checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(3460000))
+        replacement_filename = random.choice(list(files.keys()))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
+
+        last_partition = self.scv.list_partitions(stream_id)[-1]
+
+        stream = scv.Stream(stream_id, self.scv.db)
+        stream.hset('frames', 0)
+        self.assertTrue(stream.hget('frames') != last_partition)
+        self.scv.db.zadd('locks', stream_id, time.time()-10)
+        self.io_loop.run_sync(self.scv.scruffy)
+        self.assertTrue(stream.hget('frames') == last_partition)
+        self.assertTrue(stream.hget('frames') == 1)
+        self._delete_stream(stream_id)
+
     def test_speed(self):
         result = self._core_start()
         stream_id = result['stream_id']
-        target_id = result['target_id']
         files = result['files']
         token = result['token']
-        headers = {'Authorization': token}
-        manager_headers = {'Authorization': self.auth_token}
-        
+
         frame_buffer = bytes()
         n_frames = 25
         active_stream = scv.ActiveStream(stream_id, self.scv.db)

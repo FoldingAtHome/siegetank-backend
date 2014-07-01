@@ -53,7 +53,7 @@ class Stream(Entity):
 
 class ActiveStream(Entity):
     prefix = 'active_stream'
-    fields = {'total_frames': int,  # total frames completed.
+    fields = {'total_frames': float,  # total frames completed.
               'buffer_frames': int,  # number of frames in buffer.xtc
               'auth_token': str,  # core Authorization token
               'user': str,  # the user assigned to the stream
@@ -358,7 +358,7 @@ class StreamsHandler(BaseHandler):
             self.error('User is not a manager', 401)
         content = json.loads(self.request.body.decode())
         target_id = content['target_id']
-        stream_files = content['files'] # important to put here for validation
+        stream_files = content['files']  # important to put here for validation
         stream_id = str(uuid.uuid4())+':'+self.application.name
         unlock = self.start_lock(stream_id)
         script = """
@@ -617,14 +617,20 @@ class CoreStartHandler(BaseHandler):
         seed_files_dir = os.path.join(self.application.streams_folder,
                                       stream_id, 'files')
         frames = stream.hget('frames')
-        if frames > 0:
-            checkpoint_files = os.path.join(self.application.streams_folder,
-                                            stream_id, str(frames),
+        frame_dir = os.path.join(self.application.streams_folder,
+                                 stream_id, str(frames))
+        try:
+            # this will throw an exception on the first frame
+            checkpoint_dirs = os.listdir(frame_dir)
+            last_checkpoint = sorted(checkpoint_dirs, key=int)[-1]
+            checkpoint_files = os.path.join(frame_dir, last_checkpoint,
                                             'checkpoint_files')
             for filename in os.listdir(checkpoint_files):
                 file_path = os.path.join(checkpoint_files, filename)
                 with open(file_path, 'r') as handle:
                     reply['files'][filename] = handle.read()
+        except FileNotFoundError:
+            pass
         for filename in os.listdir(seed_files_dir):
             file_path = os.path.join(seed_files_dir, filename)
             with open(file_path, 'r') as handle:
@@ -762,10 +768,14 @@ class CoreCheckpointHandler(BaseHandler):
                 {
                     "files": {
                         "state.xml.gz.b64" : "state.xml.gz.b64"
-                    }
+                    },
+                    "frames": 239.98, # number of frames since last checkpoint
                 }
 
-            ..note:: filenames must be almost be present in stream_files
+            .. note:: filenames must be almost be present in stream_files
+
+            .. note:: If ``frames`` is not provided, the backend uses
+                buffer frames an approximation
 
             :status 200: OK
             :status 400: Bad request
@@ -780,32 +790,21 @@ class CoreCheckpointHandler(BaseHandler):
         # When a checkpoint is submitted, the checkpoint files are written to
         # the folder buffer_files/checkpoint_files/
 
-        # When the checkpoints are written successfully, buffer_files is renamed
-        # to the frame count. This also marks the successful completion of an
-        # atomic transaction.
-
         # When streams are started, checkpoint_files U seed_files are
         # combined, with filenames in checkpoint_files taking precedence.
-
-        # When a stream deactivates, buffer_files folder is completedly blown
-        # away. Note that when the server starts, all streams are deactivated.
 
         self.set_status(400)
         stream_id, unlock = self.authenticate_core()
         request_hash = hashlib.md5(self.request.body).hexdigest()
         if request_hash != self.request.headers.get('Content-MD5'):
             unlock()
-            self.error('Frame MD5 mismatch')
+            self.error('Content-MD5 mismatch')
         content = json.loads(self.request.body.decode())
         stream = Stream(stream_id, self.db)
         active_stream = ActiveStream(stream_id, self.db)
-        stream_frames = stream.hget('frames')
         buffer_frames = active_stream.hget('buffer_frames')
-        total_frames = stream_frames + buffer_frames
-        # Important check for idempotency
-        if buffer_frames == 0:
-            unlock()
-            return self.set_status(200)
+        sum_frames = stream.hget('frames') + buffer_frames
+
         streams_folder = self.application.streams_folder
         buffer_folder = os.path.join(streams_folder, stream_id, 'buffer_files')
         checkpoint_folder = os.path.join(buffer_folder, 'checkpoint_files')
@@ -821,17 +820,32 @@ class CoreCheckpointHandler(BaseHandler):
                 handle.write(checkpoint_bytes)
 
         # 2) Rename buffer folder
-        frame_folder = os.path.join(streams_folder, stream_id,
-                                    str(total_frames))
-        os.rename(buffer_folder, frame_folder)
 
-        # 3) TODO: remove extra checkpoints
+        partition = os.path.join(streams_folder, stream_id, str(sum_frames))
 
-        # TODO: If the server crashes here, we need a check to make sure that
-        # extraneous buffer frames are cleaned up properly.
+        if not os.path.exists(partition):
+            os.makedirs(partition)
 
-        stream.hincrby('frames', buffer_frames)
-        active_stream.hincrby('total_frames', buffer_frames)
+        if buffer_frames == 0:
+            # we're writing to a stream that has no frames recorded, so we
+            # find last checkpoint directory and increment by 1
+            checkpoint_dirs = os.listdir(partition)
+            last_dir = int(sorted(checkpoint_dirs, key=int)[-1])
+            last_dir = str(last_dir+1)
+            rename_dir = os.path.join(partition, last_dir)
+        else:
+            rename_dir = os.path.join(partition, '0')
+
+        os.rename(buffer_folder, rename_dir)
+
+        # If the server dies here, scruffy checks that redis frames is equal
+        # to the highest partition number on disk
+        stream.hset('frames', sum_frames)
+
+        if 'frames' in content:
+            active_stream.hincrbyfloat('total_frames', content['frames'])
+        else:
+            active_stream.hincrbyfloat('total_frames', buffer_frames)
         active_stream.hset('buffer_frames', 0)
 
         unlock()
@@ -1010,21 +1024,14 @@ class StreamSyncHandler(BaseHandler):
             return self.set_status(401)
         streams_folder = self.application.streams_folder
         stream_dir = os.path.join(streams_folder, stream_id)
-        folders = os.listdir(stream_dir)
-        partitions = []
-        for item in folders:
-            try:
-                partitions.append(int(item))
-            except:
-                pass
-        partitions = sorted(partitions)
+        partitions = self.application.list_partitions(stream_id)
         seed_files = os.listdir(os.path.join(stream_dir, 'files'))
         reply = {
             'partitions': partitions,
             'seed_files': seed_files,
         }
         if len(partitions) > 0:
-            frame_dir = os.path.join(stream_dir, str(partitions[0]))
+            frame_dir = os.path.join(stream_dir, str(partitions[0]), '0')
             frame_files = os.listdir(frame_dir)
             chkpt_name = 'checkpoint_files'
             frame_files.remove(chkpt_name)
@@ -1067,7 +1074,6 @@ class StreamUploadHandler(BaseHandler):
         unlock = self.start_lock(stream_id)
         if stream_owner != current_user:
             return self.set_status(401)
-        stream = Stream(stream_id, self.db)
         streams_folder = self.application.streams_folder
         stream_dir = os.path.abspath(os.path.join(streams_folder, stream_id))
         requested_file = os.path.abspath(os.path.join(stream_dir, filename))
@@ -1191,11 +1197,24 @@ class SCV(BaseServerMixin, tornado.web.Application):
             elif time.time() - start_time > 0.1:
                 raise tornado.web.HTTPError(400, reason="stream is busy")
 
+    def list_partitions(self, stream_id):
+        """ List available partitions for a stream, sorted by increasing order """
+        streams_folder = self.streams_folder
+        stream_dir = os.path.join(streams_folder, stream_id)
+        folders = os.listdir(stream_dir)
+        partitions = []
+        for item in folders:
+            try:
+                partitions.append(int(item))
+            except:
+                pass
+        return sorted(partitions)
+
     @tornado.gen.coroutine
     def scruffy(self):
         """ Cleans up after streams with bad locks, and unrecorded stats """
         # check for locks
-        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-3):
+        for stream_id in self.db.zrangebyscore('locks', 0, time.time()-5):
             message = 'Scruffy found a bad stream: '+stream_id
             logging.getLogger('tornado.application').critical(message)
             if not Stream.exists(stream_id, self.db):
@@ -1203,9 +1222,19 @@ class SCV(BaseServerMixin, tornado.web.Application):
                 if os.path.exists(stream_dir):
                     os.shutil.rmtree(stream_dir)
             else:
+                partitions = self.list_partitions(stream_id)
+                stream = Stream(stream_id, self.db)
+                if partitions:
+                    last_partition = int(partitions[-1])
+                else:
+                    last_partition = 0
+                if last_partition != stream.hget('frames'):
+                    message = 'last_partition != db frames, fixing ...'
+                    logging.getLogger('tornado.application').critical(message)
+                    stream.hset('frames', last_partition)
                 yield self.deactivate_stream(stream_id)
             self.release_lock(stream_id)
-        
+
         # check for unrecorded stats
         while(True):
             body = self.db.lpop('fragments')
@@ -1217,13 +1246,12 @@ class SCV(BaseServerMixin, tornado.web.Application):
                     fragment.pop('target_id')
                     cursor = motor.MotorCollection(self.motor.stats, target_id)
                     yield cursor.insert(fragment)
-                except Exception as e:
+                except Exception:
                     # mongo replicaset is still inaccessible, try later.
                     self.db.rpush('fragments', body)
                     break
             else:
                 break
-
 
     def acquire_lock(self, resource):
         script = """
