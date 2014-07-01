@@ -1408,7 +1408,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
                     cursor = motor.MotorCollection(self.motor.stats, target_id)
                     # mongo will manipulate this by adding an _id, so we need
                     # to make a copy
-                    insertion_object = body
+                    insertion_object = body.copy()
                     yield cursor.insert(insertion_object)
                 except:
                     body['target_id'] = target_id

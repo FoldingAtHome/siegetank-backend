@@ -152,7 +152,8 @@ int main(int argc, const char * argv[]) {
     );
 
     opt.add(
-        "cc.proteneer.com", // Default.
+        //"cc.proteneer.com", // Default.
+        "127.0.0.1:8980",
         0, // Required?
         1, // Number of args expected.
         0, // Delimiter if expecting multiple args.

@@ -105,7 +105,7 @@ void testStartStream(string donor_token="", string target_id="") {
     string c_filename("state.xml");
     map<string, string> checkpoint_files;
     checkpoint_files[c_filename] = test_state;
-    core.sendCheckpoint(checkpoint_files, true);
+    core.sendCheckpoint(checkpoint_files, 23.5, true);
     for(int i=0; i < 10; i++) {
         string filename1("frames.xtc");
         string filedata1 = gen_random(100);
@@ -118,7 +118,7 @@ void testStartStream(string donor_token="", string target_id="") {
         core.sendFrame(frame_files, count);
     }
     core.sendHeartbeat();
-    core.sendCheckpoint(checkpoint_files, true);
+    core.sendCheckpoint(checkpoint_files, 29.8, true);
     core.stopStream();
 }
 
@@ -129,9 +129,13 @@ int main() {
     ifstream target_ids("target_ids.log");
     string target_id;
     target_ids >> target_id;
+    cout << "ONE" << endl;
     testStartStream();
+    cout << "TWO" << endl;
     testStartStream(donor_token);
+    cout << "THREE" << endl;
     testStartStream("", target_id);
+    cout << "FOUR" << endl;
     testStartStream(donor_token, target_id);
     return 0;
 }

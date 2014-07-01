@@ -344,16 +344,18 @@ void Core::assign(const string &cc_uri,
         string ws_url(json_object["url"].get<string>());
         Poco::URI poco_url(ws_url);
         core_token_ = json_object["token"].get<string>();
-        session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), 
-            poco_url.getPort(), context);
+        session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), poco_url.getPort(), context);
 
         if(proxy_string.size() > 0) {
             string proxy_user, proxy_pass, proxy_host;
             int proxy_port;
             parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
             session_->setProxy(proxy_host, proxy_port);
-            if(proxy_user.size() > 0 && proxy_pass.size() > 0)
+            logStream << "setting proxy_host, proxy_port " << proxy_host << " " << proxy_port << endl;
+            if(proxy_user.size() > 0 && proxy_pass.size() > 0) {
                 session_->setProxyCredentials(proxy_user, proxy_pass);
+                logStream << "setting proxy_user, proxy_pass " << proxy_user << " " << proxy_pass << endl;
+            }
         }
 	} catch(Poco::Net::SSLException &se) {
 		cout << se.message() << endl;
@@ -473,8 +475,8 @@ void Core::sendFrame(const map<string, string> &files,
     }
 }
 
-void Core::sendCheckpoint(const map<string, string> &files, 
-    bool gzip) const {
+void Core::sendCheckpoint(const map<string, string> &files, double frames, bool gzip)
+    const {
 
     logStream << "sending checkpoint" << std::flush;
 
@@ -496,7 +498,12 @@ void Core::sendCheckpoint(const map<string, string> &files,
         message += ":";
         message += "\""+filedata+"\"";
     }
-    message += "}}";
+    message += "},";
+    message += "\"frames\":";
+    stringstream frames_string;
+    frames_string << frames;
+    message += frames_string.str();
+    message += "}";
     request.set("Content-MD5", compute_md5(message));
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());

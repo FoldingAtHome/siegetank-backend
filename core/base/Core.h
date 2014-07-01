@@ -68,7 +68,7 @@ protected:
        files will first be gzipped, with a '.gz' suffix appended, and then b64
        encoded.
     */
-    void sendCheckpoint(const std::map<std::string, std::string> &files,
+    void sendCheckpoint(const std::map<std::string, std::string> &files, double frames,
                         bool gzip=false) const;
 
     /* Send a heartbeat */

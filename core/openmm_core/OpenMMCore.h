@@ -51,7 +51,7 @@ public:
 protected:
     /* check the step and determine if we need to 1) write frame/send frame, 
     or 2) send a checkpoint */
-    void checkFrameWrite(int current_step);
+    void checkFrameWrite();
 
     /* get time per frame in seconds */
     int timePerFrame(long long steps_completed) const;
@@ -78,7 +78,9 @@ private:
     int checkpoint_send_interval_;
     int heartbeat_interval_;
     int start_time_;
-    std::string last_checkpoint_;
+    long long current_step_;
+    long long last_checkpoint_step_;
+    //std::string last_checkpoint_;
     OpenMM::Context* ref_context_;
     OpenMM::Context* core_context_;
     OpenMM::Integrator* ref_intg_;

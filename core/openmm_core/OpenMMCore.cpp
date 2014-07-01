@@ -62,6 +62,8 @@ OpenMMCore::OpenMMCore(string core_key, map<string, string> properties, std::ost
     Core(core_key, logStream),
     checkpoint_send_interval_(6000),
     heartbeat_interval_(60),
+    current_step_(0),
+    last_checkpoint_step_(0),
     ref_context_(NULL),
     core_context_(NULL),
     ref_intg_(NULL),
@@ -283,12 +285,24 @@ void OpenMMCore::stopStream(string error_msg) {
 }
 
 void OpenMMCore::flushCheckpoint() {
-    if(last_checkpoint_.size() == 0)
-        return;
+    OpenMM::State state = core_context_->getState(
+        OpenMM::State::Positions | 
+        OpenMM::State::Velocities | 
+        OpenMM::State::Parameters | 
+        OpenMM::State::Energy | 
+        OpenMM::State::Forces);
+    checkState(state);
+    ostringstream checkpoint;
+    OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
     map<string, string> checkpoint_files;
-    checkpoint_files["state.xml"] = last_checkpoint_;
-    sendCheckpoint(checkpoint_files, true);
-    last_checkpoint_.clear();
+    checkpoint_files["state.xml"] = checkpoint.str();
+    stringstream partial_steps;
+    partial_steps << (current_step_ % steps_per_frame_);
+    cout << "writing partial steps" << partial_steps.str() << endl;
+    checkpoint_files["partial_steps"] = partial_steps.str();
+    double frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
+    sendCheckpoint(checkpoint_files, frames, true);
+    last_checkpoint_step_ = current_step_;
 }
 
 void OpenMMCore::checkState(const OpenMM::State &core_state) const {
@@ -301,19 +315,16 @@ void OpenMMCore::checkState(const OpenMM::State &core_state) const {
     StateTests::compareForcesAndEnergies(reference_state, core_state);
 }
 
-void OpenMMCore::checkFrameWrite(int current_step) {
+void OpenMMCore::checkFrameWrite() {
     // nothing is written on the first step;
-    if(current_step > 0 && current_step % steps_per_frame_ == 0) {
+    if(current_step_ > 0 && current_step_ % steps_per_frame_ == 0) {
         OpenMM::State state = core_context_->getState(
             OpenMM::State::Positions | 
             OpenMM::State::Velocities | 
             OpenMM::State::Parameters | 
             OpenMM::State::Energy | 
             OpenMM::State::Forces);
-
-        // todo: check against reference context.
         checkState(state);
-
         state.getTime();
         OpenMM::Vec3 a,b,c;
         state.getPeriodicBoxVectors(a,b,c);
@@ -332,14 +343,10 @@ void OpenMMCore::checkFrameWrite(int current_step) {
         // write frame
         ostringstream frame_stream;
         XTCWriter xtcwriter(frame_stream);
-        xtcwriter.append(current_step, state.getTime(), box, positions);
+        xtcwriter.append(current_step_, state.getTime(), box, positions);
         map<string, string> frame_files;
         frame_files["frames.xtc"] = frame_stream.str();
         sendFrame(frame_files);
-        // write checkpoint
-        ostringstream checkpoint;
-        OpenMM::XmlSerializer::serialize<OpenMM::State>(&state, "State", checkpoint);
-        last_checkpoint_ = checkpoint.str();
     }
 }
 
@@ -362,23 +369,31 @@ float OpenMMCore::nsPerDay(long long steps_completed) const {
 void OpenMMCore::main() {
     logStream << "main" << endl;
     try {
-        long long current_step = 0;
         changemode(1);
         status_header(logStream);
 
         double next_checkpoint = time(NULL) + checkpoint_send_interval_;
         double next_heartbeat = time(NULL) + heartbeat_interval_;
 
+        if(files_.find("partial_steps") != files_.end()) {
+            stringstream buffer(files_["partial_steps"]);
+            buffer >> current_step_;
+            last_checkpoint_step_ = current_step_;
+        }
+
+        long long starting_step = current_step_;
+
+        cout << "Starting on step: " << current_step_ << endl;
+
         while(true) {
 #ifdef FAH_CORE
-            if(current_step % 400 == 0) {
-                //mkdir(wu_dir.c_str(), 0755);
+            if(current_step_ % 300 == 0) {
                 string info_path = "./"+wu_dir+"/wuinfo_01.dat";
                 ofstream file(info_path.c_str(), ios::binary);
                 uint32_t unitType = 101;     ///< UNIT_FAH (101) for Folding@home work units
                 char unitName[80] = "Streaming"; ///< Protein name
                 uint32_t framesTotal = steps_per_frame_;  ///< Total # frames
-                uint32_t framesDone = current_step % steps_per_frame_;   ///< # Frames complete
+                uint32_t framesDone = current_step_ % steps_per_frame_;   ///< # Frames complete
                 uint32_t frameSteps = 1;   ///< # Dynamic steps per frame
                 char reserved[416] = "";
                 file.write((char *)&unitType, sizeof(unitType));
@@ -390,13 +405,13 @@ void OpenMMCore::main() {
                 file.close();
             } 
 #else
-           if(current_step % 10 == 0) {
+           if(current_step_ % 10 == 0) {
                 update_status(target_id_,
                               stream_id_,
-                              timePerFrame(current_step),
-                              nsPerDay(current_step),
-                              current_step/steps_per_frame_,
-                              current_step);
+                              timePerFrame(current_step_),
+                              nsPerDay(current_step_),
+                              current_step_/steps_per_frame_,
+                              current_step_);
             }
 #endif
             if(ExitSignal::shouldExit()) {
@@ -409,7 +424,7 @@ void OpenMMCore::main() {
                     flushCheckpoint();
                 }
             }
-            checkFrameWrite(current_step);
+            checkFrameWrite();
             if(time(NULL) > next_heartbeat) { 
                 sendHeartbeat();
                 next_heartbeat = time(NULL) + heartbeat_interval_;
@@ -419,7 +434,7 @@ void OpenMMCore::main() {
                next_checkpoint = time(NULL) + checkpoint_send_interval_;
             }
             core_context_->getIntegrator().step(1);
-            current_step++;
+            current_step_++;
         }
         stopStream();
     } catch(exception &e) {
