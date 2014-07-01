@@ -782,13 +782,40 @@ class CoreCheckpointHandler(BaseHandler):
 
         """
 
-        # All buffered frame files are stored in the buffer_files folder:
+        # All buffered frame files and checkpoints are stored in the
+        # buffer_files folder as:
 
-        # buffer_files/frames.xtc
-        # buffer_files/misc.txt
+        # buffer_files/[frames.xtc, misc.txt]
+        # buffer_files/checkpoint_files/[state.xml.gz.b64, partial_steps]
 
-        # When a checkpoint is submitted, the checkpoint files are written to
-        # the folder buffer_files/checkpoint_files/
+        # Upon completion, the buffer_files folder is then renamed to:
+        # x/0/
+
+        # If no frames have been submitted, that is, buffer_frames == 0, then
+        # the folder will simply look like:
+
+        # buffer_files/checkpoint_files/[state.xml.gz.b64, partial_steps]
+
+        # and buffer_files will be renamed to:
+        # x/y/, where y is the next increment
+
+        # the over all structure will look like:
+
+        # stream_id/0/1/checkpoint_files/[state.xml.gz.b64, partial_steps]
+        # stream_id/0/2/checkpoint_files/[state.xml.gz.b64, partial_steps]
+        # stream_id/1/0/[frames.xtc, misc.txt, checkpoint_files/[state.xml.gz.b64, partial_steps]]
+        # stream_id/1/1/checkpoint_files/[state.xml.gz.b64, partial_steps]
+        # stream_id/1/2/checkpoint_files/[state.xml.gz.b64, partial_steps]
+        # stream_id/35/0/[frames.xtc, misc.txt, checkpoint_files/[state.xml.gz.b64, partial_steps]]
+        # stream_id/49/0/[frames.xtc, misc.txt, checkpoint_files/[state.xml.gz.b64, partial_steps]]
+        # stream_id/49/1/checkpoint_files/[state.xml.gz.b64, partial_steps]
+
+
+        # note: only when y == 0 will the folder contain frame data.
+        # note: stream_id/0/0 does not exist since no frames exist for the 0th step.
+
+        # At first glance, this structure looks awfully weird, but it is a due
+        # to the fact that os.rename() is the only atomically safe operation
 
         # When streams are started, checkpoint_files U seed_files are
         # combined, with filenames in checkpoint_files taking precedence.
@@ -834,7 +861,8 @@ class CoreCheckpointHandler(BaseHandler):
                 last_dir = int(sorted(checkpoint_dirs, key=int)[-1])
                 rename_dir = os.path.join(partition, str(last_dir+1))
             else:
-                # corner case when stream frames == 0 && buffer_frames == 0
+                # the only time checkpoint_dirs is empty is if we're in the 0th
+                # partition and no checkpoint has been written
                 rename_dir = os.path.join(partition, '1')
         else:
             rename_dir = os.path.join(partition, '0')
