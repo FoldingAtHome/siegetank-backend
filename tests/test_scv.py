@@ -175,9 +175,11 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(response.code, 200)
         return frame_bin
 
-    def _add_checkpoint(self, core_token, filename, filebin):
-        body = json.dumps({'files': {filename:
-                                     filebin.decode()}})
+    def _add_checkpoint(self, core_token, filename, filebin, frames=None):
+        body = {'files': {filename: filebin.decode()}}
+        if frames:
+            body['frames'] = frames
+        body = json.dumps(body)
         headers = {'Authorization': core_token,
                    'Content-MD5': hashlib.md5(body.encode()).hexdigest()}
         response = self.fetch('/core/checkpoint', headers=headers,
@@ -494,15 +496,15 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
                                        'checkpoint_files', replacement_filename)
         self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
 
-        # test idempotency of put checkpoint
-        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
-        self.assertFalse(os.path.exists(buffer_path))
-        self.assertEqual(stream.hget('frames'), n_frames+more_frames)
-        self.assertEqual(active_stream.hget('buffer_frames'), 0)
-        initial_state_path = os.path.join(streams_dir, stream_id, 'files',
-                                          replacement_filename)
-        self.assertTrue(isfile(initial_state_path))
-        self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
+        # # test idempotency of put checkpoint
+        # self._add_checkpoint(token, replacement_filename, checkpoint_bin)
+        # self.assertFalse(os.path.exists(buffer_path))
+        # self.assertEqual(stream.hget('frames'), n_frames+more_frames)
+        # self.assertEqual(active_stream.hget('buffer_frames'), 0)
+        # initial_state_path = os.path.join(streams_dir, stream_id, 'files',
+        #                                   replacement_filename)
+        # self.assertTrue(isfile(initial_state_path))
+        # self.assertEqual(checkpoint_bin, open(checkpoint_path, 'rb').read())
 
         # test idempotency of put frame
         frame_buffer = self._add_frames(token)
@@ -652,6 +654,152 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, 200)
         data = self._download(stream_id, 'a/b/'+random_file)
         self.assertEqual(data, random_binary)
+
+        self._delete_stream(stream_id)
+
+    def test_arbitrary_checkpoints_2(self):
+        result = self._core_start()
+        stream_id = result['stream_id']
+        target_id = result['target_id']
+        files = result['files']
+        token = result['token']
+        headers = {'Authorization':  token}
+        frame_buffer = bytes()
+        n_frames = 25
+        active_stream = scv.ActiveStream(stream_id, self.scv.db)
+
+        random_file = random.choice(list(files.keys()))
+
+        fcs = [0.23, 0.53, n_frames+0.12, 0.59]
+
+        # download a frame file that has not been replaced yet
+        data = self._download(stream_id, 'files/'+random_file)
+        self.assertEqual(data.decode(), files[random_file])
+
+        # PUT a checkpoint without any frames
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        replacement_filename = random.choice(list(files.keys()))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin, fcs[0])
+
+        data = self._download(stream_id, '0/1/checkpoint_files/'+replacement_filename)
+        self.assertEqual(data, checkpoint_bin)
+
+        # PUT another checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        replacement_filename = random.choice(list(files.keys()))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin, fcs[1])
+
+        data = self._download(stream_id, '0/2/checkpoint_files/'+replacement_filename)
+        self.assertEqual(data, checkpoint_bin)
+
+        # PUT 25 frames
+        for count in range(n_frames):
+            frame_buffer += self._add_frames(token)
+        self.assertEqual(active_stream.hget('buffer_frames'), n_frames)
+        streams_dir = self.scv.streams_folder
+        buffer_path = os.path.join(streams_dir, stream_id, 'buffer_files',
+                                   'frames.xtc')
+        self.assertEqual(frame_buffer, open(buffer_path, 'rb').read())
+
+        # PUT another checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        replacement_filename = random.choice(list(files.keys()))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin, fcs[2])
+
+        data = self._download(stream_id, '25/0/checkpoint_files/'+replacement_filename)
+        self.assertEqual(data, checkpoint_bin)
+
+        # PUT another checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        replacement_filename = random.choice(list(files.keys()))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin, fcs[3])
+
+        data = self._download(stream_id, '25/1/checkpoint_files/'+replacement_filename)
+        self.assertEqual(data, checkpoint_bin)
+
+        active_stream = scv.ActiveStream(stream_id, self.scv.db)
+        self.assertAlmostEqual(active_stream.hget('total_frames'),
+                               sum(fcs), delta=1e-6)
+
+        # Get info about the stream
+        response = self.fetch('/streams/info/'+stream_id)
+        content = json.loads(response.body.decode())
+        self.assertEqual(n_frames, content['frames'])
+        self.assertEqual('OK', content['status'])
+        self.assertEqual(0, content['error_count'])
+        self.assertEqual(True, content['active'])
+
+        # stop the old stream
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+
+        # test mongo
+        cursor = pymongo.collection.Collection(self.mdb.stats, target_id)
+        result = cursor.find_one({'stream': stream_id})
+        self.assertAlmostEqual(sum(fcs), result['frames'], delta=1e-6)
+
+        # start a stream and make sure we recover the head
+        stream_id2, new_token = self._activate_stream(target_id)
+        headers = {'Authorization': new_token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.headers['Content-MD5'],
+                         hashlib.md5(response.body).hexdigest())
+
+        content = json.loads(response.body.decode())
+        files2 = content['files']
+
+        self.assertEqual(files2[replacement_filename], checkpoint_bin.decode())
+
+        self._delete_stream(stream_id)
+
+    def test_arbitrary_checkpoints_1(self):
+        result = self._core_start()
+        stream_id = result['stream_id']
+        target_id = result['target_id']
+        files = result['files']
+        token = result['token']
+        headers = {'Authorization':  token}
+
+        random_file = random.choice(list(files.keys()))
+        # download a frame file that has not been replaced yet
+        data = self._download(stream_id, 'files/'+random_file)
+        self.assertEqual(data.decode(), files[random_file])
+
+        # PUT a checkpoint without any frames
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        replacement_filename = random.choice(list(files.keys()))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
+
+        data = self._download(stream_id, '0/1/checkpoint_files/'+replacement_filename)
+        self.assertEqual(data, checkpoint_bin)
+
+        # PUT another checkpoint
+        checkpoint_bin = base64.b64encode(os.urandom(1024))
+        replacement_filename = random.choice(list(files.keys()))
+        self._add_checkpoint(token, replacement_filename, checkpoint_bin)
+
+        data = self._download(stream_id, '0/2/checkpoint_files/'+replacement_filename)
+        self.assertEqual(data, checkpoint_bin)
+
+        # stop the old stream
+        response = self.fetch('/core/stop', headers=headers, method='PUT',
+                              body='{}')
+        self.assertEqual(response.code, 200)
+
+        # start a stream and make sure we recover the head
+        stream_id2, new_token = self._activate_stream(target_id)
+        headers = {'Authorization': new_token}
+        response = self.fetch('/core/start', headers=headers, method='GET')
+        self.assertEqual(response.code, 200)
+        self.assertEqual(response.headers['Content-MD5'],
+                         hashlib.md5(response.body).hexdigest())
+
+        content = json.loads(response.body.decode())
+        files2 = content['files']
+
+        self.assertEqual(files2[replacement_filename], checkpoint_bin.decode())
 
         self._delete_stream(stream_id)
 

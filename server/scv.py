@@ -830,9 +830,12 @@ class CoreCheckpointHandler(BaseHandler):
             # we're writing to a stream that has no frames recorded, so we
             # find last checkpoint directory and increment by 1
             checkpoint_dirs = os.listdir(partition)
-            last_dir = int(sorted(checkpoint_dirs, key=int)[-1])
-            last_dir = str(last_dir+1)
-            rename_dir = os.path.join(partition, last_dir)
+            if checkpoint_dirs:
+                last_dir = int(sorted(checkpoint_dirs, key=int)[-1])
+                rename_dir = os.path.join(partition, str(last_dir+1))
+            else:
+                # corner case when stream frames == 0 && buffer_frames == 0
+                rename_dir = os.path.join(partition, '1')
         else:
             rename_dir = os.path.join(partition, '0')
 
@@ -847,10 +850,8 @@ class CoreCheckpointHandler(BaseHandler):
         else:
             active_stream.hincrbyfloat('total_frames', buffer_frames)
         active_stream.hset('buffer_frames', 0)
-
-        unlock()
-
         self.set_status(200)
+        unlock()
 
 
 class CoreStopHandler(BaseHandler):
@@ -1025,6 +1026,9 @@ class StreamSyncHandler(BaseHandler):
         streams_folder = self.application.streams_folder
         stream_dir = os.path.join(streams_folder, stream_id)
         partitions = self.application.list_partitions(stream_id)
+        # zeroth partition is a special case that doesn't contain frame data.
+        if 0 in partitions:
+            partitions.remove(0)
         seed_files = os.listdir(os.path.join(stream_dir, 'files'))
         reply = {
             'partitions': partitions,
@@ -1353,7 +1357,7 @@ class SCV(BaseServerMixin, tornado.web.Application):
         action = self.db.register_script(script)
         result = action(keys=[stream_id])
         if result:
-            frames = int(result[0])
+            frames = float(result[0])
             user = result[1]
             start_time = float(result[2])
             engine = result[3]
@@ -1379,7 +1383,6 @@ class SCV(BaseServerMixin, tornado.web.Application):
                     insertion_object = body
                     yield cursor.insert(insertion_object)
                 except:
-                    print(body)
                     body['target_id'] = target_id
                     self.db.rpush('fragments', json.dumps(body))
 

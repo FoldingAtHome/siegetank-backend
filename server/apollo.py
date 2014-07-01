@@ -334,7 +334,7 @@ class Entity(metaclass=_entity_metaclass):
         """ Increment the field by count, field must be declared float """
         if self.fields[field] != float:
             raise TypeError('cannot call hincrbyfloat on a non-float field')
-        return self._db.hincrby(self.prefix + ':' + self._id, field, count)
+        return self._db.hincrbyfloat(self.prefix + ':' + self._id, field, count)
 
     @check_field
     @auto_pipeline
