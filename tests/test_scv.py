@@ -34,7 +34,7 @@ import tests.utils
 class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
     def get_app(self):
-        redis_options = {'port': 3828, 'logfile': os.devnull}
+        redis_options = {'port': 49873, 'logfile': os.devnull}
         self.scv = scv.SCV(name='test_scv',
                            external_host='127.0.0.1',
                            mongo_options=self.mongo_options,
@@ -45,6 +45,8 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
     def setUp(self):
         self.mongo_options = {'host': 'localhost', 'port': 27017}
         self.mdb = pymongo.MongoClient('localhost', 27017)
+        for db_name in self.mdb.database_names():
+            self.mdb.drop_database(db_name)
         result = tests.utils.add_user(manager=True, admin=True)
         self.auth_token = result['token']
         self.test_manager = result['user']
@@ -63,6 +65,9 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
             self.scv.db.flushdb()
             self.scv.db.shutdown()
             raise Exception('Redis database is not clean', keys)
+
+        self.scv.db.flushdb()
+        self.scv.db.shutdown()
 
     def _download(self, stream_id, filename):
         headers = {'Authorization': self.auth_token}
@@ -686,7 +691,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         # PUT another checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
-        replacement_filename = random.choice(list(files.keys()))
         self._add_checkpoint(token, replacement_filename, checkpoint_bin, fcs[1])
 
         data = self._download(stream_id, '0/2/checkpoint_files/'+replacement_filename)
@@ -703,7 +707,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         # PUT another checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
-        replacement_filename = random.choice(list(files.keys()))
         self._add_checkpoint(token, replacement_filename, checkpoint_bin, fcs[2])
 
         data = self._download(stream_id, '25/0/checkpoint_files/'+replacement_filename)
@@ -711,7 +714,6 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
 
         # PUT another checkpoint
         checkpoint_bin = base64.b64encode(os.urandom(1024))
-        replacement_filename = random.choice(list(files.keys()))
         self._add_checkpoint(token, replacement_filename, checkpoint_bin, fcs[3])
 
         data = self._download(stream_id, '25/1/checkpoint_files/'+replacement_filename)
@@ -751,6 +753,16 @@ class TestSCV(tornado.testing.AsyncHTTPTestCase):
         files2 = content['files']
 
         self.assertEqual(files2[replacement_filename], checkpoint_bin.decode())
+
+       # test sync api
+        manager_headers = {'Authorization': self.auth_token}
+        reply = self.fetch('/streams/sync/'+stream_id, headers=manager_headers)
+        content = json.loads(reply.body.decode())
+        self.assertEqual(content['partitions'], [n_frames])
+        self.assertEqual(set(content['seed_files']), set(list(files.keys())))
+        self.assertEqual(content['checkpoint_files'], [replacement_filename])
+        self.assertEqual(content['frame_files'], ['frames.xtc'])
+        self.assertEqual(reply.code, 200)
 
         self._delete_stream(stream_id)
 

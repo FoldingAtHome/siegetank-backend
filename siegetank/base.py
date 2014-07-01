@@ -213,7 +213,7 @@ class Stream(Base):
             if not os.path.exists(p_dir):
                 os.makedirs(p_dir)
             for frame_n in missing(content['frame_files'], os.listdir(p_dir)):
-                filedata = self.download(os.path.join(str(partition), frame_n, '0'))
+                filedata = self.download(os.path.join(str(partition), '0', frame_n))
                 filepath = os.path.join(p_dir, frame_n)
                 open(filepath, 'wb').write(filedata)
             # if 'checkpoint_files' in content:
