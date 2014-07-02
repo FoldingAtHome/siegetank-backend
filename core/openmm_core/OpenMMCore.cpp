@@ -408,8 +408,8 @@ void OpenMMCore::main() {
            if(current_step_ % 10 == 0) {
                 update_status(target_id_,
                               stream_id_,
-                              timePerFrame(current_step_),
-                              nsPerDay(current_step_),
+                              timePerFrame(current_step_-starting_step),
+                              nsPerDay(current_step_-starting_step),
                               current_step_/steps_per_frame_,
                               current_step_);
             }
@@ -417,12 +417,6 @@ void OpenMMCore::main() {
             if(ExitSignal::shouldExit()) {
                 changemode(0);
                 break;
-            }
-            if(kbhit()) {
-                if('c' == char(getchar())) {
-                    logStream << "\rsending checkpoint" << flush;
-                    flushCheckpoint();
-                }
             }
             checkFrameWrite();
             if(time(NULL) > next_heartbeat) { 

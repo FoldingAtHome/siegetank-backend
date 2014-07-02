@@ -345,7 +345,6 @@ void Core::assign(const string &cc_uri,
         Poco::URI poco_url(ws_url);
         core_token_ = json_object["token"].get<string>();
         session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), poco_url.getPort(), context);
-
         if(proxy_string.size() > 0) {
             string proxy_user, proxy_pass, proxy_host;
             int proxy_port;

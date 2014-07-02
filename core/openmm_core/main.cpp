@@ -205,6 +205,14 @@ int main(int argc, const char * argv[]) {
         "Proxy string, [username:password@]host:port. Ex: localhost:8080, ytz:random_pass@localhost:8080",
         "--proxy");
 
+    opt.add(
+        "",
+        0,
+        1,
+        0,
+        "Number of seconds the core should run before exiting",
+        "--duration");
+
 #ifdef FAH_CORE
     opt.add(
         "",
@@ -295,6 +303,11 @@ int main(int argc, const char * argv[]) {
     }
     if(!opt.isSet("--nospoiler")) {
         write_spoiler(cout);
+    }
+    if(opt.isSet("--duration")) {
+        int seconds_until_quit;
+        opt.get("--duration")->getInt(seconds_until_quit);
+        ExitSignal::setExitTime(seconds_until_quit);
     }
 
     map<string, string> contextProperties;
@@ -423,6 +436,8 @@ int main(int argc, const char * argv[]) {
 
             core.setCheckpointSendInterval(checkpoint_frequency);
             cout << "sleeping for " << delay_in_sec << " seconds.." << endl;
+            
+            // change to polling to allow for detection of exit events
             sleep(delay_in_sec);
             delay_in_sec = min(delay_in_sec * 10, 600);
             core.startStream(cc_uri, donor_token, target_id, proxy_string);

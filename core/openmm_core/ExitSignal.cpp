@@ -1,7 +1,10 @@
 #include "ExitSignal.h"
 #include <errno.h>
+#include <time.h>
 
 static sig_atomic_t global_exit = false;
+
+static time_t exit_time = 0;
 
 #ifdef FAH_CORE
 #ifdef _WIN32
@@ -55,9 +58,28 @@ static bool pid_is_dead() {
 #endif
 #endif
 
-
 static void exit_signal_handler(int param) {
     global_exit = true;
+}
+
+#include <iostream>
+
+using namespace std;
+
+static bool has_expired() {
+	if(exit_time == 0) {
+		return false;
+	} else {
+		if(time(NULL) > exit_time) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+}
+
+void ExitSignal::setExitTime(int t_in_seconds) {
+	exit_time = t_in_seconds + time(NULL);
 }
 
 void ExitSignal::init() {
@@ -67,8 +89,8 @@ void ExitSignal::init() {
 
 bool ExitSignal::shouldExit() {
 #ifdef FAH_CORE
-	return pid_is_dead() || global_exit;
+	return pid_is_dead() || has_expired() || global_exit;
 #else
-	return global_exit;
+	return has_expired() || global_exit;
 #endif
 }

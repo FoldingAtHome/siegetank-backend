@@ -18,9 +18,14 @@ namespace ExitSignal {
 #endif
 #endif
 
+/* Initialize */
 void init();
 
+/* If the core should exit or not */
 bool shouldExit();
+
+/* Number of seconds the core should run for */
+void setExitTime(int t_in_seconds);
 
 }
 
