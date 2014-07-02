@@ -58,8 +58,6 @@ foreach(POCO_LIBRARY_NAME ${POCO_LIBRARY_NAMES})
     mark_as_advanced(POCO_LIB_ID_${POCO_LIBRARY_NAME})
     set(POCO_LIBRARIES ${POCO_LIBRARIES} ${POCO_LIB_ID_${POCO_LIBRARY_NAME}})
 
-message(STATUS ${POCO_LIBRARIES})
-
 endforeach()
 mark_as_advanced(POCO_LIBRARIES)
 

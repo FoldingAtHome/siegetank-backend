@@ -6,10 +6,7 @@ find_package(OpenMM REQUIRED)
 include_directories(${OPENMM_INCLUDE_DIRS})
 
 file(GLOB OpenMMCoreSources "*.cpp")
-message(STATUS ${OpenMMCoreSources})
 list(REMOVE_ITEM OpenMMCoreSources main.cpp)
-
-set(CORE_TYPE "CPU" CACHE STRING "Core type: CPU, OpenCL, or CUDA")
 
 set(BUILD_FAH_CORE OFF CACHE BOOL "Whether or not to build as a FAHCore")
 
@@ -42,8 +39,6 @@ elseif(WIN32)
 endif()
 set(BUILD_OPENCL ON CACHE BOOL "Whether to build OpenCL core or not")
 set(BUILD_CUDA ON CACHE BOOL "Whether to build CUDA core or not")
-
-message(STATUS ${POCO_LIBRARIES})
 
 set(OPENMM_CORE_DEPENDENCIES ${CMAKE_THREAD_LIBS_INIT} ${POCO_LIBRARIES} ${OPENSSL_LIBRARIES} ${OPENMM_LIBRARIES})
 

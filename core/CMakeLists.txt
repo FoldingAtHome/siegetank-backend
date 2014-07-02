@@ -16,9 +16,6 @@ else()
 endif()
 
 find_package(OpenSSL2 REQUIRED)
-
-message(STATUS "OPENSSL:" ${OPENSSL_LIBRARIES})
-
 find_package(Threads REQUIRED)
 
 include_directories(${POCO_INCLUDE_DIRS})

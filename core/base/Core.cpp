@@ -200,7 +200,6 @@ Core::Core(std::string core_key, std::ostream& log) :
     core_key_(core_key),
     logStream(log),
     session_(NULL) {
-    logStream << "\n\nconstructing base core\n\n" << endl;
 }
 
 Core::~Core() {
@@ -220,7 +219,7 @@ void Core::assign(const string &cc_uri,
                   const string &donor_token,
                   const string &target_id,
                   const string &proxy_string) {
-    logStream << "assignStart" << endl;
+    logStream << "preparing for assignment..." << endl;
     Poco::Net::Context::VerificationMode verify_mode;
     if(is_domain(getHost(cc_uri))) {
         verify_mode = Poco::Net::Context::VERIFY_RELAXED;
@@ -238,7 +237,6 @@ void Core::assign(const string &cc_uri,
 	    #include "certs_bundle_0.pem"
 		stringstream ss;
 		ss << ssl_string_0;
-		cout << "START READ" << endl;
 		read_cert_into_ctx(ss, ctx);
 	}
 
@@ -285,7 +283,7 @@ void Core::assign(const string &cc_uri,
 		read_cert_into_ctx(ss, ctx);
 	}
 
-    logStream << "connecting to cc..." << flush;
+    logStream << "connecting to cc..." << endl;
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
                                              context);
@@ -315,7 +313,7 @@ void Core::assign(const string &cc_uri,
         istream &content_stream = cc_session.receiveResponse(response);
 
         if(response.getStatus() == 200) {
-            logStream << "Assignment succesful" << endl;
+            logStream << "ok" << endl;
         } else if(response.getStatus() == 401) {
             logStream << "core is outdated" << endl; 
     #ifdef FAH_CORE
@@ -367,19 +365,17 @@ void Core::startStream(const string &cc_uri,
                        const string &donor_token,
                        const string &target_id,
                        const string &proxy_string) {
-    logStream << "b-startStream" << endl;
     if(session_ != NULL) {
         delete session_;
         session_ = NULL;
     }
     assign(cc_uri, donor_token, target_id, proxy_string);
-    logStream << "Preparing to start stream..." << endl;
+    logStream << "preparing to start stream..." << endl;
     Poco::Net::HTTPRequest request("GET", "/core/start");
-    logStream << "1" << endl;
     request.set("Authorization", core_token_);
     session_->sendRequest(request);
     Poco::Net::HTTPResponse response;
-    cout << "receiving response..." << endl;
+    logStream << "receiving response..." << endl;
     istream &content_stream = session_->receiveResponse(response);
     if(response.getStatus() != 200)
         throw std::runtime_error("Could not start a stream from SCV");
@@ -395,7 +391,6 @@ void Core::startStream(const string &cc_uri,
             throw std::runtime_error("MD5 mismatch");
         }
     }
-    logStream << "OK Good." << endl;
     picojson::value json_value;
     std::istringstream input(data);
     input >> json_value;
@@ -408,8 +403,8 @@ void Core::startStream(const string &cc_uri,
     stream_id_ = json_object["stream_id"].get<string>();
     target_id_ = json_object["target_id"].get<string>();
 
-    cout << "stream id: " << stream_id_.substr(0, 8) << endl;
-    cout << "target id: " << target_id_.substr(0, 8) << endl;
+    logStream << "stream id: " << stream_id_.substr(0, 8) << endl;
+    logStream << "target id: " << target_id_.substr(0, 8) << endl;
 
     if(target_id.size() > 0 && target_id != target_id_) {
         throw std::runtime_error("FATAL: Specified target_id mismatch");
@@ -435,9 +430,7 @@ void Core::startStream(const string &cc_uri,
 
 void Core::sendFrame(const map<string, string> &files, 
     int frame_count, bool gzip) const {
-
-    logStream << "sending frame" << std::flush;
-
+    logStream << "sending frame" << std::endl;
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
     stringstream frame_count_str;
     frame_count_str << frame_count;
@@ -464,9 +457,7 @@ void Core::sendFrame(const map<string, string> &files,
     request.set("Content-MD5", compute_md5(message));
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    logStream << "start fSendRequest()" << endl;
     session_->sendRequest(request) << message;
-    logStream << "end fSendRequest()" << endl;
     Poco::Net::HTTPResponse response;
     session_->receiveResponse(response);
     if(response.getStatus() != 200) {
@@ -474,11 +465,8 @@ void Core::sendFrame(const map<string, string> &files,
     }
 }
 
-void Core::sendCheckpoint(const map<string, string> &files, double frames, bool gzip)
-    const {
-
-    logStream << "sending checkpoint" << std::flush;
-
+void Core::sendCheckpoint(const map<string, string> &files, double frames, bool gzip) const {
+    logStream << "sending checkpoint" << std::endl;
     Poco::Net::HTTPRequest request("PUT", "/core/checkpoint");
     string message;
     message += "{\"files\":{";
@@ -506,9 +494,7 @@ void Core::sendCheckpoint(const map<string, string> &files, double frames, bool 
     request.set("Content-MD5", compute_md5(message));
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
-    logStream << "start cSendRequest()" << endl;
     session_->sendRequest(request) << message;
-    logStream << "end cSendRequest()" << endl;
     Poco::Net::HTTPResponse response;
     session_->receiveResponse(response);
     if(response.getStatus() != 200) {

@@ -23,6 +23,7 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <cstdlib>
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -120,6 +121,7 @@ static void write_spoiler(ostream &outstream) {
     outstream << "                         N    proteneer@gmail.com                 /           " << std::endl;
     outstream << "                                                                 O            " << std::endl;
     outstream << "                                  version "<< CORE_VERSION << "                   " << std::endl;
+    outstream << "===============================================================================" << std::endl;
 }
 
 int main(int argc, const char * argv[]) {
@@ -397,7 +399,7 @@ int main(int argc, const char * argv[]) {
         opt.get("--proxy")->getString(proxy_string);
     }
 
-    int delay_in_sec = 1;
+
     ExitSignal::init();
     OpenMMCore::registerComponents();
 
@@ -409,18 +411,18 @@ int main(int argc, const char * argv[]) {
     }
 #endif
 
+    int delay_in_sec = 1;
+    time_t next_sleep_time = time(NULL);
+
     while(!ExitSignal::shouldExit()) {
         try {
 
-// OMFG
 #ifdef FAH_CORE
             string wu_dir;
-            cout << wu_dir << endl;
             opt.get("-dir")->getString(wu_dir);
             string logpath("./"+wu_dir+"/logfile_01.txt");
             ofstream logfile(logpath.c_str(), std::ios::binary);
 #endif
-            cout << "start constructor" << endl;
             OpenMMCore core(ENGINE_KEY,
                             contextProperties
 #ifdef FAH_CORE
@@ -431,15 +433,16 @@ int main(int argc, const char * argv[]) {
 #ifdef FAH_CORE
             core.wu_dir = wu_dir;
 #endif
-
-            cout << "setting checkpoint to " << checkpoint_frequency << endl;
-
+            cout << "setting checkpoint interval to " << checkpoint_frequency << " seconds" << endl;
             core.setCheckpointSendInterval(checkpoint_frequency);
-            cout << "sleeping for " << delay_in_sec << " seconds.." << endl;
-            
-            // change to polling to allow for detection of exit events
-            sleep(delay_in_sec);
-            delay_in_sec = min(delay_in_sec * 10, 600);
+            cout << "sleeping for " << delay_in_sec << " seconds" << endl;
+            next_sleep_time = time(NULL) + delay_in_sec;
+            while(time(NULL) < next_sleep_time) {
+                if(ExitSignal::shouldExit()) {
+                    exit(0);
+                }
+            }
+            delay_in_sec = min(delay_in_sec * 5, 300);
             core.startStream(cc_uri, donor_token, target_id, proxy_string);
             delay_in_sec = 1;
             core.main();

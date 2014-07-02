@@ -70,9 +70,6 @@ OpenMMCore::OpenMMCore(string core_key, map<string, string> properties, std::ost
     core_intg_(NULL),
     shared_system_(NULL),
     properties_(properties) {
-
-    logStream << "\n\nconstructing new core\n\n" << endl;
-
 }
 
 OpenMMCore::~OpenMMCore() {
@@ -191,28 +188,33 @@ static string format_time(int input_seconds) {
     return tpf.str();
 }
 
-static void update_status(string target_id,
-                          string stream_id,
-                          int seconds_per_frame, 
+static void update_status(int seconds_per_frame, 
                           float ns_per_day,
                           int frames,
                           long long steps,
                           ostream &out = cout) {
 
     out << "\r";
-    out << setw(10) << target_id.substr(0,8) 
-        << setw(10) << stream_id.substr(0,8)
+
+    time_t current_time = time(NULL);
+    // NOT THREADSAFE, but shouldn't matter for all practical reasons
+    tm* timeinfo = std::localtime(&current_time);
+    char buffer[80];
+    std::strftime(buffer,80,"%b/%d %I:%M:%S%p",timeinfo);
+
+    out << setw(17) << buffer
         << setw(10) << format_time(seconds_per_frame) << "  "
         << setw(7) << std::fixed << std::setprecision(2) << ns_per_day
         << setw(8) << frames
         << setw(11) << steps;
-    out << flush;
+    out << " " << flush;
+
 }
 
 static void status_header(ostream &out) {
     out << "\r";
-    out << setw(10) << "target"
-        << setw(10) << "stream"
+    out << setw(6) << "date"
+        << setw(11) << "time"
         << setw(10) << "tpf"
         << setw(9) << "ns/day"
         << setw(8) << "frames"
@@ -224,7 +226,6 @@ void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
                              const string &target_id,
                              const string &proxy_string) {
-    logStream << "d-startStream" << endl;
     start_time_ = time(NULL);
     Core::startStream(cc_uri, donor_token, target_id, proxy_string);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
@@ -260,12 +261,13 @@ void OpenMMCore::startStream(const string &cc_uri,
     logStream << "\rcreating contexts: reference... " << flush;
     ref_context_ = new OpenMM::Context(*shared_system_, *ref_intg_,
         OpenMM::Platform::getPlatformByName("Reference"));
-    logStream << "core..." << flush;
+    logStream << "core... " << endl;
     core_context_ = new OpenMM::Context(*shared_system_, *core_intg_,
         OpenMM::Platform::getPlatformByName(PLATFORM_NAME), properties_);
-    logStream << "ok";
+    logStream << "setting initial states..." << endl;
     ref_context_->setState(*initial_state);
     core_context_->setState(*initial_state);
+    logStream << "checking states for discrepancies..." << endl;
     checkState(*initial_state);
     checkState(core_context_->getState((
         OpenMM::State::Positions | 
@@ -278,8 +280,7 @@ void OpenMMCore::startStream(const string &cc_uri,
 }
 
 void OpenMMCore::stopStream(string error_msg) {
-    logStream << "stopping stream" << endl;
-    logStream << "sending last checkpoint" << endl;
+    logStream << "stopping stream..." << endl;
     flushCheckpoint();
     Core::stopStream(error_msg);
 }
@@ -298,7 +299,7 @@ void OpenMMCore::flushCheckpoint() {
     checkpoint_files["state.xml"] = checkpoint.str();
     stringstream partial_steps;
     partial_steps << (current_step_ % steps_per_frame_);
-    cout << "writing partial steps" << partial_steps.str() << endl;
+    logStream << "partial frames: " << partial_steps.str() << endl;
     checkpoint_files["partial_steps"] = partial_steps.str();
     double frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
     sendCheckpoint(checkpoint_files, frames, true);
@@ -367,10 +368,9 @@ float OpenMMCore::nsPerDay(long long steps_completed) const {
 }
 
 void OpenMMCore::main() {
-    logStream << "main" << endl;
+    logStream << "entering main md loop..." << endl;
     try {
         changemode(1);
-        status_header(logStream);
 
         double next_checkpoint = time(NULL) + checkpoint_send_interval_;
         double next_heartbeat = time(NULL) + heartbeat_interval_;
@@ -382,8 +382,8 @@ void OpenMMCore::main() {
         }
 
         long long starting_step = current_step_;
-
-        cout << "Starting on step: " << current_step_ << endl;
+        cout << "starting on step " << current_step_ << endl;
+        status_header(logStream);
 
         while(true) {
 #ifdef FAH_CORE
@@ -406,9 +406,7 @@ void OpenMMCore::main() {
             } 
 #else
            if(current_step_ % 10 == 0) {
-                update_status(target_id_,
-                              stream_id_,
-                              timePerFrame(current_step_-starting_step),
+                update_status(timePerFrame(current_step_-starting_step),
                               nsPerDay(current_step_-starting_step),
                               current_step_/steps_per_frame_,
                               current_step_);
