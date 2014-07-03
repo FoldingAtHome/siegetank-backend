@@ -318,7 +318,7 @@ class CoreAssignHandler(BaseHandler):
                             'url': 'https://'+host+'/core/start'}
                     self.write(body)
                     return self.set_status(200)
-                else if reply.code == 400:
+                elif reply.code == 400:
                     message = "Assignment returned 400, target_id: "+target_id+" scv: "+scv
                     logging.getLogger('tornado.application').critical(message)
             except tornado.httpclient.HTTPError as e:
