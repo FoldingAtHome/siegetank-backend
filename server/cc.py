@@ -28,6 +28,7 @@ import time
 import io
 import signal
 import sys
+import logging
 
 from server.common import BaseServerMixin, is_domain, configure_options
 from server.common import CommonHandler, kill_children
