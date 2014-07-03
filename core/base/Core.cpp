@@ -234,49 +234,49 @@ void Core::assign(const string &cc_uri,
 
     // hacky as hell way to load certs:)
 	{
-	    #include "certs_bundle_0.pem"
+	    #include "certs/certs_bundle_0.pem"
 		stringstream ss;
 		ss << ssl_string_0;
 		read_cert_into_ctx(ss, ctx);
 	}
 
 	{
-		#include "certs_bundle_1.pem"
+		#include "certs/certs_bundle_1.pem"
 		stringstream ss;
 		ss << ssl_string_1;
 		read_cert_into_ctx(ss, ctx);
 	}
 
 	{
-		#include "certs_bundle_2.pem"
+		#include "certs/certs_bundle_2.pem"
 		stringstream ss;
 		ss << ssl_string_2;
 		read_cert_into_ctx(ss, ctx);
 	}
 
 	{
-		#include "certs_bundle_3.pem"
+		#include "certs/certs_bundle_3.pem"
 		stringstream ss;
 		ss << ssl_string_3;
 		read_cert_into_ctx(ss, ctx);
 	}
 
 	{
-		#include "certs_bundle_4.pem"
+		#include "certs/certs_bundle_4.pem"
 		stringstream ss;
 		ss << ssl_string_4;
 		read_cert_into_ctx(ss, ctx);
 	}
 
 	{
-		#include "certs_bundle_5.pem"
+		#include "certs/certs_bundle_5.pem"
 		stringstream ss;
 		ss << ssl_string_5;
 		read_cert_into_ctx(ss, ctx);
 	}
 
 	{
-		#include "certs_bundle_6.pem"
+		#include "certs/certs_bundle_6.pem"
 		;
 		stringstream ss;
 		ss << ssl_string_6;
