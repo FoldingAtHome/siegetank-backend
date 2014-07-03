@@ -382,7 +382,7 @@ void OpenMMCore::main() {
         }
 
         long long starting_step = current_step_;
-        cout << "starting on step " << current_step_ << endl;
+        cout << "resuming from step " << current_step_ << endl;
         status_header(logStream);
 
         while(true) {

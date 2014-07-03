@@ -283,18 +283,23 @@ void Core::assign(const string &cc_uri,
 		read_cert_into_ctx(ss, ctx);
 	}
 
-    logStream << "connecting to cc..." << endl;
+    logStream << "connecting to cc " << getHost(cc_uri) << "... " << endl;
+
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),
                                              context);
 
     if(proxy_string.size() > 0) {
+        cout << "setting up proxy credentials... " << endl;
         string proxy_user, proxy_pass, proxy_host;
         int proxy_port;
         parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
         cc_session.setProxy(proxy_host, proxy_port);
-        if(proxy_user.size() > 0 && proxy_pass.size() > 0)
+        logStream << "setting proxy_host, proxy_port " << proxy_host << " " << proxy_port << endl;
+        if(proxy_user.size() > 0 && proxy_pass.size() > 0) {
             cc_session.setProxyCredentials(proxy_user, proxy_pass);
+            logStream << "setting proxy_user, proxy_pass " << proxy_user << " " << proxy_pass << endl;
+        }
     }
 
 	try {
@@ -342,8 +347,10 @@ void Core::assign(const string &cc_uri,
         string ws_url(json_object["url"].get<string>());
         Poco::URI poco_url(ws_url);
         core_token_ = json_object["token"].get<string>();
+        logStream << "connecting to scv " << poco_url.getHost() << "... " << endl;
         session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), poco_url.getPort(), context);
         if(proxy_string.size() > 0) {
+            cout << "setting up proxy credentials... " << endl;
             string proxy_user, proxy_pass, proxy_host;
             int proxy_port;
             parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
