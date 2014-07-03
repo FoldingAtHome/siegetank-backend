@@ -290,7 +290,7 @@ void Core::assign(const string &cc_uri,
                                              context);
 
     if(proxy_string.size() > 0) {
-        cout << "setting up proxy credentials... " << endl;
+        logStream << "setting up proxy credentials... " << endl;
         string proxy_user, proxy_pass, proxy_host;
         int proxy_port;
         parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
@@ -350,7 +350,7 @@ void Core::assign(const string &cc_uri,
         logStream << "connecting to scv " << poco_url.getHost() << "... " << endl;
         session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), poco_url.getPort(), context);
         if(proxy_string.size() > 0) {
-            cout << "setting up proxy credentials... " << endl;
+            logStream << "setting up proxy credentials... " << endl;
             string proxy_user, proxy_pass, proxy_host;
             int proxy_port;
             parse_proxy_string(proxy_string, proxy_user, proxy_pass, proxy_host, proxy_port);
@@ -362,8 +362,8 @@ void Core::assign(const string &cc_uri,
             }
         }
 	} catch(Poco::Net::SSLException &se) {
-		cout << se.message() << endl;
-		cout << se.displayText() << endl;
+		logStream << se.message() << endl;
+		logStream << se.displayText() << endl;
 		throw;
 	}
 }
@@ -390,11 +390,11 @@ void Core::startStream(const string &cc_uri,
                  (std::istreambuf_iterator<char>()));
     if(response.has("Content-MD5")) {
         // compute md5sum
-        cout << "verifying hash..." << endl;
+        logStream << "verifying hash..." << endl;
         string expected(response.get("Content-MD5"));
         if(compute_md5(data) != expected) {
-            cout << compute_md5(data) << endl;
-            cout << expected << endl;
+            logStream << compute_md5(data) << endl;
+            logStream << expected << endl;
             throw std::runtime_error("MD5 mismatch");
         }
     }
@@ -410,8 +410,8 @@ void Core::startStream(const string &cc_uri,
     stream_id_ = json_object["stream_id"].get<string>();
     target_id_ = json_object["target_id"].get<string>();
 
-    logStream << "stream id: " << stream_id_.substr(0, 8) << endl;
-    logStream << "target id: " << target_id_.substr(0, 8) << endl;
+    logStream << "assigned to stream " << stream_id_.substr(0, 8);
+    logStream << " from target " << target_id_.substr(0, 8) << endl;
 
     if(target_id.size() > 0 && target_id != target_id_) {
         throw std::runtime_error("FATAL: Specified target_id mismatch");
@@ -432,7 +432,7 @@ void Core::startStream(const string &cc_uri,
         files_[filename] = filedata;
     }
     options_ = json_object["options"].serialize();
-    cout << "json decode complete" << endl;
+    logStream << "finished decodiing..." << endl;
 }
 
 void Core::sendFrame(const map<string, string> &files, 

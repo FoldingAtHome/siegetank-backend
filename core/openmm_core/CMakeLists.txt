@@ -28,9 +28,9 @@ else()
     set(CORE_NAME ocore_601)
 endif()
 
-set(CPU_ENGINE_KEY 86f094c5-b76a-460e-9335-61eb0c76643b)
-set(OPENCL_ENGINE_KEY 3ca62f73-3979-4eb2-a302-d891ad75b70b)
-set(CUDA_ENGINE_KEY 91c5e3f7-f6fa-446b-843c-e94bf5ed49e5)
+set(CPU_ENGINE_KEY 4298d9fc-ce56-4ce7-abcf-02bf2603260b)
+set(OPENCL_ENGINE_KEY 08d501ed-c864-4db7-9a9e-9df722879e9a)
+set(CUDA_ENGINE_KEY b052c4c0-245e-44b8-ada0-49552021eecf)
 
 if(UNIX)
     set(BUILD_CPU ON CACHE BOOL "Whether to build CPU core or not")

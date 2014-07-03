@@ -315,13 +315,15 @@ class CoreAssignHandler(BaseHandler):
                     token = json.loads(reply.body.decode())["token"]
                     host = SCV(scv, self.db).hget('host')
                     body = {'token': token,
-                            'url': 'https://'+host+'/core/start'
-                            }
+                            'url': 'https://'+host+'/core/start'}
                     self.write(body)
                     return self.set_status(200)
-            except tornado.httpclient.HTTPError:
-                print('--CAUGHT HTTP ERROR--')
-                pass
+                else if reply.code == 400:
+                    message = "Assignment returned 400, target_id: "+target_id+" scv: "+scv
+                    logging.getLogger('tornado.application').critical(message)
+            except tornado.httpclient.HTTPError as e:
+                message = "Assignment failed, target_id: "+target_id+" scv: "+scv
+                logging.getLogger('tornado.application').critical(message)
         self.error('no streams available for the target')
 
 

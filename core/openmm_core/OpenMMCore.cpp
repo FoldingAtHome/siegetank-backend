@@ -149,7 +149,7 @@ void OpenMMCore::setupSystem(OpenMM::System *sys, int randomSeed) const {
         } catch(const std::bad_cast &bc) {}
     }
     int numAtoms = sys->getNumParticles();
-    logStream << "System size: " << numAtoms << " atoms, " << sys->getNumForces() << " types of forces." << std::endl;
+    logStream << "system has " << numAtoms << " atoms, " << sys->getNumForces() << " types of forces." << std::endl;
 }
 
 
@@ -230,21 +230,21 @@ void OpenMMCore::startStream(const string &cc_uri,
     Core::startStream(cc_uri, donor_token, target_id, proxy_string);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
     OpenMM::State *initial_state;
-    cout << "start deserialization" << endl;
+    logStream << "deserializing system... " << flush;
     if(files_.find("system.xml") != files_.end()) {
         istringstream system_stream(files_["system.xml"]);
         shared_system_ = OpenMM::XmlSerializer::deserialize<OpenMM::System>(system_stream);
     } else {
         throw std::runtime_error("Cannot find system.xml");
     }
-    cout << "deserialized system" << endl;
+    logStream << "state... " << flush;
     if(files_.find("state.xml") != files_.end()) {
         istringstream state_stream(files_["state.xml"]);
         initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
     } else {
         throw std::runtime_error("Cannot find state.xml");
     }
-    cout << "deserialized state" << endl;
+    logStream << "integrator..." << endl;
     if(files_.find("integrator.xml") != files_.end()) {
         istringstream core_integrator_stream(files_["integrator.xml"]);
         core_intg_ = OpenMM::XmlSerializer::deserialize<OpenMM::Integrator>(core_integrator_stream);
@@ -253,9 +253,8 @@ void OpenMMCore::startStream(const string &cc_uri,
     } else {
         throw std::runtime_error("Cannot find integrator.xml");
     }
-    cout << "deserialized integrator" << endl;
     int random_seed = time(NULL);
-    cout << "start setting up system" << endl;
+    logStream << "preparing the system for simulation..." << endl;
     setupSystem(shared_system_, random_seed);
     logStream << "\r                                                             " << flush;
     logStream << "\rcreating contexts: reference... " << flush;
@@ -382,7 +381,7 @@ void OpenMMCore::main() {
         }
 
         long long starting_step = current_step_;
-        cout << "resuming from step " << current_step_ << endl;
+        logStream << "resuming from step " << current_step_ << endl;
         status_header(logStream);
 
         while(true) {
