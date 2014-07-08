@@ -289,6 +289,7 @@ void Core::assign(const string &cc_uri,
                                              getPort(cc_uri),
                                              context);
 
+    /*
     if(proxy_string.size() > 0) {
         logStream << "setting up proxy credentials... " << endl;
         string proxy_user, proxy_pass, proxy_host;
@@ -301,8 +302,10 @@ void Core::assign(const string &cc_uri,
             logStream << "setting proxy_user, proxy_pass " << proxy_user << " " << proxy_pass << endl;
         }
     }
-
-	try {
+    */
+    cc_session.setProxy("http://web-proxy.cce.hp.com", 8080);
+	
+    try {
         logStream << "assigning core to a stream..." << flush;
         Poco::Net::HTTPRequest request("POST", "/core/assign");
     	picojson::object obj;
@@ -349,6 +352,7 @@ void Core::assign(const string &cc_uri,
         core_token_ = json_object["token"].get<string>();
         logStream << "connecting to scv " << poco_url.getHost() << "... " << endl;
         session_ = new Poco::Net::HTTPSClientSession(poco_url.getHost(), poco_url.getPort(), context);
+        /*
         if(proxy_string.size() > 0) {
             logStream << "setting up proxy credentials... " << endl;
             string proxy_user, proxy_pass, proxy_host;
@@ -361,6 +365,8 @@ void Core::assign(const string &cc_uri,
                 logStream << "setting proxy_user, proxy_pass " << proxy_user << " " << proxy_pass << endl;
             }
         }
+        */
+        session_->setProxy("http://web-proxy.cce.hp.com", 8080);
 	} catch(Poco::Net::SSLException &se) {
 		logStream << se.message() << endl;
 		logStream << se.displayText() << endl;
