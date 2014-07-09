@@ -320,12 +320,9 @@ void Core::assign(const string &cc_uri,
         if(response.getStatus() == 200) {
             logStream << "ok" << endl;
         } else if(response.getStatus() == 401) {
-            logStream << "core is outdated" << endl; 
-    #ifdef FAH_CORE
-            exit(0x110);
-    #else
-            exit(1);
-    #endif
+            logStream << "core is outdated" << endl;
+            // note that 110 is a special code expected by F@Hclient. This is a convenience thing for now. 
+            exit(110);
         } else if(response.getStatus() == 400) {
             logStream << response.getStatus() << endl;
             logStream << content_stream.rdbuf() << endl;
@@ -432,7 +429,7 @@ void Core::startStream(const string &cc_uri,
         files_[filename] = filedata;
     }
     options_ = json_object["options"].serialize();
-    logStream << "finished decodiing..." << endl;
+    logStream << "finished decoding..." << endl;
 }
 
 void Core::sendFrame(const map<string, string> &files, 

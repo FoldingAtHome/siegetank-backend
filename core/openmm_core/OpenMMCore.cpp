@@ -193,9 +193,6 @@ static void update_status(int seconds_per_frame,
                           int frames,
                           long long steps,
                           ostream &out = cout) {
-
-    out << "\r";
-
     time_t current_time = time(NULL);
     // NOT THREADSAFE, but shouldn't matter for all practical reasons
     tm* timeinfo = std::localtime(&current_time);
@@ -402,9 +399,15 @@ void OpenMMCore::main() {
                 file.write((char *)&frameSteps, sizeof(frameSteps));
                 file.write((char *)&reserved, 416);
                 file.close();
+                update_status(timePerFrame(current_step_-starting_step),
+                              nsPerDay(current_step_-starting_step),
+                              current_step_/steps_per_frame_,
+                              current_step_);
+                logStream << endl;
             } 
 #else
            if(current_step_ % 10 == 0) {
+                logStream << "\r";
                 update_status(timePerFrame(current_step_-starting_step),
                               nsPerDay(current_step_-starting_step),
                               current_step_/steps_per_frame_,
