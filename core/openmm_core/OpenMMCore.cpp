@@ -188,6 +188,12 @@ static string format_time(int input_seconds) {
     return tpf.str();
 }
 
+#ifdef FAH_CORE
+
+static void status_header(ostream &out) {
+
+}
+
 static void update_status(int seconds_per_frame, 
                           float ns_per_day,
                           int frames,
@@ -197,7 +203,36 @@ static void update_status(int seconds_per_frame,
     // NOT THREADSAFE, but shouldn't matter for all practical reasons
     tm* timeinfo = std::localtime(&current_time);
     char buffer[80];
-    std::strftime(buffer,80,"%b/%d %I:%M:%S%p",timeinfo);
+    std::strftime(buffer,80,"%b/%d %I:%M:%S%p", timeinfo);
+
+    out << buffer
+        << " | tpf: " << format_time(seconds_per_frame)
+        << " | ns/day: " << std::fixed << std::setprecision(2) << ns_per_day
+        << " | frames: " << frames
+        << endl;
+}
+#else
+
+static void status_header(ostream &out) {
+    out << setw(6) << "date"
+        << setw(11) << "time"
+        << setw(10) << "tpf"
+        << setw(9) << "ns/day"
+        << setw(8) << "frames"
+        << setw(11) << "steps"
+        << "\n";
+}
+
+static void update_status(int seconds_per_frame, 
+                          float ns_per_day,
+                          int frames,
+                          long long steps,
+                          ostream &out = cout) {
+    time_t current_time = time(NULL);
+    // NOT THREADSAFE, but shouldn't matter for all practical reasons
+    tm* timeinfo = std::localtime(&current_time);
+    char buffer[80];
+    std::strftime(buffer,80,"%b/%d %I:%M:%S%p", timeinfo);
 
     out << setw(17) << buffer
         << setw(10) << format_time(seconds_per_frame) << "  "
@@ -205,19 +240,9 @@ static void update_status(int seconds_per_frame,
         << setw(8) << frames
         << setw(11) << steps;
     out << " " << flush;
-
 }
+#endif
 
-static void status_header(ostream &out) {
-    out << "\r";
-    out << setw(6) << "date"
-        << setw(11) << "time"
-        << setw(10) << "tpf"
-        << setw(9) << "ns/day"
-        << setw(8) << "frames"
-        << setw(11) << "steps";
-    out << "\n";
-}
 
 void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
@@ -383,7 +408,7 @@ void OpenMMCore::main() {
 
         while(true) {
 #ifdef FAH_CORE
-            if(current_step_ % 300 == 0) {
+            if(current_step_ % 150 == 0) {
                 string info_path = "./"+wu_dir+"/wuinfo_01.dat";
                 ofstream file(info_path.c_str(), ios::binary);
                 uint32_t unitType = 101;     ///< UNIT_FAH (101) for Folding@home work units
@@ -399,11 +424,13 @@ void OpenMMCore::main() {
                 file.write((char *)&frameSteps, sizeof(frameSteps));
                 file.write((char *)&reserved, 416);
                 file.close();
+            }
+            if(current_step_ % 2000 == 0) {
                 update_status(timePerFrame(current_step_-starting_step),
                               nsPerDay(current_step_-starting_step),
                               current_step_/steps_per_frame_,
-                              current_step_);
-                logStream << endl;
+                              current_step_,
+                              logStream);
             } 
 #else
            if(current_step_ % 10 == 0) {
