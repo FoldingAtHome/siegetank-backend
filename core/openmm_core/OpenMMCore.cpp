@@ -196,7 +196,7 @@ static void status_header(ostream &out) {
 
 static void update_status(int seconds_per_frame, 
                           float ns_per_day,
-                          int frames,
+                          double frames,
                           long long steps,
                           ostream &out = cout) {
     time_t current_time = time(NULL);
@@ -426,18 +426,20 @@ void OpenMMCore::main() {
                 file.close();
             }
             if(current_step_ % 2000 == 0) {
+                double partial_frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
                 update_status(timePerFrame(current_step_-starting_step),
                               nsPerDay(current_step_-starting_step),
-                              current_step_/steps_per_frame_,
+                              partial_frames,
                               current_step_,
                               logStream);
             } 
 #else
            if(current_step_ % 10 == 0) {
                 logStream << "\r";
+                double partial_frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
                 update_status(timePerFrame(current_step_-starting_step),
                               nsPerDay(current_step_-starting_step),
-                              current_step_/steps_per_frame_,
+                              partial_frames,
                               current_step_);
             }
 #endif
