@@ -205,8 +205,7 @@ static void update_status(int seconds_per_frame,
     char buffer[80];
     std::strftime(buffer,80,"%b/%d %I:%M:%S%p", timeinfo);
 
-    out << buffer
-        << " | tpf: " << format_time(seconds_per_frame)
+    out << " tpf: " << format_time(seconds_per_frame)
         << " | ns/day: " << std::fixed << std::setprecision(2) << ns_per_day
         << " | frames: " << frames
         << endl;
@@ -278,8 +277,7 @@ void OpenMMCore::startStream(const string &cc_uri,
     int random_seed = time(NULL);
     logStream << "preparing the system for simulation..." << endl;
     setupSystem(shared_system_, random_seed);
-    logStream << "\r                                                             " << flush;
-    logStream << "\rcreating contexts: reference... " << flush;
+    logStream << "creating contexts: reference... " << flush;
     ref_context_ = new OpenMM::Context(*shared_system_, *ref_intg_,
         OpenMM::Platform::getPlatformByName("Reference"));
     logStream << "core... " << endl;
@@ -301,7 +299,7 @@ void OpenMMCore::startStream(const string &cc_uri,
 }
 
 void OpenMMCore::stopStream(string error_msg) {
-    logStream << "stopping stream..." << endl;
+    logStream << "stopping... this may take several seconds.." << endl;
     flushCheckpoint();
     Core::stopStream(error_msg);
 }
