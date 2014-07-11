@@ -207,6 +207,14 @@ int main(int argc, const char * argv[]) {
         "--proxy");
 
     opt.add(
+        "60",
+        0,
+        1,
+        0,
+        "How often to display simulation progress in seconds",
+        "--progress");
+
+    opt.add(
         "",
         0,
         1,
@@ -292,14 +300,25 @@ int main(int argc, const char * argv[]) {
 
     opt.parse(argc, argv);
 
+
+ #ifdef FAH_CORE
+    string wu_dir;
+    opt.get("-dir")->getString(wu_dir);
+    string logpath("./"+wu_dir+"/logfile_01.txt");
+    ofstream logfile(logpath.c_str(), std::ios::binary);
+    ostream &output = logfile;
+#else
+    ostream &output = cout;
+#endif
+
     if(opt.isSet("-h")) {
         std::string usage;
         opt.getUsage(usage);
-        std::cout << usage;
+        output << usage;
         return 0;
     }
     if(opt.isSet("--version")) {
-        std::cout << CORE_VERSION << endl;
+        output << CORE_VERSION << endl;
         return 0;
     }
     if(!opt.isSet("--nospoiler")) {
@@ -320,10 +339,10 @@ int main(int argc, const char * argv[]) {
     opt.get("-gpu-vendor")->getString(gpu_vendor);
     if(gpu_vendor == "VENDOR_NOT_SET") {
         platformId = guessPlatformId();
-        cout << "guessing platformId.." << platformId << endl;
+        output << "guessing platformId.." << platformId << endl;
     } else {
         platformId = getPlatformId(gpu_vendor);
-        cout << "found on platformId " << platformId << endl;
+        output << "found " << gpu_vendor << " on platformId " << platformId << endl;
     }
     string dIndex;
     opt.get("-gpu")->getString(dIndex);
@@ -332,12 +351,12 @@ int main(int argc, const char * argv[]) {
     contextProperties["OpenCLPrecision"] = "single";
 #else
     if(opt.isSet("--devices")) {
-        cout << endl;
+        output << endl;
         Util::listOpenCLDevices();
         return 1;
     }
     if(opt.isSet("--platformId") != opt.isSet("--deviceId")) {
-        cout << "You must either specify both platformId and deviceId, or specify neither" << endl;
+        output << "You must either specify both platformId and deviceId, or specify neither" << endl;
         return 1;
     }
     if(opt.isSet("--platformId")) {
@@ -349,7 +368,7 @@ int main(int argc, const char * argv[]) {
         string did;
         opt.get("--deviceId")->getString(did);
         if(did.find(",") != string::npos) {
-            cout << "Using multiple GPUs to run the same simulation is not currently supported" << endl;
+            output << "Using multiple GPUs to run the same simulation is not currently supported" << endl;
             return 1;
         };
         contextProperties["OpenCLDeviceIndex"] = did;
@@ -357,7 +376,7 @@ int main(int argc, const char * argv[]) {
 #endif 
 #elif OPENMM_CUDA
     if(opt.isSet("--devices")) {
-        cout << endl;
+        output << endl;
         Util::listCUDADevices();
         return 1;
     }
@@ -365,7 +384,7 @@ int main(int argc, const char * argv[]) {
         string did;
         opt.get("--deviceId")->getString(did);
         if(did.find(",") != string::npos) {
-            cout << "Using multiple GPUs to run the same simulation is not currently supported" << endl;
+            output << "Using multiple GPUs to run the same simulation is not currently supported" << endl;
             return 1;
         };
         contextProperties["CudaDeviceIndex"] = did;
@@ -378,6 +397,9 @@ int main(int argc, const char * argv[]) {
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
     string donor_token;
 
+    int progress_interval;
+    opt.get("--progress")->getInt(progress_interval);
+ 
     if(opt.isSet("--donor_token")) {
         opt.get("--donor_token")->getString(donor_token);
         if(donor_token.length() != 36) {
@@ -415,13 +437,6 @@ int main(int argc, const char * argv[]) {
 
     while(!ExitSignal::shouldExit()) {
         try {
-
-#ifdef FAH_CORE
-            string wu_dir;
-            opt.get("-dir")->getString(wu_dir);
-            string logpath("./"+wu_dir+"/logfile_01.txt");
-            ofstream logfile(logpath.c_str(), std::ios::binary);
-#endif
             OpenMMCore core(ENGINE_KEY,
                             contextProperties
 #ifdef FAH_CORE
@@ -432,9 +447,10 @@ int main(int argc, const char * argv[]) {
 #ifdef FAH_CORE
             core.wu_dir = wu_dir;
 #endif
-            cout << "setting checkpoint interval to " << checkpoint_frequency << " seconds" << endl;
+            output << "setting checkpoint interval to " << checkpoint_frequency << " seconds" << endl;
             core.setCheckpointSendInterval(checkpoint_frequency);
-            cout << "sleeping for " << delay_in_sec << " seconds" << endl;
+            core.setProgressUpdateInterval(progress_interval);
+            output << "sleeping for " << delay_in_sec << " seconds" << endl;
             next_sleep_time = time(NULL) + delay_in_sec;
             while(time(NULL) < next_sleep_time) {
                 if(ExitSignal::shouldExit()) {
@@ -446,7 +462,7 @@ int main(int argc, const char * argv[]) {
             delay_in_sec = 1;
             core.main();
         } catch(const exception &e) {
-            cout << e.what() << endl;
+            output << e.what() << endl;
         }
     }
 

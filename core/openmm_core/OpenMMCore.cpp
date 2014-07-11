@@ -21,7 +21,6 @@
 
 #include "XTCWriter.h"
 #include "OpenMMCore.h"
-#include "kbhit.h"
 #include "StateTests.h"
 #include "ExitSignal.h"
 
@@ -62,6 +61,7 @@ OpenMMCore::OpenMMCore(string core_key, map<string, string> properties, std::ost
     Core(core_key, logStream),
     checkpoint_send_interval_(6000),
     heartbeat_interval_(60),
+    progress_update_interval_(60),
     current_step_(0),
     last_checkpoint_step_(0),
     ref_context_(NULL),
@@ -84,7 +84,10 @@ OpenMMCore::~OpenMMCore() {
     core_intg_ = NULL;
     delete shared_system_;
     shared_system_ = NULL;
-    changemode(0);
+}
+
+void OpenMMCore::setProgressUpdateInterval(int interval) {
+    progress_update_interval_ = interval;
 }
 
 void OpenMMCore::setCheckpointSendInterval(int interval) {
@@ -205,7 +208,7 @@ static void update_status(int seconds_per_frame,
     char buffer[80];
     std::strftime(buffer,80,"%b/%d %I:%M:%S%p", timeinfo);
 
-    out << " tpf: " << format_time(seconds_per_frame)
+    out << "tpf: " << format_time(seconds_per_frame)
         << " | ns/day: " << std::fixed << std::setprecision(2) << ns_per_day
         << " | frames: " << frames
         << endl;
@@ -238,7 +241,7 @@ static void update_status(int seconds_per_frame,
         << setw(7) << std::fixed << std::setprecision(2) << ns_per_day
         << setw(8) << frames
         << setw(11) << steps;
-    out << " " << flush;
+    out << endl;
 }
 #endif
 
@@ -295,12 +298,12 @@ void OpenMMCore::startStream(const string &cc_uri,
         OpenMM::State::Energy | 
         OpenMM::State::Forces)));
     delete(initial_state);
-    changemode(0);
 }
 
 void OpenMMCore::stopStream(string error_msg) {
     logStream << "stopping... this may take several seconds.." << endl;
     flushCheckpoint();
+    logStream << "notifying server..." << endl;
     Core::stopStream(error_msg);
 }
 
@@ -318,7 +321,7 @@ void OpenMMCore::flushCheckpoint() {
     checkpoint_files["state.xml"] = checkpoint.str();
     stringstream partial_steps;
     partial_steps << (current_step_ % steps_per_frame_);
-    logStream << "partial frames: " << partial_steps.str() << endl;
+    logStream << "partially completed " << partial_steps.str() << " steps..." << endl;
     checkpoint_files["partial_steps"] = partial_steps.str();
     double frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
     sendCheckpoint(checkpoint_files, frames, true);
@@ -389,10 +392,9 @@ float OpenMMCore::nsPerDay(long long steps_completed) const {
 void OpenMMCore::main() {
     logStream << "entering main md loop..." << endl;
     try {
-        changemode(1);
-
         double next_checkpoint = time(NULL) + checkpoint_send_interval_;
         double next_heartbeat = time(NULL) + heartbeat_interval_;
+        double next_status = time(NULL)+10;
 
         if(files_.find("partial_steps") != files_.end()) {
             stringstream buffer(files_["partial_steps"]);
@@ -423,26 +425,17 @@ void OpenMMCore::main() {
                 file.write((char *)&reserved, 416);
                 file.close();
             }
-            if(current_step_ % 2000 == 0) {
+#endif
+            if(time(NULL) > next_status) {
                 double partial_frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
                 update_status(timePerFrame(current_step_-starting_step),
                               nsPerDay(current_step_-starting_step),
                               partial_frames,
                               current_step_,
                               logStream);
-            } 
-#else
-           if(current_step_ % 10 == 0) {
-                logStream << "\r";
-                double partial_frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
-                update_status(timePerFrame(current_step_-starting_step),
-                              nsPerDay(current_step_-starting_step),
-                              partial_frames,
-                              current_step_);
+                next_status = time(NULL) + progress_update_interval_;
             }
-#endif
             if(ExitSignal::shouldExit()) {
-                changemode(0);
                 break;
             }
             checkFrameWrite();

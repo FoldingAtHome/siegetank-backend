@@ -434,7 +434,7 @@ void Core::startStream(const string &cc_uri,
 
 void Core::sendFrame(const map<string, string> &files, 
     int frame_count, bool gzip) const {
-    logStream << "sending frame" << std::endl;
+    logStream << "sending frame (" << flush;
     Poco::Net::HTTPRequest request("PUT", "/core/frame");
     stringstream frame_count_str;
     frame_count_str << frame_count;
@@ -458,6 +458,7 @@ void Core::sendFrame(const map<string, string> &files,
         message += "\""+filedata+"\"";
     }
     message += "}}";
+    logStream << message.size()/1000 << "KB)..." << flush;
     request.set("Content-MD5", compute_md5(message));
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
@@ -467,10 +468,11 @@ void Core::sendFrame(const map<string, string> &files,
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::sendFrame bad status code");
     }
+    logStream << " ok" << endl;
 }
 
 void Core::sendCheckpoint(const map<string, string> &files, double frames, bool gzip) const {
-    logStream << "sending checkpoint" << std::endl;
+    logStream << "sending checkpoint (" << flush;
     Poco::Net::HTTPRequest request("PUT", "/core/checkpoint");
     string message;
     message += "{\"files\":{";
@@ -495,6 +497,7 @@ void Core::sendCheckpoint(const map<string, string> &files, double frames, bool 
     frames_string << frames;
     message += frames_string.str();
     message += "}";
+    logStream << message.size()/1000 << "KB)..." << flush;
     request.set("Content-MD5", compute_md5(message));
     request.set("Authorization", core_token_);
     request.setContentLength(message.length());
@@ -504,6 +507,7 @@ void Core::sendCheckpoint(const map<string, string> &files, double frames, bool 
     if(response.getStatus() != 200) {
         throw std::runtime_error("Core::sendCheckpointFiles bad status code");
     }
+    logStream << " ok" << endl;
 }
 
 void Core::stopStream(string err_msg) {

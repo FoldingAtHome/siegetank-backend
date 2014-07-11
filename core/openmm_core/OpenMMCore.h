@@ -38,6 +38,8 @@ public:
 
     virtual void stopStream(std::string error_msg = "");
 
+    void setProgressUpdateInterval(int interval);
+
     /* set the checkpoint interval */
     void setCheckpointSendInterval(int interval);
 
@@ -77,6 +79,7 @@ private:
     int steps_per_frame_;
     int checkpoint_send_interval_;
     int heartbeat_interval_;
+    int progress_update_interval_;
     int start_time_;
     long long current_step_;
     long long last_checkpoint_step_;
