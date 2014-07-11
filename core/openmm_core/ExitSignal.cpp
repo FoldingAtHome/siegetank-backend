@@ -80,7 +80,9 @@ void ExitSignal::setExitTime(int t_in_seconds) {
 }
 
 void ExitSignal::init() {
+#ifdef _WIN32
     signal(SIGBREAK, exit_signal_handler);
+#endif
     signal(SIGINT, exit_signal_handler);
     signal(SIGTERM, exit_signal_handler);
 }
