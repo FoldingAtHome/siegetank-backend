@@ -283,7 +283,7 @@ void Core::assign(const string &cc_uri,
 		read_cert_into_ctx(ss, ctx);
 	}
 
-    logStream << "connecting to cc " << getHost(cc_uri) << "... " << endl;
+    logStream << "connecting to cc... " << endl;
 
     Poco::Net::HTTPSClientSession cc_session(getHost(cc_uri),
                                              getPort(cc_uri),

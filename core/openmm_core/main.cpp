@@ -395,6 +395,10 @@ int main(int argc, const char * argv[]) {
     opt.get("--cc")->getString(cc_uri);
     int checkpoint_frequency;
     opt.get("--checkpoint")->getInt(checkpoint_frequency);
+    if(checkpoint_frequency < 1800) {
+        output << "Checkpoint frequency must be greater than or equal to 1800. " << endl;
+        return 1;
+    }
     string donor_token;
 
     int progress_interval;

@@ -427,10 +427,9 @@ void OpenMMCore::main() {
             }
 #endif
             if(time(NULL) > next_status) {
-                double partial_frames = double(current_step_-last_checkpoint_step_)/double(steps_per_frame_);
                 update_status(timePerFrame(current_step_-starting_step),
                               nsPerDay(current_step_-starting_step),
-                              partial_frames,
+                              double(current_step_)/double(steps_per_frame_),
                               current_step_,
                               logStream);
                 next_status = time(NULL) + progress_update_interval_;
