@@ -36,8 +36,6 @@ public:
                              const std::string &target_id = "",
                              const std::string &proxy_string = "");
 
-    virtual void stopStream(std::string error_msg = "");
-
     void setProgressUpdateInterval(int interval);
 
     /* set the checkpoint interval */

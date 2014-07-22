@@ -156,7 +156,6 @@ void StateTests::compareForces(const State& first, const State& b, double tolera
         mse += ex*ex+ey*ey+ez*ez;
     }
     mse = sqrt(mse/nAtoms);
-    //cout << "Force Error Reporter, MSE: " << mse << endl;
     if(mse > tolerance) {
         stringstream ss;
         ss << "Force RMSE error of " << mse << " with threshold of " << tolerance << endl;

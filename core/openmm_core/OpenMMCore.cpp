@@ -227,7 +227,7 @@ static void status_header(ostream &out) {
 
 static void update_status(int seconds_per_frame, 
                           float ns_per_day,
-                          int frames,
+                          double frames,
                           long long steps,
                           ostream &out = cout) {
     time_t current_time = time(NULL);
@@ -289,8 +289,15 @@ void OpenMMCore::startStream(const string &cc_uri,
     logStream << "setting initial states..." << endl;
     ref_context_->setState(*initial_state);
     core_context_->setState(*initial_state);
-    logStream << "checking states for discrepancies..." << endl;
-    checkState(*initial_state);
+    logStream << "checking states for discrepancies in initial state... " << flush;
+    try {
+        checkState(*initial_state);
+    } catch(...) {
+        // cleanup
+        delete(initial_state);
+        throw;
+    }
+    logStream << "reference... " << endl;
     checkState(core_context_->getState((
         OpenMM::State::Positions | 
         OpenMM::State::Velocities | 
@@ -298,13 +305,6 @@ void OpenMMCore::startStream(const string &cc_uri,
         OpenMM::State::Energy | 
         OpenMM::State::Forces)));
     delete(initial_state);
-}
-
-void OpenMMCore::stopStream(string error_msg) {
-    logStream << "stopping... this may take several seconds.." << endl;
-    flushCheckpoint();
-    logStream << "notifying server..." << endl;
-    Core::stopStream(error_msg);
 }
 
 void OpenMMCore::flushCheckpoint() {
@@ -449,9 +449,13 @@ void OpenMMCore::main() {
             core_context_->getIntegrator().step(1);
             current_step_++;
         }
-        stopStream();
+        logStream << "flushing final checkpoint..." << endl;
+        flushCheckpoint();
+        logStream << "stopping gracefully..." << endl;
+        Core::stopStream();
     } catch(exception &e) {
-        stopStream(e.what());
+        logStream << "stopping with error: " << flush;
+        Core::stopStream(e.what());
         logStream << e.what() << endl;
     }
 }
