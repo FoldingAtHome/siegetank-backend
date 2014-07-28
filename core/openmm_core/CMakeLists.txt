@@ -10,7 +10,7 @@ list(REMOVE_ITEM OpenMMCoreSources main.cpp)
 
 set(BUILD_FAH_CORE OFF CACHE BOOL "Whether or not to build as a FAHCore")
 
-set(CORE_VERSION 19 CACHE STRING "Core Version")
+set(CORE_VERSION 20 CACHE STRING "Core Version")
 add_definitions(-DCORE_VERSION=${CORE_VERSION})
 
 if(WIN32)

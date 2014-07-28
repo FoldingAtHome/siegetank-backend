@@ -73,17 +73,13 @@ OpenMMCore::OpenMMCore(string core_key, map<string, string> properties, std::ost
 }
 
 OpenMMCore::~OpenMMCore() {
-    logStream << "cleaning up" << endl;
+    logStream << "cleaning up." << endl;
     delete ref_context_;
-    ref_context_ = NULL;
     delete core_context_;
-    core_context_ = NULL;
     delete ref_intg_;
-    ref_intg_ = NULL;
     delete core_intg_;
-    core_intg_ = NULL;
     delete shared_system_;
-    shared_system_ = NULL;
+    delete initial_state_;
 }
 
 void OpenMMCore::setProgressUpdateInterval(int interval) {
@@ -235,7 +231,6 @@ static void update_status(int seconds_per_frame,
     tm* timeinfo = std::localtime(&current_time);
     char buffer[80];
     std::strftime(buffer,80,"%b/%d %I:%M:%S%p", timeinfo);
-
     out << setw(17) << buffer
         << setw(10) << format_time(seconds_per_frame) << "  "
         << setw(7) << std::fixed << std::setprecision(2) << ns_per_day
@@ -245,7 +240,6 @@ static void update_status(int seconds_per_frame,
 }
 #endif
 
-
 void OpenMMCore::startStream(const string &cc_uri,
                              const string &donor_token,
                              const string &target_id,
@@ -253,7 +247,6 @@ void OpenMMCore::startStream(const string &cc_uri,
     start_time_ = time(NULL);
     Core::startStream(cc_uri, donor_token, target_id, proxy_string);
     steps_per_frame_ = static_cast<int>(getOption<double>("steps_per_frame")+0.5);
-    OpenMM::State *initial_state;
     logStream << "deserializing system... " << flush;
     if(files_.find("system.xml") != files_.end()) {
         istringstream system_stream(files_["system.xml"]);
@@ -264,7 +257,7 @@ void OpenMMCore::startStream(const string &cc_uri,
     logStream << "state... " << flush;
     if(files_.find("state.xml") != files_.end()) {
         istringstream state_stream(files_["state.xml"]);
-        initial_state = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
+        initial_state_ = OpenMM::XmlSerializer::deserialize<OpenMM::State>(state_stream);
     } else {
         throw std::runtime_error("Cannot find state.xml");
     }
@@ -287,16 +280,9 @@ void OpenMMCore::startStream(const string &cc_uri,
     core_context_ = new OpenMM::Context(*shared_system_, *core_intg_,
         OpenMM::Platform::getPlatformByName(PLATFORM_NAME), properties_);
     logStream << "setting initial states..." << endl;
-    ref_context_->setState(*initial_state);
-    core_context_->setState(*initial_state);
+    ref_context_->setState(*initial_state_);
+    core_context_->setState(*initial_state_);
     logStream << "checking states for discrepancies in initial state... " << flush;
-    try {
-        checkState(*initial_state);
-    } catch(...) {
-        // cleanup
-        delete(initial_state);
-        throw;
-    }
     logStream << "reference... " << endl;
     checkState(core_context_->getState((
         OpenMM::State::Positions | 
@@ -304,7 +290,8 @@ void OpenMMCore::startStream(const string &cc_uri,
         OpenMM::State::Parameters | 
         OpenMM::State::Energy | 
         OpenMM::State::Forces)));
-    delete(initial_state);
+    delete(initial_state_);
+    initial_state_ = NULL;
 }
 
 void OpenMMCore::flushCheckpoint() {
@@ -330,9 +317,7 @@ void OpenMMCore::flushCheckpoint() {
 
 void OpenMMCore::checkState(const OpenMM::State &core_state) const {
     ref_context_->setState(core_state);
-    OpenMM::State reference_state = ref_context_->getState(
-        OpenMM::State::Energy | 
-        OpenMM::State::Forces);
+    OpenMM::State reference_state = ref_context_->getState(OpenMM::State::Energy | OpenMM::State::Forces);
     StateTests::checkForNans(core_state);
     StateTests::checkForDiscrepancies(core_state);
     StateTests::compareForcesAndEnergies(reference_state, core_state);

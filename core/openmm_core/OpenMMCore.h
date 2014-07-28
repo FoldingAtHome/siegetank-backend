@@ -86,6 +86,7 @@ private:
     OpenMM::Context* core_context_;
     OpenMM::Integrator* ref_intg_;
     OpenMM::Integrator* core_intg_;
+    OpenMM::State* initial_state_;
     OpenMM::System* shared_system_;
 
 };
