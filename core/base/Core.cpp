@@ -153,7 +153,7 @@ static string compute_md5(const string &binary_string) {
     unsigned char digest[16] = "";
     md5_finish(&state, digest);
     char converted[16*2+1];
-    converted[33] = '\0'; 
+    converted[32] = '\0'; 
     for(int i=0; i < 16; i++) {
         sprintf(&converted[i*2], "%02x", digest[i]);
     }
