@@ -118,7 +118,7 @@ If you'd like (and you should), you can tag your stream with additional files (s
 
 .. sourcecode:: python
 
-    encoded_pdb = base64.base64encode(gzip.compress(open('my_file.pdb', 'rb').read()))
+    encoded_pdb = base64.base64encode(gzip.compress(open('my_file.pdb', 'rb').read())).decode()
     tags = {'pdb.gz.b64': encoded_pdb}
     stream = target.add_stream(files=data, scv='vspg11', tags=tags)
 

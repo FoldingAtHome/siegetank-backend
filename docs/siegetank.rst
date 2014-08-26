@@ -51,6 +51,7 @@ Siegetank Python API
         .. automethod:: Target.delete
         .. automethod:: Target.add_stream
         .. automethod:: Target.reload_info
+        .. automethod:: Target.update
         .. attribute:: Target.id
 
             id of the target. Returns ``str``.
