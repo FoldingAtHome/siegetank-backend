@@ -69,6 +69,7 @@ OpenMMCore::OpenMMCore(string core_key, map<string, string> properties, std::ost
     ref_intg_(NULL),
     core_intg_(NULL),
     shared_system_(NULL),
+    initial_state_(NULL),
     properties_(properties) {
 }
 
