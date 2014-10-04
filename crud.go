@@ -7,7 +7,7 @@ import (
     "math/rand"
 )
 
-var letters = []rune("012345689")
+var letters = []rune("012345689ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
 
 func randSeq(n int) string {
     b := make([]rune, n)
