@@ -87,9 +87,20 @@ func (m *Manager) DeactivateEmployee(name string) {
 // Listen for expirations
 func (m* Manager) Init() {
     for {
-        employee_name := <- m.expirations
-        m.DeactivateEmployee(employee_name)
+        select {
+        case employee_name, ok := <- m.expirations:
+            if ok {
+                m.DeactivateEmployee(employee_name) 
+            } else {
+                fmt.Println("Shutting down")
+                return
+            }
+        }
     }
+}
+
+func (m* Manager) Cleanup() {
+    close(m.expirations)
 }
 
 func main() {
@@ -104,8 +115,9 @@ func main() {
         // go manager.RemoveEmployee(name)
     }
 
-    manager = nil
-
     var input string
     fmt.Scanln(&input)
+    manager.Cleanup()
+    manager = nil
+    time.Sleep(time.Duration(5)*time.Second)
 }
