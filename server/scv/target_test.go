@@ -1,14 +1,14 @@
 package scv
 
 import (
-    //"time"
-    "testing"
-    "sync"
-    // "sort"
-    // "fmt"
-    // "time"
+	//"time"
+	"sync"
+	"testing"
+	// "sort"
+	// "fmt"
+	// "time"
 
-    "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 // func TestAddRemoveStream(t *testing.T) {
@@ -37,52 +37,52 @@ import (
 //             defer wg.Done()
 //             target.RemoveStream(key)
 //         }()
-//     } 
+//     }
 //     wg.Wait()
-    
+
 //     target.Die()
 // }
 
 func TestActivateStream(t *testing.T) {
-    tm := NewTargetManager()
-    target := NewTarget(tm)
-    var wg sync.WaitGroup
-    stream_indices := make(map[string]struct{})
-    numStreams := 100
-    for i := 0; i < numStreams; i++ {
-        // wg.Add(1)
-        // go func() {
-            // defer wg.Done()
-            uuid := randSeq(3)
-            stream_indices[uuid] = struct{}{}
-            target.AddStream(uuid)
-        // }()
-    } 
+	tm := NewTargetManager()
+	target := NewTarget(tm)
+	var wg sync.WaitGroup
+	stream_indices := make(map[string]struct{})
+	numStreams := 100
+	for i := 0; i < numStreams; i++ {
+		// wg.Add(1)
+		// go func() {
+		// defer wg.Done()
+		uuid := randSeq(3)
+		stream_indices[uuid] = struct{}{}
+		target.AddStream(uuid)
+		// }()
+	}
 
-    wg.Wait()
-    for i := 0; i < numStreams; i++ {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            // activate a single stream
-            username := randSeq(5)
-            engine := randSeq(5)
-            _, stream_id, err := target.ActivateStream(username, engine)
-            if err != nil {
-                t.Errorf("Failed to activate a stream")
-            }
-            as, err := target.GetActiveStream(stream_id)
-            assert.Equal(t, as.user, username)
-            assert.Equal(t, as.engine, engine)
-            active_streams, err := target.GetActiveStreams()
-            if err != nil {
-                t.Errorf("Unable to retrieve active streams")
-            }
-            _, ok := active_streams[stream_id]
+	wg.Wait()
+	for i := 0; i < numStreams; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// activate a single stream
+			username := randSeq(5)
+			engine := randSeq(5)
+			_, stream_id, err := target.ActivateStream(username, engine)
+			if err != nil {
+				t.Errorf("Failed to activate a stream")
+			}
+			as, err := target.GetActiveStream(stream_id)
+			assert.Equal(t, as.user, username)
+			assert.Equal(t, as.engine, engine)
+			active_streams, err := target.GetActiveStreams()
+			if err != nil {
+				t.Errorf("Unable to retrieve active streams")
+			}
+			_, ok := active_streams[stream_id]
 
-            assert.True(t, ok)
-        }()
-    }
-    wg.Wait()
-    target.Die()
+			assert.True(t, ok)
+		}()
+	}
+	wg.Wait()
+	target.Die()
 }
