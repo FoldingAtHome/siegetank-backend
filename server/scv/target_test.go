@@ -5,85 +5,84 @@ import (
     "testing"
     "sync"
     // "sort"
-    "fmt"
-    "time"
+    // "fmt"
+    // "time"
 
     "github.com/stretchr/testify/assert"
 )
 
-func TestAddRemoveStream(t *testing.T) {
-    tm := NewTargetManager()
-    target := NewTarget(tm)
-    var wg sync.WaitGroup
-    stream_indices := make(map[string]struct{})
-    for i := 0; i < 10; i++ {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            uuid := randSeq(36)
-            stream_indices[uuid] = struct{}{}
-            target.AddStream(uuid)
-        }()
-    }
-    wg.Wait()
-    time.Sleep(time.Second)
-    myMap, _ := target.GetInactiveStreams()
-    assert.Equal(t, myMap, stream_indices)
+// func TestAddRemoveStream(t *testing.T) {
+//     tm := NewTargetManager()
+//     target := NewTarget(tm)
+//     var wg sync.WaitGroup
+//     stream_indices := make(map[string]struct{})
+//     for i := 0; i < 10; i++ {
+//         wg.Add(1)
+//         go func() {
+//             defer wg.Done()
+//             uuid := randSeq(36)
+//             // NOT SAFE
+//             stream_indices[uuid] = struct{}{}
+//             target.AddStream(uuid)
+//         }()
+//     }
+//     wg.Wait()
+//     time.Sleep(time.Second)
+//     myMap, _ := target.GetInactiveStreams()
+//     assert.Equal(t, myMap, stream_indices)
 
-    for key, _ := range stream_indices {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            target.RemoveStream(key)
-        }()
-    } 
-    wg.Wait()
+//     for key, _ := range stream_indices {
+//         wg.Add(1)
+//         go func() {
+//             defer wg.Done()
+//             target.RemoveStream(key)
+//         }()
+//     } 
+//     wg.Wait()
     
-    target.Die()
-}
+//     target.Die()
+// }
 
 func TestActivateStream(t *testing.T) {
     tm := NewTargetManager()
     target := NewTarget(tm)
     var wg sync.WaitGroup
     stream_indices := make(map[string]struct{})
-    for i := 0; i < 10; i++ {
+    numStreams := 100
+    for i := 0; i < numStreams; i++ {
+        // wg.Add(1)
+        // go func() {
+            // defer wg.Done()
+            uuid := randSeq(3)
+            stream_indices[uuid] = struct{}{}
+            target.AddStream(uuid)
+        // }()
+    } 
+
+    wg.Wait()
+    for i := 0; i < numStreams; i++ {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            uuid := randSeq(36)
-            stream_indices[uuid] = struct{}{}
-            target.AddStream(uuid)
+            // activate a single stream
+            username := randSeq(5)
+            engine := randSeq(5)
+            _, stream_id, err := target.ActivateStream(username, engine)
+            if err != nil {
+                t.Errorf("Failed to activate a stream")
+            }
+            as, err := target.GetActiveStream(stream_id)
+            assert.Equal(t, as.user, username)
+            assert.Equal(t, as.engine, engine)
+            active_streams, err := target.GetActiveStreams()
+            if err != nil {
+                t.Errorf("Unable to retrieve active streams")
+            }
+            _, ok := active_streams[stream_id]
+
+            assert.True(t, ok)
         }()
     }
     wg.Wait()
-
-    // activate a single stream
-    _, stream_id, err := target.ActivateStream("foo", "bar")
-    if err != nil {
-        t.Errorf("Failed to activate a stream")
-    }
-
-    active_streams, err := target.GetActiveStreams()
-
-    fmt.Println(active_streams, stream_id)
-
-    _, ok := active_streams[stream_id];
-    assert.True(t, ok)
-
-    // see if stream exists
-
-    // as := target.GetActiveStream(stream_id)
-    // as2 := tm.Tokens.FindStream(as.auth_token)
-
-    // if as != as2 {
-    //     t.Errorf("Token mismatch")
-    // }
-
-    // copy := target.GetActiveStreams()
-
-    // fmt.Println(copy)
-
-    // time.Sleep(time.Duration(100)*time.Second)
-
+    target.Die()
 }

@@ -1,7 +1,7 @@
 package scv
 
 import (
-    "fmt"
+    // "fmt"
     "math/rand"
     "sync"
     "time"
@@ -25,14 +25,14 @@ type ActiveStream struct {
     start_time    int
     frame_hash    string
     engine        string
-    timer         *time.Timer
 }
 
 type Target struct {
     sync.RWMutex
     active_streams map[string]ActiveStream
     inactive_streams map[string]struct{}
-    expirations chan string
+    timers map[string]*time.Timer // map of timers
+    expirations chan string // expiration channel for the timers
     targetManager *TargetManager
     dead_wg sync.WaitGroup
     is_dead bool
@@ -42,6 +42,7 @@ func NewTarget(tm *TargetManager) *Target {
     target := Target{
         active_streams: make(map[string]ActiveStream),
         inactive_streams: make(map[string]struct{}),
+        timers: make(map[string] *time.Timer),
         expirations: make(chan string),
         targetManager: tm,
     }
@@ -60,6 +61,7 @@ func (t *Target) Die() {
     if t.is_dead {
         return
     }
+    // expire all streams too.
     close(t.expirations)
     t.dead_wg.Wait()
 }
@@ -93,17 +95,19 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
     for stream_id = range t.inactive_streams {
         break
     }
-    token = randSeq(36)
+    token = randSeq(5)
     as := ActiveStream{
         user: user, 
         engine: engine, 
         auth_token: token,
-        timer: time.AfterFunc(time.Second*5, func() {
-            t.expirations <- stream_id
-        }),
+        // timer: nil,
     }
+    t.timers[stream_id] = time.AfterFunc(time.Second*5, func() {
+           t.expirations <- stream_id
+        })
     t.active_streams[stream_id] = as
     t.targetManager.Tokens.AddToken(token, &as)
+    delete(t.inactive_streams, stream_id)
     return
 }
 
@@ -117,31 +121,32 @@ func (t *Target) DeactivateStream(stream_id string) error {
     return nil
 }
 
-func (t *Target) GetActiveStream(stream_id string) (*ActiveStream, error) {
+func (t *Target) GetActiveStream(stream_id string) (as ActiveStream, err error) {
     t.Lock()
     defer t.Unlock()
     if t.is_dead {
-        return nil, errors.New("target is dead")
+        err = errors.New("target is dead")
+        return
     }
-    data, err_code := t.active_streams[stream_id]
-    if err_code {
-        return nil, errors.New(stream_id + "is not active")
-    } else {
-        return &data, nil
+    as, ok := t.active_streams[stream_id]
+    if ok == false {
+       err = errors.New(stream_id + "is not active")
     }
+    return
 }
 
 // Returns a copy. Adding to this map will not affect the actual map used by
-// the target since maps are not goroutine safe.
-func (t *Target) GetActiveStreams() (map[string]*ActiveStream, error) {
+// the target since maps are not goroutine safe. If the caller would like to
+// iterate over the list of streams returned in here, he'd need to call Lock
+func (t *Target) GetActiveStreams() (map[string]struct{}, error) {
     t.Lock()
     defer t.Unlock()
     if t.is_dead {
         return nil, errors.New("target is dead")
     }
-    copy := make(map[string]*ActiveStream)
-    for k, v := range t.active_streams {
-        copy[k] = &v
+    copy := make(map[string]struct{})
+    for k := range t.active_streams {
+        copy[k] = struct{}{}
     }
     return copy, nil
 }
@@ -177,7 +182,6 @@ func (t *Target) run() {
 }
 
 func (target *Target) deactivate(stream_id string) {
-    fmt.Println("Deactivating", stream_id)
     prop, ok := target.active_streams[stream_id]
     if ok {
         target.targetManager.Tokens.RemoveToken(prop.auth_token)
