@@ -84,13 +84,12 @@ func (t *Target) RemoveStream(stream_id string) error {
     return nil
 }
 
-func (t *Target) ActivateStream(user, engine string) (token string, err error) {
+func (t *Target) ActivateStream(user, engine string) (token, stream_id string, err error) {
     t.Lock()
     defer t.Unlock()
     if t.is_dead {
-        return "", errors.New("target is dead")
+        return "", "", errors.New("target is dead")
     }
-    var stream_id string
     for stream_id = range t.inactive_streams {
         break
     }
@@ -116,6 +115,20 @@ func (t *Target) DeactivateStream(stream_id string) error {
     }
     t.deactivate(stream_id)
     return nil
+}
+
+func (t *Target) GetActiveStream(stream_id string) (*ActiveStream, error) {
+    t.Lock()
+    defer t.Unlock()
+    if t.is_dead {
+        return nil, errors.New("target is dead")
+    }
+    data, err_code := t.active_streams[stream_id]
+    if err_code {
+        return nil, errors.New(stream_id + "is not active")
+    } else {
+        return &data, nil
+    }
 }
 
 // Returns a copy. Adding to this map will not affect the actual map used by

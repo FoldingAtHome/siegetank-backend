@@ -5,7 +5,7 @@ import (
     "testing"
     "sync"
     // "sort"
-    // "fmt"
+    "fmt"
     "time"
 
     "github.com/stretchr/testify/assert"
@@ -14,14 +14,7 @@ import (
 func TestAddRemoveStream(t *testing.T) {
     tm := NewTargetManager()
     target := NewTarget(tm)
-
-    // uuid := randSeq(36)
-    // target.AddStream(uuid)
-    // target.RemoveStream(uuid)
-    // target.Die()
-
     var wg sync.WaitGroup
-
     stream_indices := make(map[string]struct{})
     for i := 0; i < 10; i++ {
         wg.Add(1)
@@ -49,41 +42,48 @@ func TestAddRemoveStream(t *testing.T) {
     target.Die()
 }
 
-// func TestActivateStream(t *testing.T) {
-//     tm := NewTargetManager()
-//     target := NewTarget(tm)
-//     var wg sync.WaitGroup
+func TestActivateStream(t *testing.T) {
+    tm := NewTargetManager()
+    target := NewTarget(tm)
+    var wg sync.WaitGroup
+    stream_indices := make(map[string]struct{})
+    for i := 0; i < 10; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            uuid := randSeq(36)
+            stream_indices[uuid] = struct{}{}
+            target.AddStream(uuid)
+        }()
+    }
+    wg.Wait()
 
-//     stream_indices := make([]string, 0)
+    // activate a single stream
+    _, stream_id, err := target.ActivateStream("foo", "bar")
+    if err != nil {
+        t.Errorf("Failed to activate a stream")
+    }
 
-//     for i := 0; i < 10; i++ {
-//         wg.Add(1)
-//         go func() {
-//             defer wg.Done()
-//             uuid := randSeq(36)
-//             stream_indices = append(stream_indices, uuid)
-//             target.AddStream(uuid)
-//         }()
-//     }
-//     wg.Wait()
+    active_streams, err := target.GetActiveStreams()
 
-//     // activate a single stream
-//     stream_id, err := target.ActivateStream("foo", "bar")
-//     if err != nil {
-//         t.Errorf("Failed to activate a stream")
-//     }
+    fmt.Println(active_streams, stream_id)
 
-//     as := target.GetActiveStream(stream_id)
-//     as2 := tm.Tokens.FindStream(as.auth_token)
+    _, ok := active_streams[stream_id];
+    assert.True(t, ok)
 
-//     if as != as2 {
-//         t.Errorf("Token mismatch")
-//     }
+    // see if stream exists
 
-//     copy := target.GetActiveStreams()
+    // as := target.GetActiveStream(stream_id)
+    // as2 := tm.Tokens.FindStream(as.auth_token)
 
-//     fmt.Println(copy)
+    // if as != as2 {
+    //     t.Errorf("Token mismatch")
+    // }
 
-//     time.Sleep(time.Duration(100)*time.Second)
+    // copy := target.GetActiveStreams()
 
-// }
+    // fmt.Println(copy)
+
+    // time.Sleep(time.Duration(100)*time.Second)
+
+}
