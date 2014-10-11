@@ -4,9 +4,11 @@ import (
     //"time"
     "testing"
     "sync"
-    "sort"
-    "fmt"
+    // "sort"
+    // "fmt"
     "time"
+
+    "github.com/stretchr/testify/assert"
 )
 
 func TestAddRemoveStream(t *testing.T) {
@@ -20,37 +22,26 @@ func TestAddRemoveStream(t *testing.T) {
 
     var wg sync.WaitGroup
 
-    stream_indices := make([]string, 0)
-
+    stream_indices := make(map[string]struct{})
     for i := 0; i < 10; i++ {
         wg.Add(1)
         go func() {
             defer wg.Done()
             uuid := randSeq(36)
-            stream_indices = append(stream_indices, uuid)
+            stream_indices[uuid] = struct{}{}
             target.AddStream(uuid)
         }()
     }
     wg.Wait()
-
     time.Sleep(time.Second)
+    myMap, _ := target.GetInactiveStreams()
+    assert.Equal(t, myMap, stream_indices)
 
-    myMap, _ := target.GetActiveStreams()
-    keys := make([]string, 0, len(myMap))
-    for k := range myMap {
-        keys = append(keys, k)
-    }
-
-    sort.Sort(sort.StringSlice(stream_indices))
-    sort.Sort(sort.StringSlice(keys))
-
-    fmt.Println(keys, stream_indices)
-
-    for _, stream_id := range stream_indices {
+    for key, _ := range stream_indices {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            target.RemoveStream(stream_id)
+            target.RemoveStream(key)
         }()
     } 
     wg.Wait()

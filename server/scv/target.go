@@ -31,7 +31,7 @@ type ActiveStream struct {
 type Target struct {
     sync.RWMutex
     active_streams map[string]ActiveStream
-    inactive_streams map[string]bool
+    inactive_streams map[string]struct{}
     expirations chan string
     targetManager *TargetManager
     dead_wg sync.WaitGroup
@@ -41,7 +41,7 @@ type Target struct {
 func NewTarget(tm *TargetManager) *Target {
     target := Target{
         active_streams: make(map[string]ActiveStream),
-        inactive_streams: make(map[string]bool),
+        inactive_streams: make(map[string]struct{}),
         expirations: make(chan string),
         targetManager: tm,
     }
@@ -70,7 +70,7 @@ func (t *Target) AddStream(stream_id string) error {
     if t.is_dead {
         return errors.New("target is dead")
     }
-    t.inactive_streams[stream_id] = true
+    t.inactive_streams[stream_id] = struct{}{}
     return nil
 }
 
@@ -119,7 +119,7 @@ func (t *Target) DeactivateStream(stream_id string) error {
 }
 
 // Returns a copy. Adding to this map will not affect the actual map used by
-// the target since maps are not goroutine safe
+// the target since maps are not goroutine safe.
 func (t *Target) GetActiveStreams() (map[string]*ActiveStream, error) {
     t.Lock()
     defer t.Unlock()
@@ -133,14 +133,15 @@ func (t *Target) GetActiveStreams() (map[string]*ActiveStream, error) {
     return copy, nil
 }
 
-// Returns by copy.
-func (t *Target) GetInactiveStreams() (map[string]bool, error) {
+// Returns a copy. Adding to this map will not affect the actual map used by
+// the target since maps are not goroutine safe.
+func (t *Target) GetInactiveStreams() (map[string]struct{}, error) {
     t.Lock()
     defer t.Unlock()
     if t.is_dead {
         return nil, errors.New("target is dead")
     }
-    copy := make(map[string]bool)
+    copy := make(map[string]struct{})
     for k, v := range t.inactive_streams {
         copy[k] = v
     }
@@ -162,13 +163,12 @@ func (t *Target) run() {
     }
 }
 
-// this method is not go-routine safe.
 func (target *Target) deactivate(stream_id string) {
     fmt.Println("Deactivating", stream_id)
     prop, ok := target.active_streams[stream_id]
     if ok {
         target.targetManager.Tokens.RemoveToken(prop.auth_token)
         delete(target.active_streams, stream_id)
-        target.inactive_streams[stream_id] = true
+        target.inactive_streams[stream_id] = struct{}{}
     }
 }
