@@ -1,7 +1,7 @@
 package scv
 
 import (
-	// "fmt"
+	"fmt"
 	"errors"
 	"math/rand"
 	"sync"
@@ -33,7 +33,8 @@ type Target struct {
 	inactive_streams map[string]struct{}
 	timers           map[string]*time.Timer // map of timers
 	expirations      chan string            // expiration channel for the timers
-	targetManager    *TargetManager
+	expiration_time  int                    // expiration time in seconds
+    targetManager    *TargetManager
 	dead_wg          sync.WaitGroup
 	is_dead          bool
 }
@@ -44,6 +45,7 @@ func NewTarget(tm *TargetManager) *Target {
 		inactive_streams: make(map[string]struct{}),
 		timers:           make(map[string]*time.Timer),
 		expirations:      make(chan string),
+        expiration_time:  600,
 		targetManager:    tm,
 	}
 	target.dead_wg.Add(1)
@@ -102,7 +104,7 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 		auth_token: token,
 		// timer: nil,
 	}
-	t.timers[stream_id] = time.AfterFunc(time.Second*5, func() {
+	t.timers[stream_id] = time.AfterFunc(time.Second*time.Duration(t.expiration_time), func() {
 		t.expirations <- stream_id
 	})
 	t.active_streams[stream_id] = as
@@ -172,6 +174,7 @@ func (t *Target) run() {
 		case stream_id, ok := <-t.expirations:
 			if ok {
 				t.Lock()
+                fmt.Println("Deactivating", stream_id)
 				t.deactivate(stream_id)
 				t.Unlock()
 			} else {

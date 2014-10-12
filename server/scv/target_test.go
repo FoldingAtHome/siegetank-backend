@@ -5,7 +5,8 @@ import (
 	"sync"
 	"testing"
 	// "sort"
-	// "time"
+	"time"
+    // "fmt"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -48,20 +49,14 @@ func TestAddRemoveStream(t *testing.T) {
 func TestActivateStream(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
-	var wg sync.WaitGroup
-	stream_indices := make(map[string]struct{})
 	numStreams := 100
 	for i := 0; i < numStreams; i++ {
-		// wg.Add(1)
-		// go func() {
-		// defer wg.Done()
-		uuid := randSeq(3)
-		stream_indices[uuid] = struct{}{}
-		target.AddStream(uuid)
-		// }()
+        go func() {
+		    uuid := randSeq(3)
+		    target.AddStream(uuid)
+        }()
 	}
-
-	wg.Wait()
+	var wg sync.WaitGroup
 	for i := 0; i < numStreams; i++ {
 		wg.Add(1)
 		go func() {
@@ -70,16 +65,12 @@ func TestActivateStream(t *testing.T) {
 			username := randSeq(5)
 			engine := randSeq(5)
 			_, stream_id, err := target.ActivateStream(username, engine)
-			if err != nil {
-				t.Errorf("Failed to activate a stream")
-			}
+			assert.True(t, err == nil)
 			as, err := target.GetActiveStream(stream_id)
 			assert.Equal(t, as.user, username)
 			assert.Equal(t, as.engine, engine)
 			active_streams, err := target.GetActiveStreams()
-			if err != nil {
-				t.Errorf("Unable to retrieve active streams")
-			}
+			assert.True(t, err == nil)
 			_, ok := active_streams[stream_id]
 
 			assert.True(t, ok)
@@ -87,4 +78,30 @@ func TestActivateStream(t *testing.T) {
 	}
 	wg.Wait()
 	target.Die()
+}
+
+func TestStreamExpiration(t *testing.T) {
+    tm := NewTargetManager()
+    target := NewTarget(tm)
+    target.expiration_time = 3
+    numStreams := 3
+    // add three streams in intervals of three seconds
+    var wg sync.WaitGroup
+    for i := 0; i < numStreams; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            uuid := randSeq(3)
+            target.AddStream(uuid)
+            _, _, err := target.ActivateStream("foo", "bar")
+            assert.True(t, err == nil)
+            _, err = target.GetActiveStream(uuid)
+            assert.True(t, err == nil)
+            time.Sleep(time.Duration(target.expiration_time)*time.Second)
+            _, err = target.GetActiveStream(uuid)
+            assert.False(t, err != nil)
+        }()
+        time.Sleep(2*time.Second)
+    }
+    wg.Wait()
 }
