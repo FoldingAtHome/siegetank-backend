@@ -49,7 +49,7 @@ func TestAddRemoveStream(t *testing.T) {
 func TestActivateStream(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
-	numStreams := 100
+	numStreams := 5
 	for i := 0; i < numStreams; i++ {
         go func() {
 		    uuid := randSeq(3)
@@ -64,15 +64,18 @@ func TestActivateStream(t *testing.T) {
 			// activate a single stream
 			username := randSeq(5)
 			engine := randSeq(5)
-			_, stream_id, err := target.ActivateStream(username, engine)
+			token, stream_id, err := target.ActivateStream(username, engine)
 			assert.True(t, err == nil)
 			as, err := target.GetActiveStream(stream_id)
 			assert.Equal(t, as.user, username)
 			assert.Equal(t, as.engine, engine)
+            assert.Equal(t, as.auth_token, token)
 			active_streams, err := target.GetActiveStreams()
 			assert.True(t, err == nil)
 			_, ok := active_streams[stream_id]
-
+            token_stream, err := tm.Tokens.FindStream(token)
+            assert.True(t, err == nil)
+            assert.Equal(t, as, token_stream)
 			assert.True(t, ok)
 		}()
 	}
@@ -83,7 +86,7 @@ func TestActivateStream(t *testing.T) {
 func TestStreamExpiration(t *testing.T) {
     tm := NewTargetManager()
     target := NewTarget(tm)
-    target.expiration_time = 3
+    target.expiration_time = 7
     numStreams := 3
     // add three streams in intervals of three seconds
     var wg sync.WaitGroup
@@ -93,7 +96,8 @@ func TestStreamExpiration(t *testing.T) {
             defer wg.Done()
             uuid := randSeq(3)
             target.AddStream(uuid)
-            _, _, err := target.ActivateStream("foo", "bar")
+            _, stream_id, err := target.ActivateStream("foo", "bar")
+            assert.Equal(t, stream_id, uuid)
             assert.True(t, err == nil)
             _, err = target.GetActiveStream(uuid)
             assert.True(t, err == nil)

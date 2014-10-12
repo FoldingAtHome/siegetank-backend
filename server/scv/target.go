@@ -1,7 +1,7 @@
 package scv
 
 import (
-	"fmt"
+	// "fmt"
 	"errors"
 	"math/rand"
 	"sync"
@@ -29,8 +29,9 @@ type ActiveStream struct {
 
 type Target struct {
 	sync.RWMutex
-	active_streams   map[string]ActiveStream
+    // TODO - this needs to be changed to a pointer to an ActiveStream
 	inactive_streams map[string]struct{}
+    active_streams   map[string]*ActiveStream
 	timers           map[string]*time.Timer // map of timers
 	expirations      chan string            // expiration channel for the timers
 	expiration_time  int                    // expiration time in seconds
@@ -41,7 +42,7 @@ type Target struct {
 
 func NewTarget(tm *TargetManager) *Target {
 	target := Target{
-		active_streams:   make(map[string]ActiveStream),
+		active_streams:   make(map[string]*ActiveStream),
 		inactive_streams: make(map[string]struct{}),
 		timers:           make(map[string]*time.Timer),
 		expirations:      make(chan string),
@@ -98,7 +99,7 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 		break
 	}
 	token = randSeq(5)
-	as := ActiveStream{
+	as := &ActiveStream{
 		user:       user,
 		engine:     engine,
 		auth_token: token,
@@ -108,10 +109,14 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 		t.expirations <- stream_id
 	})
 	t.active_streams[stream_id] = as
-	t.targetManager.Tokens.AddToken(token, &as)
+	t.targetManager.Tokens.AddToken(token, as)
 	delete(t.inactive_streams, stream_id)
 	return
 }
+
+// func (t *Target) GetTokenManager() *TokenManager {
+//     return &t.targetManager.Tokens
+// }
 
 func (t *Target) DeactivateStream(stream_id string) error {
 	t.Lock()
@@ -123,7 +128,7 @@ func (t *Target) DeactivateStream(stream_id string) error {
 	return nil
 }
 
-func (t *Target) GetActiveStream(stream_id string) (as ActiveStream, err error) {
+func (t *Target) GetActiveStream(stream_id string) (as *ActiveStream, err error) {
 	t.Lock()
 	defer t.Unlock()
 	if t.is_dead {
@@ -174,8 +179,7 @@ func (t *Target) run() {
 		case stream_id, ok := <-t.expirations:
 			if ok {
 				t.Lock()
-                fmt.Println("Deactivating", stream_id)
-				t.deactivate(stream_id)
+                t.deactivate(stream_id)
 				t.Unlock()
 			} else {
 				return

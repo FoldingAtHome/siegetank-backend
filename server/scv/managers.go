@@ -2,6 +2,7 @@ package scv
 
 import(
     "sync"
+    "errors"
 )
 
 // map of tokens to active streams
@@ -12,21 +13,25 @@ type TokenManager struct {
 
 func (t *TokenManager) AddToken(token string, stream *ActiveStream) {
     t.Lock()
+    defer t.Unlock()
     t.tokens[token] = stream
-    t.Unlock()
 }
 
 func (t *TokenManager) RemoveToken(token string) {
     t.Lock()
+    defer t.Unlock()
     delete(t.tokens, token)
-    t.Unlock()
 }
 
-func (t *TokenManager) FindStream(token string) *ActiveStream {
+func (t *TokenManager) FindStream(token string) (*ActiveStream, error) {
     t.RLock()
-    stream := t.tokens[token]
-    t.RUnlock()
-    return stream
+    defer t.RUnlock()
+    stream, ok := t.tokens[token]
+    if ok {
+        return stream, nil
+    } else {
+        return nil, errors.New("Bad Token")
+    }
 }
 
 type TargetManager struct {
