@@ -5,43 +5,45 @@ import (
 	"sync"
 	"testing"
 	// "sort"
-	// "fmt"
 	// "time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// func TestAddRemoveStream(t *testing.T) {
-//     tm := NewTargetManager()
-//     target := NewTarget(tm)
-//     var wg sync.WaitGroup
-//     stream_indices := make(map[string]struct{})
-//     for i := 0; i < 10; i++ {
-//         wg.Add(1)
-//         go func() {
-//             defer wg.Done()
-//             uuid := randSeq(36)
-//             // NOT SAFE
-//             stream_indices[uuid] = struct{}{}
-//             target.AddStream(uuid)
-//         }()
-//     }
-//     wg.Wait()
-//     time.Sleep(time.Second)
-//     myMap, _ := target.GetInactiveStreams()
-//     assert.Equal(t, myMap, stream_indices)
+func TestAddRemoveStream(t *testing.T) {
+    tm := NewTargetManager()
+    target := NewTarget(tm)
+    var wg sync.WaitGroup
+    var mutex sync.Mutex
+    stream_indices := make(map[string]struct{})
+    for i := 0; i < 10; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            uuid := randSeq(36)
+            mutex.Lock()
+            stream_indices[uuid] = struct{}{}
+            mutex.Unlock()
+            target.AddStream(uuid)
+        }()
+    }
+    wg.Wait()
+    myMap, _ := target.GetInactiveStreams()
+    assert.Equal(t, myMap, stream_indices)
 
-//     for key, _ := range stream_indices {
-//         wg.Add(1)
-//         go func() {
-//             defer wg.Done()
-//             target.RemoveStream(key)
-//         }()
-//     }
-//     wg.Wait()
+    for key, _ := range stream_indices {
+        wg.Add(1)
+        go func(stream_id string) {
+            defer wg.Done()
+            target.RemoveStream(stream_id)
+        }(key)
+    }
+    wg.Wait()
+    removed, _ := target.GetInactiveStreams()
+    assert.Equal(t, removed, make(map[string]struct{}))
 
-//     target.Die()
-// }
+    target.Die()
+}
 
 func TestActivateStream(t *testing.T) {
 	tm := NewTargetManager()
