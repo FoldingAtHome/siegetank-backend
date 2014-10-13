@@ -118,4 +118,5 @@ func TestStreamExpiration(t *testing.T) {
         time.Sleep(2*time.Second)
     }
     wg.Wait()
+    target.Die()
 }

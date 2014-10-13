@@ -18,6 +18,7 @@ func randSeq(n int) string {
 }
 
 type ActiveStream struct {
+    sync.RWMutex
 	total_frames  float32
 	buffer_frames int
 	auth_token    string
@@ -29,8 +30,7 @@ type ActiveStream struct {
 
 type Target struct {
 	sync.RWMutex
-    // TODO - this needs to be changed to a pointer to an ActiveStream
-	inactive_streams map[string]struct{}
+    inactive_streams map[string]struct{}
     active_streams   map[string]*ActiveStream
 	timers           map[string]*time.Timer // map of timers
 	expirations      chan string            // expiration channel for the timers
@@ -113,10 +113,6 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 	delete(t.inactive_streams, stream_id)
 	return
 }
-
-// func (t *Target) GetTokenManager() *TokenManager {
-//     return &t.targetManager.Tokens
-// }
 
 func (t *Target) DeactivateStream(stream_id string) error {
 	t.Lock()
