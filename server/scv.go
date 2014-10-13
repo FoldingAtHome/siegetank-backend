@@ -24,8 +24,6 @@ func AuthorizeManager(*http.Request) string {
     return "diwaka"
 }
 
-type SCVHandler func(http.ResponseWriter, *http.Request) error
-
 type Application struct {
     db *mgo.Session
     external_host string
@@ -50,31 +48,34 @@ func NewApplication() *Application {
     return &app
 }
 
-func (app *Application) Run() {
-    r := mux.NewRouter()
-    //r.HandleFunc("/download/{filename:.*}", app.PostStreamHandler()).Methods("POST")
-    r.HandleFunc("/streams/{stream_id}", app.PostStreamHandler()).Methods("POST")
-    http.Handle("/", r)
-    err := http.ListenAndServe(":12345", nil)
-    if err != nil {
-        log.Fatal("ListenAndServe: ", err)
+type SCVHandler func(http.ResponseWriter, *http.Request) error
+
+func (fn SCVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    if err := fn(w, r); err != nil {
+        http.Error(w, err.Error(), 500)
     }
 }
 
-func (app *Application) PostStreamHandler() func(http.ResponseWriter, *http.Request) {
-    return func(w http.ResponseWriter, r *http.Request) {
+func (app *Application) PostStreamHandler() SCVHandler {
+    return func(w http.ResponseWriter, r *http.Request) error {
         fmt.Println(app.db)
         fmt.Println(app.external_host)
         // use app.db
         // handle authorization
         // handle db transaction
         // write using application specific properties
+        return nil
     }
 }
 
-func (fn SCVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-    if err := fn(w, r); err != nil {
-        http.Error(w, err.Error(), 500)
+func (app *Application) Run() {
+    r := mux.NewRouter()
+    r.Handle("/streams/{stream_id}", app.PostStreamHandler()).Methods("POST")
+
+    http.Handle("/", r)
+    err := http.ListenAndServe(":12345", nil)
+    if err != nil {
+        log.Fatal("ListenAndServe: ", err)
     }
 }
 
