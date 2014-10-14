@@ -7,7 +7,7 @@ import(
     "time"
     "fmt"
     "gopkg.in/mgo.v2"
-    // "gopkg.in/mgo.v2/bson"
+    "gopkg.in/mgo.v2/bson"
     "github.com/gorilla/mux"
 )
 
@@ -48,15 +48,15 @@ func NewApplication() *Application {
     return &app
 }
 
-type SCVHandler func(http.ResponseWriter, *http.Request) error
+type AppHandler func(http.ResponseWriter, *http.Request) error
 
-func (fn SCVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     if err := fn(w, r); err != nil {
         http.Error(w, err.Error(), 500)
     }
 }
 
-func (app *Application) PostStreamHandler() SCVHandler {
+func (app *Application) PostStreamHandler() AppHandler {
     return func(w http.ResponseWriter, r *http.Request) error {
         fmt.Println(app.db)
         fmt.Println(app.external_host)
@@ -66,6 +66,23 @@ func (app *Application) PostStreamHandler() SCVHandler {
         // write using application specific properties
         return nil
     }
+}
+
+type User struct {
+    Id string `bson:"_id"`
+    Token string
+}
+
+func (app *Application) GetCurrentUser(r *http.Request) string {
+    token := r.Header.Get("Authorization")
+    cursor := app.db.DB("users").C("all")
+    result := User{}
+    err := cursor.Find(bson.M{"token": token}).One(&result)
+    if err != nil {
+        fmt.Println("OHGOD")
+    }
+    fmt.Println(result)
+    return result.Id
 }
 
 func (app *Application) Run() {
@@ -81,5 +98,6 @@ func (app *Application) Run() {
 
 func main() {
     app := NewApplication()
+    //app.GetCurrentUser("some_token")
     app.Run()
 }
