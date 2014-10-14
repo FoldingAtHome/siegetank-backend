@@ -2,10 +2,13 @@ package main
 
 import(
     "io"
+    "io/ioutil"
     "net/http"
     "log"
     "time"
     "fmt"
+    "errors"
+
     "gopkg.in/mgo.v2"
     "gopkg.in/mgo.v2/bson"
     "github.com/gorilla/mux"
@@ -57,48 +60,54 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (app *Application) PostStreamHandler() AppHandler {
-    return func(w http.ResponseWriter, r *http.Request) error {
-        user := app.GetCurrentUser(r)
-        if user == "" {
-            return errors.New("Unauthorized")
+    return func(w http.ResponseWriter, r *http.Request) (err error) {
+        /* Multi-Stage Process:
+
+        -Validate that the user is indeed a user
+        -Validate that the user is a manager
+        -
+
+        */
+        user, err := app.CurrentUser(r)
+        if err != nil {
+            return errors.New("Unable to find user.")
         }
-        fmt.Println(app.Mongo)
-        fmt.Println(app.external_host)
+        fmt.Println("Authorized as user:", user)
+        isManager := app.IsManager(user)
+        fmt.Println("Is the user a manager?", isManager)
+        // fmt.Println(app.Mongo)
+        // fmt.Println(app.external_host)
         // use app.Mongo
         // handle authorization
         // handle Mongo transaction
         // write using application specific properties
-        return nil
+
+        w.Write([]byte("logged in as: "+ user))
+        return
     }
 }
 
-type User struct {
-    Id string `bson:"_id"`
-    Token string
-}
-
-// Look up the user using the Authorization header
-func (app *Application) GetCurrentUser(r *http.Request) string {
+// Look up the User using the Authorization header
+func (app *Application) CurrentUser(r *http.Request) (user string, err error) {
     token := r.Header.Get("Authorization")
     cursor := app.Mongo.DB("users").C("all")
-    result := User{}
-    err := cursor.Find(bson.M{"token": token}).One(&result)
-    if err != nil {
-        return ""
+    result := make(map[string]string)
+    if err = cursor.Find(bson.M{"token": token}).One(&result); err != nil {
+        return 
     }
-    return result.Id
+    user = result["_id"]
+    return
 }
 
-func (app *Application) IsManager(user_id string) string {
-    cursor := app.Mongo.DB("")
+func (app *Application) IsManager(user string) bool {
+    cursor := app.Mongo.DB("users").C("managers")
+    result := make(map[string]string)
+    if err := cursor.Find(bson.M{"_id": user}).One(&result); err != nil {
+        return false
+    } else {
+        return true
+    }
 }
-
-cursor = self.motor.users.managers
-        query = yield cursor.find_one({'_id': user})
-        if query:
-            return True
-        else:
-            return False
 
 func (app *Application) Run() {
     r := mux.NewRouter()
@@ -113,6 +122,21 @@ func (app *Application) Run() {
 
 func main() {
     app := NewApplication()
-    //app.GetCurrentUser("some_token")
+    req := func(token string) {
+        time.Sleep(3*time.Second)
+        client := &http.Client{}
+        req, _ := http.NewRequest("POST", "http://127.0.0.1:12345/streams/982034859", nil)
+        req.Header.Add("Authorization", token)
+        resp, err := client.Do(req)
+        if err != nil {
+            panic(err)
+        } else {
+            defer resp.Body.Close()
+            contents, _ := ioutil.ReadAll(resp.Body)
+            fmt.Println(string(contents))
+        }
+        fmt.Println(resp.Body, err)
+    }
+
     app.Run()
 }
