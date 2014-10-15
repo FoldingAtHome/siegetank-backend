@@ -21,7 +21,7 @@ func TestAddRemoveStream(t *testing.T) {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            uuid := randSeq(36)
+            uuid := RandSeq(36)
             mutex.Lock()
             stream_indices[uuid] = struct{}{}
             mutex.Unlock()
@@ -52,7 +52,7 @@ func TestActivateStream(t *testing.T) {
 	numStreams := 5
 	for i := 0; i < numStreams; i++ {
         go func() {
-		    uuid := randSeq(3)
+		    uuid := RandSeq(3)
 		    target.AddStream(uuid)
         }()
 	}
@@ -62,8 +62,8 @@ func TestActivateStream(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// activate a single stream
-			username := randSeq(5)
-			engine := randSeq(5)
+			username := RandSeq(5)
+			engine := RandSeq(5)
 			token, stream_id, err := target.ActivateStream(username, engine)
 			assert.True(t, err == nil)
 			as, err := target.GetActiveStream(stream_id)
@@ -94,7 +94,7 @@ func TestStreamExpiration(t *testing.T) {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            stream_id := randSeq(3)
+            stream_id := RandSeq(3)
             target.AddStream(stream_id)
             token, stream_id, err := target.ActivateStream("foo", "bar")
             assert.Equal(t, stream_id, stream_id)

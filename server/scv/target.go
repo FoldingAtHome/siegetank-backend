@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func randSeq(n int) string {
+func RandSeq(n int) string {
 	b := make([]rune, n)
 	var letters = []rune("012345689ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
 	for i := range b {
@@ -98,7 +98,7 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 	for stream_id = range t.inactive_streams {
 		break
 	}
-	token = randSeq(5)
+	token = RandSeq(5)
 	as := &ActiveStream{
 		user:       user,
 		engine:     engine,

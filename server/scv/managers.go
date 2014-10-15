@@ -48,28 +48,28 @@ func NewTargetManager() *TargetManager {
     return &tm
 }
 
-func (tm *TargetManager) AddTarget(target_id string) {
-    tm.Lock()
-    tm.targets[target_id] = Target{
-        active_streams:   make(map[string]ActiveStream),
-        inactive_streams: make(map[string]bool),
-        expirations:      make(chan string),
-        targetManager:    tm,
-    }
-    tm.Unlock()
-}
+// func (tm *TargetManager) AddTarget(target_id string) {
+//     tm.Lock()
+//     tm.targets[target_id] = Target{
+//         active_streams:   make(map[string]ActiveStream),
+//         inactive_streams: make(map[string]bool),
+//         expirations:      make(chan string),
+//         targetManager:    tm,
+//     }
+//     tm.Unlock()
+// }
 
-func (tm *TargetManager) RemoveTarget(target_id string) {
-    tm.Lock()
-    target := tm.targets[target_id]
-    target.Cleanup()
-    delete(tm.targets, target_id)
-    tm.Unlock()
-}
+// func (tm *TargetManager) RemoveTarget(target_id string) {
+//     tm.Lock()
+//     target := tm.targets[target_id]
+//     target.Cleanup()
+//     delete(tm.targets, target_id)
+//     tm.Unlock()
+// }
 
-func (tm *TargetManager) FindTarget(target_id string) *Target {
-    tm.RLock()
-    target := tm.targets[target_id]
-    tm.RUnlock()
-    return &target
-}
+// func (tm *TargetManager) FindTarget(target_id string) *Target {
+//     tm.RLock()
+//     target := tm.targets[target_id]
+//     tm.RUnlock()
+//     return &target
+// }
