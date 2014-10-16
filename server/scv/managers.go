@@ -1,51 +1,51 @@
 package scv
 
-import(
-    "sync"
-    "errors"
+import (
+	"errors"
+	"sync"
 )
 
 // map of tokens to active streams
 type TokenManager struct {
-    sync.RWMutex
-    tokens map[string]*ActiveStream
+	sync.RWMutex
+	tokens map[string]*ActiveStream
 }
 
 func (t *TokenManager) AddToken(token string, stream *ActiveStream) {
-    t.Lock()
-    defer t.Unlock()
-    t.tokens[token] = stream
+	t.Lock()
+	defer t.Unlock()
+	t.tokens[token] = stream
 }
 
 func (t *TokenManager) RemoveToken(token string) {
-    t.Lock()
-    defer t.Unlock()
-    delete(t.tokens, token)
+	t.Lock()
+	defer t.Unlock()
+	delete(t.tokens, token)
 }
 
 func (t *TokenManager) FindStream(token string) (*ActiveStream, error) {
-    t.RLock()
-    defer t.RUnlock()
-    stream, ok := t.tokens[token]
-    if ok {
-        return stream, nil
-    } else {
-        return nil, errors.New("Bad Token")
-    }
+	t.RLock()
+	defer t.RUnlock()
+	stream, ok := t.tokens[token]
+	if ok {
+		return stream, nil
+	} else {
+		return nil, errors.New("Bad Token")
+	}
 }
 
 type TargetManager struct {
-    sync.RWMutex
-    targets      map[string]*Target
-    Tokens TokenManager
+	sync.RWMutex
+	targets map[string]*Target
+	Tokens  TokenManager
 }
 
 func NewTargetManager() *TargetManager {
-    tm := TargetManager{
-        targets: make(map[string]*Target),
-        Tokens: TokenManager{tokens: make(map[string]*ActiveStream)},
-    }
-    return &tm
+	tm := TargetManager{
+		targets: make(map[string]*Target),
+		Tokens:  TokenManager{tokens: make(map[string]*ActiveStream)},
+	}
+	return &tm
 }
 
 // // Does nothing if the target already exists
@@ -60,7 +60,7 @@ func NewTargetManager() *TargetManager {
 //         expirations:      make(chan string),
 //         targetManager:    tm,
 //     }
-//     tm.Unlock() 
+//     tm.Unlock()
 // }
 
 // // Remove target from the manager. Does nothing if the target does not exist

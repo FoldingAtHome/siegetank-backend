@@ -2,42 +2,42 @@ package scv
 
 import (
 	// "fmt"
+	"../util"
 	"errors"
 	"sync"
 	"time"
-	"../util"
 )
 
 type ActiveStream struct {
-    sync.RWMutex
+	sync.RWMutex
 	totalFrames  float32
 	bufferFrames int
 	authToken    string
-	user          string
+	user         string
 	startTime    int
 	frameHash    string
-	engine        string
+	engine       string
 }
 
 type Target struct {
 	CommandQueue
-    inactiveStreams map[string]struct{}
-    activeStreams   map[string]*ActiveStream
+	inactiveStreams map[string]struct{}
+	activeStreams   map[string]*ActiveStream
 	timers          map[string]*time.Timer // map of timers
 	expirations     chan string            // expiration channel for the timers
 	expirationTime  int                    // expiration time in seconds
-    targetManager   *TargetManager
+	targetManager   *TargetManager
 }
 
 func NewTarget(tm *TargetManager) *Target {
 	target := Target{
-		CommandQueue: makeCommandQueue(),
+		CommandQueue:    makeCommandQueue(),
 		activeStreams:   make(map[string]*ActiveStream),
 		inactiveStreams: make(map[string]struct{}),
-		timers:           make(map[string]*time.Timer),
-		expirations:      make(chan string),
-        expirationTime:  600,
-		targetManager:    tm,
+		timers:          make(map[string]*time.Timer),
+		expirations:     make(chan string),
+		expirationTime:  600,
+		targetManager:   tm,
 	}
 	go func() {
 		target.run()
@@ -46,26 +46,26 @@ func NewTarget(tm *TargetManager) *Target {
 }
 
 func (t *Target) AddStream(stream_id string) error {
-	return t.Dispatch(func(){
+	return t.Dispatch(func() {
 		t.inactiveStreams[stream_id] = struct{}{}
 	})
 }
 
 func (t *Target) RemoveStream(stream_id string) error {
-	return t.Dispatch(func(){
+	return t.Dispatch(func() {
 		delete(t.inactiveStreams, stream_id)
 	})
 }
 
 func (t *Target) ActivateStream(user, engine string) (token, stream_id string, err error) {
-	err = t.Dispatch(func(){
+	err = t.Dispatch(func() {
 		for stream_id = range t.inactiveStreams {
 			break
 		}
 		token = util.RandSeq(5)
 		as := &ActiveStream{
-			user:       user,
-			engine:     engine,
+			user:      user,
+			engine:    engine,
 			authToken: token,
 		}
 		t.timers[stream_id] = time.AfterFunc(time.Second*time.Duration(t.expirationTime), func() {
@@ -79,14 +79,14 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 }
 
 func (t *Target) DeactivateStream(stream_id string) error {
-	return t.Dispatch(func(){
+	return t.Dispatch(func() {
 		t.deactivate(stream_id)
 	})
 }
 
 func (t *Target) ActiveStream(stream_id string) (as *ActiveStream, err error) {
 	var ok bool
-	err2 := t.Dispatch(func(){
+	err2 := t.Dispatch(func() {
 		as, ok = t.activeStreams[stream_id]
 	})
 	if err2 != nil {
@@ -125,16 +125,16 @@ func (t *Target) GetInactiveStreams() (copy map[string]struct{}, err error) {
 
 func (t *Target) run() {
 	for {
-        select {
-        	case stream_id := <-t.expirations:
-        		t.deactivate(stream_id)
-            case msg := <-t.commands:
-                msg.fn()
-                msg.wait <- struct{}{}
-            case <- t.finished:
-                return
-        }
-    }
+		select {
+		case stream_id := <-t.expirations:
+			t.deactivate(stream_id)
+		case msg := <-t.commands:
+			msg.fn()
+			msg.wait <- struct{}{}
+		case <-t.finished:
+			return
+		}
+	}
 }
 
 func (target *Target) deactivate(stream_id string) {
