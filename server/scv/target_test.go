@@ -14,15 +14,10 @@ import (
 func TestAddRemoveStream(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
-
-	// uuid := util.RandSeq(36)
-	// target.AddStream(uuid)
-	// time.Sleep(time.Second*5)
-
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
 	stream_indices := make(map[string]struct{})
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -48,6 +43,15 @@ func TestAddRemoveStream(t *testing.T) {
 	removed, _ := target.GetInactiveStreams()
 	assert.Equal(t, removed, make(map[string]struct{}))
 	target.Die()
+}
+
+func TestDie(t *testing.T) {
+	target := NewTarget(NewTargetManager())
+	_, err := target.ActiveStreams()
+	assert.True(t, err == nil)
+	target.Die()
+	_, err = target.ActiveStreams()
+	assert.True(t, err != nil)
 }
 
 func TestActivateStream(t *testing.T) {

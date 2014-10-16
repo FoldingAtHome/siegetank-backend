@@ -133,8 +133,9 @@ func (app *Application) PostStreamHandler() AppHandler {
 		if err != nil {
 			return errors.New("Bad request: " + err.Error())
 		}
-		// target_id = msg.TargetId
+		if target_id == "" {
 
+		}
 		stream_id := util.RandSeq(36)
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
 		for Directory, Content := range todo {

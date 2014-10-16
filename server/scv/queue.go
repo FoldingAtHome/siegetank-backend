@@ -2,7 +2,6 @@ package scv
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 )
 
@@ -37,13 +36,10 @@ func (q *CommandQueue) Die() {
 // Functions to be dispatched must not return anything. Use closures to retrieve data back out.
 func (q *CommandQueue) Dispatch(fn func()) (err error) {
 	msg := _message{fn, make(chan struct{})}
-	fmt.Println("Dispatching", msg)
 	select {
 	case q.commands <- msg:
-		fmt.Println("waiting on result")
 		<-msg.wait
 	case <-q.finished:
-		fmt.Println("???")
 		err = errors.New("No longer accepting new tasks.")
 	}
 	return
