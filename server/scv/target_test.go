@@ -4,7 +4,7 @@ import (
 	//"time"
 	"sync"
 	"testing"
-	// "sort"
+    "../util"	
 	"time"
     // "fmt"
 
@@ -14,14 +14,19 @@ import (
 func TestAddRemoveStream(t *testing.T) {
     tm := NewTargetManager()
     target := NewTarget(tm)
+    
+    // uuid := util.RandSeq(36)
+    // target.AddStream(uuid)
+    // time.Sleep(time.Second*5)
+
     var wg sync.WaitGroup
     var mutex sync.Mutex
     stream_indices := make(map[string]struct{})
-    for i := 0; i < 10; i++ {
+    for i := 0; i < 2; i++ {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            uuid := RandSeq(36)
+            uuid := util.RandSeq(36)
             mutex.Lock()
             stream_indices[uuid] = struct{}{}
             mutex.Unlock()
@@ -42,7 +47,6 @@ func TestAddRemoveStream(t *testing.T) {
     wg.Wait()
     removed, _ := target.GetInactiveStreams()
     assert.Equal(t, removed, make(map[string]struct{}))
-
     target.Die()
 }
 
@@ -52,7 +56,7 @@ func TestActivateStream(t *testing.T) {
 	numStreams := 5
 	for i := 0; i < numStreams; i++ {
         go func() {
-		    uuid := RandSeq(3)
+		    uuid := util.RandSeq(3)
 		    target.AddStream(uuid)
         }()
 	}
@@ -62,15 +66,15 @@ func TestActivateStream(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			// activate a single stream
-			username := RandSeq(5)
-			engine := RandSeq(5)
+			username := util.RandSeq(5)
+			engine := util.RandSeq(5)
 			token, stream_id, err := target.ActivateStream(username, engine)
 			assert.True(t, err == nil)
-			as, err := target.GetActiveStream(stream_id)
+			as, err := target.ActiveStream(stream_id)
 			assert.Equal(t, as.user, username)
 			assert.Equal(t, as.engine, engine)
-            assert.Equal(t, as.auth_token, token)
-			active_streams, err := target.GetActiveStreams()
+            assert.Equal(t, as.authToken, token)
+			active_streams, err := target.ActiveStreams()
 			assert.True(t, err == nil)
 			_, ok := active_streams[stream_id]
             token_stream, err := tm.Tokens.FindStream(token)
@@ -86,7 +90,7 @@ func TestActivateStream(t *testing.T) {
 func TestStreamExpiration(t *testing.T) {
     tm := NewTargetManager()
     target := NewTarget(tm)
-    target.expiration_time = 7
+    target.expirationTime = 7
     numStreams := 3
     // add three streams in intervals of three seconds
     var wg sync.WaitGroup
@@ -94,20 +98,20 @@ func TestStreamExpiration(t *testing.T) {
         wg.Add(1)
         go func() {
             defer wg.Done()
-            stream_id := RandSeq(3)
+            stream_id := util.RandSeq(3)
             target.AddStream(stream_id)
             token, stream_id, err := target.ActivateStream("foo", "bar")
             assert.Equal(t, stream_id, stream_id)
             assert.True(t, err == nil)
-            _, err = target.GetActiveStream(stream_id)
+            _, err = target.ActiveStream(stream_id)
             assert.True(t, err == nil)
             _, err = tm.Tokens.FindStream(token)
             assert.True(t, err == nil)
             inactive_streams, err := target.GetInactiveStreams()
             _, ok := inactive_streams[stream_id]
             assert.False(t, ok)
-            time.Sleep(time.Duration(target.expiration_time+1)*time.Second)
-            _, err = target.GetActiveStream(stream_id)
+            time.Sleep(time.Duration(target.expirationTime+1)*time.Second)
+            _, err = target.ActiveStream(stream_id)
             assert.True(t, err != nil)
             _, err = tm.Tokens.FindStream(token)
             assert.True(t, err != nil)

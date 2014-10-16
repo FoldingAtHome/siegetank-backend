@@ -13,11 +13,13 @@ import(
     "path/filepath"
     "encoding/json"
     "encoding/base64"
-    "./scv"
 
     "gopkg.in/mgo.v2"
     "gopkg.in/mgo.v2/bson"
     "github.com/gorilla/mux"
+
+    // "./scv"
+    "./util"
 )
 
 func DownloadHandler(w http.ResponseWriter, req *http.Request) (err error) {
@@ -35,10 +37,10 @@ func AuthorizeManager(*http.Request) string {
 
 type Application struct {
     Mongo *mgo.Session
-    external_host string
-    data_dir string
-    password string
-    name string
+    ExternalHost string
+    DataDir string
+    Password string
+    Name string
 }
 
 func NewApplication(name string) *Application {
@@ -50,10 +52,10 @@ func NewApplication(name string) *Application {
     fmt.Print("ok")
     app := Application{
         Mongo: session,
-        password: "12345",
-        external_host: "vspg11.stanford.edu",
-        name: name,
-        data_dir: name+"_data",
+        Password: "12345",
+        ExternalHost: "vspg11.stanford.edu",
+        Name: name,
+        DataDir: name+"_data",
     }
     return &app
 }
@@ -90,7 +92,7 @@ func (app *Application) IsManager(user string) bool {
 
 // Return a path indicati
 func (app *Application) StreamDir(stream_id string) string {
-    return filepath.Join(app.data_dir, stream_id)
+    return filepath.Join(app.DataDir, stream_id)
 }
 
 func (app *Application) Run() {
@@ -131,11 +133,10 @@ func (app *Application) PostStreamHandler() AppHandler {
         if err != nil {
             return errors.New("Bad request: "+err.Error())
         }
-       
-        stream_id := scv.RandSeq(36)
-
+        target_id = msg.TargetId
+        if target_id 
+        stream_id := util.RandSeq(36)
         todo := map[string] map[string]string{"files": msg.Files, "tags": msg.Tags}
-            
         for Directory, Content := range todo {
             for filename, fileb64 := range Content {
                 filedata, err := base64.StdEncoding.DecodeString(fileb64)
@@ -150,7 +151,24 @@ func (app *Application) PostStreamHandler() AppHandler {
                 }
             }
         }
-        w.Write([]byte("logged in as: "+ user))
+        type Stream struct {
+            Id string `bson:"_id"`
+            Frames int `bson:"frames"`
+            Status string `bson:"status"`
+            ErrorCount int `bson:"error_count"`
+            CreationDate int `bson:"creation_date"`
+        }
+        stream := Stream{
+            Id: stream_id,
+            Status: "OK",
+            CreationDate: int(time.Now().Unix()),
+        }
+        cursor := app.Mongo.DB("streams").C(app.Name)
+        err = cursor.Insert(stream)
+        if err != nil {
+            os.RemoveAll(app.StreamDir(stream_id))
+            return errors.New("Unable to connect to database.")
+        }
         return
     }
 }
@@ -173,5 +191,15 @@ func main() {
         }
         //fmt.Println(resp.Body, err)
     }
+    //go req("19762704-41c9-4752-9aaa-802098ffa02e")
+
+    jsonData1 := `{"target_id":"12345", "files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+    jsonData2 := `{"target_id":"12345",
+                   "files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="},
+                   "tags": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+    // jsonData3 := `{"target_id":"12345", "files": "foo", "tags": {"oh": "wow"}}`
+    go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData1)
+    go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData2)
+    // go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData3)
     app.Run()
 }
