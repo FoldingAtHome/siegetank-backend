@@ -1,7 +1,6 @@
-package main
+package scv
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -18,8 +17,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	// "./scv"
-	"./util"
+	"../util"
 )
 
 func DownloadHandler(w http.ResponseWriter, req *http.Request) (err error) {
@@ -41,6 +39,7 @@ type Application struct {
 	DataDir      string
 	Password     string
 	Name         string
+	TM           *TargetManager
 }
 
 func NewApplication(name string) *Application {
@@ -56,6 +55,7 @@ func NewApplication(name string) *Application {
 		ExternalHost: "vspg11.stanford.edu",
 		Name:         name,
 		DataDir:      name + "_data",
+		TM:           NewTargetManager(),
 	}
 	return &app
 }
@@ -90,7 +90,7 @@ func (app *Application) IsManager(user string) bool {
 	}
 }
 
-// Return a path indicati
+// Return a path indicating where stream files should be stored
 func (app *Application) StreamDir(stream_id string) string {
 	return filepath.Join(app.DataDir, stream_id)
 }
@@ -109,10 +109,21 @@ func (app *Application) Run() {
 func (app *Application) PostStreamHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		/*:
-		  -Validate Authorization token in the header.
-		  -Validate that the requesting user is a manager.
-		  -Write the data to disk.
-		  -Record stream statistics in MongoDB.
+			-Validate Authorization token in the header.
+			-Write the data to disk.
+			-Validate that the requesting user is a manager.
+			-Record stream statistics in MongoDB.
+
+		        {
+		            "target_id": "target_id",
+		            "files": {"system.xml.gz.b64": "file1.b64",
+		                "integrator.xml.gz.b64": "file2.b64",
+		                "state.xml.gz.b64": "file3.b64"
+		            }
+		            "tags": {
+		                "pdb.gz.b64": "file4.b64",
+		            } // optional
+		        }
 		*/
 		user, err := app.CurrentUser(r)
 		if err != nil {
@@ -132,9 +143,6 @@ func (app *Application) PostStreamHandler() AppHandler {
 		err = decoder.Decode(&msg)
 		if err != nil {
 			return errors.New("Bad request: " + err.Error())
-		}
-		if target_id == "" {
-
 		}
 		stream_id := util.RandSeq(36)
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
@@ -168,39 +176,10 @@ func (app *Application) PostStreamHandler() AppHandler {
 		err = cursor.Insert(stream)
 		if err != nil {
 			os.RemoveAll(app.StreamDir(stream_id))
-			return errors.New("Unable to connect to database.")
+			return errors.New("Unable insert stream into DB")
 		}
+		// Does nothing if the target already exists.
+		app.TM.AddStreamToTarget(msg.TargetId, stream_id)
 		return
 	}
-}
-
-func main() {
-	app := NewApplication("vspg11")
-	req := func(token string, jsonData string) {
-		time.Sleep(3 * time.Second)
-		client := &http.Client{}
-		dataBuffer := bytes.NewBuffer([]byte(jsonData))
-		req, _ := http.NewRequest("POST", "http://127.0.0.1:12345/streams/982034859", dataBuffer)
-		req.Header.Add("Authorization", token)
-		resp, err := client.Do(req)
-		if err != nil {
-			panic(err)
-		} else {
-			defer resp.Body.Close()
-			data, _ := ioutil.ReadAll(resp.Body)
-			fmt.Println(string(data))
-		}
-		//fmt.Println(resp.Body, err)
-	}
-	//go req("19762704-41c9-4752-9aaa-802098ffa02e")
-
-	jsonData1 := `{"target_id":"12345", "files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-	jsonData2 := `{"target_id":"12345",
-                   "files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="},
-                   "tags": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-	// jsonData3 := `{"target_id":"12345", "files": "foo", "tags": {"oh": "wow"}}`
-	go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData1)
-	go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData2)
-	// go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData3)
-	app.Run()
 }
