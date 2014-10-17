@@ -53,10 +53,6 @@ func main() {
 	// go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData3)
 	go app.Run()
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
-	<-c
-	app.Mongo.Close()
 	os.RemoveAll(app.Name + "_data")
 
 }

@@ -106,6 +106,13 @@ func (app *Application) Run() {
 	}
 }
 
+func (app *Application) Shutdown() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill)
+	<-c
+	app.Mongo.Close()
+}
+
 func (app *Application) PostStreamHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		/*:
