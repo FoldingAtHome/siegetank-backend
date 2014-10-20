@@ -22,7 +22,6 @@ import (
 )
 
 func DownloadHandler(w http.ResponseWriter, req *http.Request) (err error) {
-	fmt.Println("processing request...")
 	time.Sleep(time.Duration(10) * time.Second)
 	io.WriteString(w, "hello, "+mux.Vars(req)["file"]+"!\n")
 	return
@@ -41,6 +40,7 @@ type Application struct {
 	Password     string
 	Name         string
 	TM           *TargetManager
+	Router       *mux.Router
 
 	server   *Server
 	shutdown chan os.Signal
@@ -52,7 +52,7 @@ func NewApplication(name string) *Application {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Print("ok")
+	fmt.Println("ok")
 	app := Application{
 		Mongo:        session,
 		Password:     "12345",
@@ -62,10 +62,11 @@ func NewApplication(name string) *Application {
 		TM:           NewTargetManager(),
 	}
 
-	r := mux.NewRouter()
-	r.Handle("/streams/{stream_id}", app.PostStreamHandler()).Methods("POST")
+	app.Router = mux.NewRouter()
+	app.Router.Handle("/streams", app.PostStreamHandler()).Methods("POST")
+	app.Router.Handle("/streams/info/{stream_id}", app.GetStreamInfoHandler()).Methods("GET")
 
-	app.server = NewServer("127.0.0.1:12345", r)
+	app.server = NewServer("127.0.0.1:12345", app.Router)
 
 	return &app
 }
@@ -126,6 +127,15 @@ func (app *Application) Shutdown() {
 	app.Mongo.Close()
 }
 
+type mongoStream struct {
+	Id           string  `bson:"_id"`
+	Status       string  `bson:"status",json:"status"`
+	Frames       float32 `bson:"frames",json:"frames"`
+	ErrorCount   int     `bson:"error_count",json:"error_count"`
+	Active       bool    `bson:"active",json:"active"`
+	CreationDate int     `bson:"creation_date"`
+}
+
 func (app *Application) PostStreamHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		/*:
@@ -181,16 +191,11 @@ func (app *Application) PostStreamHandler() AppHandler {
 				}
 			}
 		}
-		type Stream struct {
-			Id           string `bson:"_id"`
-			Frames       int    `bson:"frames"`
-			Status       string `bson:"status"`
-			ErrorCount   int    `bson:"error_count"`
-			CreationDate int    `bson:"creation_date"`
-		}
-		stream := Stream{
+		stream := mongoStream{
 			Id:           stream_id,
 			Status:       "OK",
+			Frames:       0,
+			ErrorCount:   0,
 			CreationDate: int(time.Now().Unix()),
 		}
 		cursor := app.Mongo.DB("streams").C(app.Name)
@@ -201,6 +206,23 @@ func (app *Application) PostStreamHandler() AppHandler {
 		}
 		// Does nothing if the target already exists.
 		app.TM.AddStreamToTarget(msg.TargetId, stream_id)
+		data, _ := json.Marshal(map[string]string{"stream_id": stream_id})
+		w.Write(data)
+		return
+	}
+}
+
+func (app *Application) GetStreamInfoHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		cursor := app.Mongo.DB("streams").C(app.Name)
+		msg := mongoStream{}
+		stream_id := mux.Vars(r)["stream_id"]
+		merr := cursor.Find(bson.M{"_id": stream_id}).Select(bson.M{"_id": 0}).One(&msg)
+		if merr != nil {
+			return errors.New("Unable to load stream from DB"), 400
+		}
+		data, _ := json.Marshal(msg)
+		w.Write(data)
 		return
 	}
 }
