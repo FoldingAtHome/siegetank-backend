@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"time"
 
@@ -40,6 +41,9 @@ type Application struct {
 	Password     string
 	Name         string
 	TM           *TargetManager
+
+	server   *Server
+	shutdown chan os.Signal
 }
 
 func NewApplication(name string) *Application {
@@ -57,14 +61,20 @@ func NewApplication(name string) *Application {
 		DataDir:      name + "_data",
 		TM:           NewTargetManager(),
 	}
+
+	r := mux.NewRouter()
+	r.Handle("/streams/{stream_id}", app.PostStreamHandler()).Methods("POST")
+
+	app.server = NewServer("127.0.0.1:12345", r)
+
 	return &app
 }
 
-type AppHandler func(http.ResponseWriter, *http.Request) error
+type AppHandler func(http.ResponseWriter, *http.Request) (error, int)
 
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err := fn(w, r); err != nil {
-		http.Error(w, err.Error(), 500)
+	if err, code := fn(w, r); err != nil {
+		http.Error(w, err.Error(), code)
 	}
 }
 
@@ -95,26 +105,29 @@ func (app *Application) StreamDir(stream_id string) string {
 	return filepath.Join(app.DataDir, stream_id)
 }
 
+// Run starts the server. Listens and Serves asynchronously. And sets up necessary
+// signal handlers for graceful termination. This blocks until a signal is sent
 func (app *Application) Run() {
-	r := mux.NewRouter()
-	r.Handle("/streams/{stream_id}", app.PostStreamHandler()).Methods("POST")
-
-	http.Handle("/", r)
-	err := http.ListenAndServe(":12345", nil)
-	if err != nil {
-		log.Fatal("ListenAndServe: ", err)
-	}
-}
-
-func (app *Application) Shutdown() {
+	go func() {
+		err := app.server.ListenAndServe()
+		if err != nil {
+			log.Println("ListenAndServe: ", err)
+		}
+	}()
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)
 	<-c
+	app.Shutdown()
+}
+
+func (app *Application) Shutdown() {
+	// Order matters.
+	app.server.Close()
 	app.Mongo.Close()
 }
 
 func (app *Application) PostStreamHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error) {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		/*:
 			-Validate Authorization token in the header.
 			-Write the data to disk.
@@ -133,12 +146,13 @@ func (app *Application) PostStreamHandler() AppHandler {
 		        }
 		*/
 		user, err := app.CurrentUser(r)
+
 		if err != nil {
-			return errors.New("Unable to find user.")
+			return errors.New("Unable to find user."), 401
 		}
 		isManager := app.IsManager(user)
 		if isManager == false {
-			return errors.New("Unauthorized.")
+			return errors.New("Not a manager."), 401
 		}
 		type Message struct {
 			TargetId string            `json:"target_id"`
@@ -149,7 +163,7 @@ func (app *Application) PostStreamHandler() AppHandler {
 		decoder := json.NewDecoder(r.Body)
 		err = decoder.Decode(&msg)
 		if err != nil {
-			return errors.New("Bad request: " + err.Error())
+			return errors.New("Bad request: " + err.Error()), 400
 		}
 		stream_id := util.RandSeq(36)
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
@@ -157,13 +171,13 @@ func (app *Application) PostStreamHandler() AppHandler {
 			for filename, fileb64 := range Content {
 				filedata, err := base64.StdEncoding.DecodeString(fileb64)
 				if err != nil {
-					return errors.New("Unable to decode file")
+					return errors.New("Unable to decode file"), 400
 				}
 				files_dir := filepath.Join(app.StreamDir(stream_id), Directory)
 				os.MkdirAll(files_dir, 0776)
 				err = ioutil.WriteFile(filepath.Join(files_dir, filename), filedata, 0776)
 				if err != nil {
-					return err
+					return err, 400
 				}
 			}
 		}
@@ -183,7 +197,7 @@ func (app *Application) PostStreamHandler() AppHandler {
 		err = cursor.Insert(stream)
 		if err != nil {
 			os.RemoveAll(app.StreamDir(stream_id))
-			return errors.New("Unable insert stream into DB")
+			return errors.New("Unable insert stream into DB"), 400
 		}
 		// Does nothing if the target already exists.
 		app.TM.AddStreamToTarget(msg.TargetId, stream_id)
