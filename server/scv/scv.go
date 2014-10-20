@@ -34,34 +34,36 @@ func AuthorizeManager(*http.Request) string {
 }
 
 type Application struct {
-	Mongo        *mgo.Session
-	ExternalHost string
-	DataDir      string
-	Password     string
-	Name         string
-	TM           *TargetManager
-	Router       *mux.Router
+	Config Configuration
+	Mongo  *mgo.Session
+	TM     *TargetManager
+	Router *mux.Router
 
 	server   *Server
 	shutdown chan os.Signal
 }
 
-func NewApplication(name string) *Application {
+// SSL stuff later
+type Configuration struct {
+	MongoURI     string
+	Name         string
+	Password     string
+	ExternalHost string
+	InternalHost string
+}
+
+func NewApplication(config Configuration) *Application {
 	fmt.Print("Connecting to database... ")
-	session, err := mgo.Dial("localhost:27017")
+	session, err := mgo.Dial(config.MongoURI)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("ok")
 	app := Application{
-		Mongo:        session,
-		Password:     "12345",
-		ExternalHost: "vspg11.stanford.edu",
-		Name:         name,
-		DataDir:      name + "_data",
-		TM:           NewTargetManager(),
+		Config: config,
+		Mongo:  session,
+		TM:     NewTargetManager(),
 	}
-
 	app.Router = mux.NewRouter()
 	app.Router.Handle("/streams", app.PostStreamHandler()).Methods("POST")
 	app.Router.Handle("/streams/info/{stream_id}", app.GetStreamInfoHandler()).Methods("GET")
@@ -103,7 +105,7 @@ func (app *Application) IsManager(user string) bool {
 
 // Return a path indicating where stream files should be stored
 func (app *Application) StreamDir(stream_id string) string {
-	return filepath.Join(app.DataDir, stream_id)
+	return filepath.Join(app.Config.Name+"_data", stream_id)
 }
 
 // Run starts the server. Listens and Serves asynchronously. And sets up necessary
@@ -136,25 +138,18 @@ type mongoStream struct {
 	CreationDate int     `bson:"creation_date"`
 }
 
+func (app *Application) StreamActivateHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		token := r.Header.Get("Authorization")
+		if token != app.Config.Password {
+			return errors.New("Unauthorized"), 401
+		}
+		return
+	}
+}
+
 func (app *Application) PostStreamHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-		/*:
-			-Validate Authorization token in the header.
-			-Write the data to disk.
-			-Validate that the requesting user is a manager.
-			-Record stream statistics in MongoDB.
-
-		        {
-		            "target_id": "target_id",
-		            "files": {"system.xml.gz.b64": "file1.b64",
-		                "integrator.xml.gz.b64": "file2.b64",
-		                "state.xml.gz.b64": "file3.b64"
-		            }
-		            "tags": {
-		                "pdb.gz.b64": "file4.b64",
-		            } // optional
-		        }
-		*/
 		user, err := app.CurrentUser(r)
 
 		if err != nil {
@@ -198,7 +193,7 @@ func (app *Application) PostStreamHandler() AppHandler {
 			ErrorCount:   0,
 			CreationDate: int(time.Now().Unix()),
 		}
-		cursor := app.Mongo.DB("streams").C(app.Name)
+		cursor := app.Mongo.DB("streams").C(app.Config.Name)
 		err = cursor.Insert(stream)
 		if err != nil {
 			os.RemoveAll(app.StreamDir(stream_id))
@@ -214,7 +209,7 @@ func (app *Application) PostStreamHandler() AppHandler {
 
 func (app *Application) GetStreamInfoHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-		cursor := app.Mongo.DB("streams").C(app.Name)
+		cursor := app.Mongo.DB("streams").C(app.Config.Name)
 		msg := mongoStream{}
 		stream_id := mux.Vars(r)["stream_id"]
 		merr := cursor.Find(bson.M{"_id": stream_id}).Select(bson.M{"_id": 0}).One(&msg)

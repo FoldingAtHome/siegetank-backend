@@ -25,7 +25,7 @@ type Target struct {
 	activeStreams   map[string]*ActiveStream
 	timers          map[string]*time.Timer // map of timers
 	expirations     chan string            // expiration channel for the timers
-	expirationTime  int                    // expiration time in seconds
+	ExpirationTime  int                    // expiration time in seconds
 	targetManager   *TargetManager
 }
 
@@ -36,7 +36,7 @@ func NewTarget(tm *TargetManager) *Target {
 		inactiveStreams: make(map[string]struct{}),
 		timers:          make(map[string]*time.Timer),
 		expirations:     make(chan string),
-		expirationTime:  600,
+		ExpirationTime:  600,
 		targetManager:   tm,
 	}
 	go func() {
@@ -68,7 +68,7 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 			engine:    engine,
 			authToken: token,
 		}
-		t.timers[stream_id] = time.AfterFunc(time.Second*time.Duration(t.expirationTime), func() {
+		t.timers[stream_id] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
 			t.expirations <- stream_id
 		})
 		t.activeStreams[stream_id] = as

@@ -94,7 +94,7 @@ func TestActivateStream(t *testing.T) {
 func TestStreamExpiration(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
-	target.expirationTime = 7
+	target.ExpirationTime = 7
 	numStreams := 3
 	// add three streams in intervals of three seconds
 	var wg sync.WaitGroup
@@ -114,7 +114,7 @@ func TestStreamExpiration(t *testing.T) {
 			inactive_streams, err := target.GetInactiveStreams()
 			_, ok := inactive_streams[stream_id]
 			assert.False(t, ok)
-			time.Sleep(time.Duration(target.expirationTime+1) * time.Second)
+			time.Sleep(time.Duration(target.ExpirationTime+1) * time.Second)
 			_, err = target.ActiveStream(stream_id)
 			assert.True(t, err != nil)
 			_, err = tm.Tokens.FindStream(token)

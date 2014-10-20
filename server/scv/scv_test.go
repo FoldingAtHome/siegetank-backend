@@ -41,8 +41,15 @@ func (f *Fixture) addManager(user string, weight int) (token string) {
 }
 
 func NewFixture() *Fixture {
+	config := Configuration{
+		MongoURI:     "localhost:27017",
+		Name:         "testServer",
+		Password:     "hello",
+		ExternalHost: "alexis.stanford.edu",
+		InternalHost: "127.0.0.1",
+	}
 	f := Fixture{
-		app: NewApplication("testServer"),
+		app: NewApplication(config),
 	}
 	db_names, _ := f.app.Mongo.DatabaseNames()
 	for _, name := range db_names {
