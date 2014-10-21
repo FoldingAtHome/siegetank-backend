@@ -1,9 +1,9 @@
 package scv
 
 import (
-	// "fmt"
 	"../util"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -61,6 +61,13 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 	err = t.Dispatch(func() {
 		for stream_id = range t.inactiveStreams {
 			break
+		}
+
+		// what happens if stream_id is nil??
+
+		if stream_id == "" {
+
+			return
 		}
 		token = util.RandSeq(5)
 		as := &ActiveStream{
