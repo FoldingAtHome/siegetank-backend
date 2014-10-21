@@ -152,13 +152,6 @@ func (app *Application) StreamActivateHandler() AppHandler {
 		if target == nil {
 			return errors.New("Target does not exist: " + msg.TargetId), 400
 		}
-		if msg.User == "guy" {
-			fmt.Println("DETECTION")
-			res, err := target.GetInactiveStreams()
-			fmt.Println("Inactive Streams: ", res, err)
-			res, err = target.ActiveStreams()
-			fmt.Println("Active Streams: ", res, err)
-		}
 		token, _, err := target.ActivateStream(msg.User, msg.Engine)
 		if err != nil {
 			return errors.New("Unable to activate stream: " + err.Error()), 400

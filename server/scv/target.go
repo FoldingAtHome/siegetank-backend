@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+var _ = fmt.Printf
+
 type ActiveStream struct {
 	sync.RWMutex
 	totalFrames  float32
@@ -58,18 +60,16 @@ func (t *Target) RemoveStream(stream_id string) error {
 }
 
 func (t *Target) ActivateStream(user, engine string) (token, stream_id string, err error) {
-	err = t.Dispatch(func() {
+	err2 := t.Dispatch(func() {
+		// TODO: Change to a queue
 		for stream_id = range t.inactiveStreams {
 			break
 		}
-
-		// what happens if stream_id is nil??
-
 		if stream_id == "" {
-
+			err = errors.New("No streams can be activated.")
 			return
 		}
-		token = util.RandSeq(5)
+		token = util.RandSeq(36)
 		as := &ActiveStream{
 			user:      user,
 			engine:    engine,
@@ -82,6 +82,13 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 		t.targetManager.Tokens.AddToken(token, as)
 		delete(t.inactiveStreams, stream_id)
 	})
+	if err2 != nil {
+		err = err2
+		return
+	}
+	if err != nil {
+		return
+	}
 	return
 }
 

@@ -91,6 +91,20 @@ func TestActivateStream(t *testing.T) {
 	target.Die()
 }
 
+func TestEmptyActivation(t *testing.T) {
+	tm := NewTargetManager()
+	target := NewTarget(tm)
+	numStreams := 3
+	for i := 0; i < numStreams; i++ {
+		stream_id := util.RandSeq(3)
+		target.AddStream(stream_id)
+		_, _, err := target.ActivateStream("foo", "bar")
+		assert.True(t, err == nil)
+	}
+	_, _, err := target.ActivateStream("foo", "bar")
+	assert.True(t, err != nil)
+}
+
 func TestStreamExpiration(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)

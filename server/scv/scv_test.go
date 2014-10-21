@@ -206,34 +206,34 @@ func TestPostStreamAsync(t *testing.T) {
 	wg.Wait()
 }
 
-// func TestFaultyStreamActivation(t *testing.T) {
-// 	f := NewFixture()
-// 	defer f.shutdown()
-// 	token := f.addManager("yutong", 1)
-// 	var mu sync.Mutex
-// 	stream_ids := make([]string, 10, 10)
-// 	var wg sync.WaitGroup
-// 	target_id := "123456"
-// 	for i := 0; i < 10; i++ {
-// 		wg.Add(1)
-// 		go func() {
-// 			jsonData := `{"target_id":"` + target_id + `",
-// 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
-// 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-// 			stream_id, code := f.postStream(token, jsonData)
-// 			mu.Lock()
-// 			stream_ids = append(stream_ids, stream_id)
-// 			mu.Unlock()
-// 			assert.Equal(t, code, 200)
-// 			wg.Done()
-// 		}()
-// 	}
-// 	wg.Wait()
-// 	_, code := f.activateStream(target_id, "a", "b", "bad_pass")
-// 	assert.Equal(t, code, 401)
-// 	_, code = f.activateStream("54321", "a", "b", f.app.Config.Password)
-// 	assert.Equal(t, code, 400)
-// }
+func TestFaultyStreamActivation(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	var mu sync.Mutex
+	stream_ids := make([]string, 10, 10)
+	var wg sync.WaitGroup
+	target_id := "123456"
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+			stream_id, code := f.postStream(token, jsonData)
+			mu.Lock()
+			stream_ids = append(stream_ids, stream_id)
+			mu.Unlock()
+			assert.Equal(t, code, 200)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	_, code := f.activateStream(target_id, "a", "b", "bad_pass")
+	assert.Equal(t, code, 401)
+	_, code = f.activateStream("54321", "a", "b", f.app.Config.Password)
+	assert.Equal(t, code, 400)
+}
 
 func TestStreamActivation(t *testing.T) {
 	f := NewFixture()
