@@ -217,7 +217,7 @@ func (app *Application) StreamsHandler() AppHandler {
 			return errors.New("Unable insert stream into DB"), 400
 		}
 		// Does nothing if the target already exists.
-		app.TM.AddStreamToTarget(msg.TargetId, stream_id)
+		app.TM.AddStreamToTarget(msg.TargetId, stream_id, 0)
 		data, _ := json.Marshal(map[string]string{"stream_id": stream_id})
 		w.Write(data)
 		return

@@ -2,6 +2,7 @@ package scv
 
 import (
 	"../util"
+	"container/heap"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,8 +13,9 @@ var _ = fmt.Printf
 
 type ActiveStream struct {
 	sync.RWMutex
-	totalFrames  float32
-	bufferFrames int
+	entireFrames float32 // number of frames across all donors
+	totalFrames  float32 // number of frames done by this donor
+	bufferFrames int     // number of frames stored in the buffer
 	authToken    string
 	user         string
 	startTime    int
@@ -23,7 +25,7 @@ type ActiveStream struct {
 
 type Target struct {
 	CommandQueue
-	inactiveStreams map[string]struct{}
+	inactiveStreams PriorityQueue
 	activeStreams   map[string]*ActiveStream
 	timers          map[string]*time.Timer // map of timers
 	expirations     chan string            // expiration channel for the timers
@@ -34,35 +36,42 @@ type Target struct {
 func NewTarget(tm *TargetManager) *Target {
 	target := Target{
 		CommandQueue:    makeCommandQueue(),
+		inactiveStreams: make(PriorityQueue, 0),
 		activeStreams:   make(map[string]*ActiveStream),
-		inactiveStreams: make(map[string]struct{}),
 		timers:          make(map[string]*time.Timer),
 		expirations:     make(chan string),
 		ExpirationTime:  600,
 		targetManager:   tm,
 	}
+	heap.Init(&target.inactiveStreams)
 	go func() {
 		target.run()
 	}()
 	return &target
 }
 
-func (t *Target) AddStream(stream_id string) error {
+func (t *Target) AddStream(stream_id string, weight float32) error {
 	return t.Dispatch(func() {
-		t.inactiveStreams[stream_id] = struct{}{}
+		item := &QueueItem{
+			value:    stream_id,
+			priority: weight,
+		}
+		heap.Push(&t.inactiveStreams, item)
 	})
 }
 
 func (t *Target) RemoveStream(stream_id string) error {
 	return t.Dispatch(func() {
-		delete(t.inactiveStreams, stream_id)
+		t.deactivate(stream_id)
+		heap.Pop(&t.inactiveStreams)
 	})
 }
 
 func (t *Target) ActivateStream(user, engine string) (token, stream_id string, err error) {
 	err2 := t.Dispatch(func() {
 		// TODO: Change to a queue
-		for stream_id = range t.inactiveStreams {
+		for _, qItem := range t.inactiveStreams {
+			stream_id = qItem.value
 			break
 		}
 		if stream_id == "" {
@@ -80,7 +89,7 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 		})
 		t.activeStreams[stream_id] = as
 		t.targetManager.Tokens.AddToken(token, as)
-		delete(t.inactiveStreams, stream_id)
+		heap.Pop(&t.inactiveStreams)
 	})
 	if err2 != nil {
 		err = err2
@@ -127,11 +136,11 @@ func (t *Target) ActiveStreams() (copy map[string]struct{}, err error) {
 
 // Returns a copy. Adding to this map will not affect the actual map used by
 // the target since maps are not goroutine safe.
-func (t *Target) GetInactiveStreams() (copy map[string]struct{}, err error) {
+func (t *Target) InactiveStreams() (copy map[string]struct{}, err error) {
 	copy = make(map[string]struct{})
 	err = t.Dispatch(func() {
-		for k, v := range t.inactiveStreams {
-			copy[k] = v
+		for _, item := range t.inactiveStreams {
+			copy[item.value] = struct{}{}
 		}
 	})
 	return copy, err
@@ -155,8 +164,12 @@ func (target *Target) deactivate(stream_id string) {
 	prop, ok := target.activeStreams[stream_id]
 	if ok {
 		target.targetManager.Tokens.RemoveToken(prop.authToken)
+		item := &QueueItem{
+			value:    stream_id,
+			priority: target.activeStreams[stream_id].entireFrames,
+		}
 		delete(target.activeStreams, stream_id)
-		target.inactiveStreams[stream_id] = struct{}{}
+		heap.Push(&target.inactiveStreams, item)
 		delete(target.timers, stream_id)
 	}
 }

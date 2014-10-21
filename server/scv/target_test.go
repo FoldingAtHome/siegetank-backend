@@ -11,6 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TODO: Add test for deleting an active stream
+// TODO: Add test for priority queue
+
 func TestAddRemoveStream(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
@@ -25,11 +28,11 @@ func TestAddRemoveStream(t *testing.T) {
 			mutex.Lock()
 			stream_indices[uuid] = struct{}{}
 			mutex.Unlock()
-			target.AddStream(uuid)
+			target.AddStream(uuid, 0)
 		}()
 	}
 	wg.Wait()
-	myMap, _ := target.GetInactiveStreams()
+	myMap, _ := target.InactiveStreams()
 	assert.Equal(t, myMap, stream_indices)
 
 	for key, _ := range stream_indices {
@@ -40,7 +43,7 @@ func TestAddRemoveStream(t *testing.T) {
 		}(key)
 	}
 	wg.Wait()
-	removed, _ := target.GetInactiveStreams()
+	removed, _ := target.InactiveStreams()
 	assert.Equal(t, removed, make(map[string]struct{}))
 	target.Die()
 }
@@ -61,7 +64,7 @@ func TestActivateStream(t *testing.T) {
 	for i := 0; i < numStreams; i++ {
 		go func() {
 			uuid := util.RandSeq(3)
-			target.AddStream(uuid)
+			target.AddStream(uuid, 0)
 		}()
 	}
 	var wg sync.WaitGroup
@@ -97,7 +100,7 @@ func TestEmptyActivation(t *testing.T) {
 	numStreams := 3
 	for i := 0; i < numStreams; i++ {
 		stream_id := util.RandSeq(3)
-		target.AddStream(stream_id)
+		target.AddStream(stream_id, 0)
 		_, _, err := target.ActivateStream("foo", "bar")
 		assert.True(t, err == nil)
 	}
@@ -117,7 +120,7 @@ func TestStreamExpiration(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			stream_id := util.RandSeq(3)
-			target.AddStream(stream_id)
+			target.AddStream(stream_id, 0)
 			token, stream_id, err := target.ActivateStream("foo", "bar")
 			assert.Equal(t, stream_id, stream_id)
 			assert.True(t, err == nil)
@@ -125,7 +128,7 @@ func TestStreamExpiration(t *testing.T) {
 			assert.True(t, err == nil)
 			_, err = tm.Tokens.FindStream(token)
 			assert.True(t, err == nil)
-			inactive_streams, err := target.GetInactiveStreams()
+			inactive_streams, err := target.InactiveStreams()
 			_, ok := inactive_streams[stream_id]
 			assert.False(t, ok)
 			time.Sleep(time.Duration(target.ExpirationTime+1) * time.Second)
@@ -133,7 +136,7 @@ func TestStreamExpiration(t *testing.T) {
 			assert.True(t, err != nil)
 			_, err = tm.Tokens.FindStream(token)
 			assert.True(t, err != nil)
-			inactive_streams, err = target.GetInactiveStreams()
+			inactive_streams, err = target.InactiveStreams()
 			_, ok = inactive_streams[stream_id]
 			assert.True(t, ok)
 		}()
