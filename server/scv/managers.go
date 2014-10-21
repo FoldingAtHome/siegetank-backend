@@ -49,7 +49,7 @@ func NewTargetManager() *TargetManager {
 }
 
 // Add stream to a given target. If the target does not exist, then it is created.
-func (tm *TargetManager) AddStreamToTarget(target_id string, stream_id string, frames float32) {
+func (tm *TargetManager) AddStreamToTarget(target_id string, stream_id string, frames float64) {
 	tm.Lock()
 	if _, ok := tm.targets[target_id]; ok == false {
 		tm.targets[target_id] = NewTarget(tm)

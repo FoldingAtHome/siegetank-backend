@@ -13,8 +13,8 @@ var _ = fmt.Printf
 
 type ActiveStream struct {
 	sync.RWMutex
-	entireFrames float32 // number of frames across all donors
-	totalFrames  float32 // number of frames done by this donor
+	entireFrames float64 // number of frames across all donors
+	totalFrames  float64 // number of frames done by this donor
 	bufferFrames int     // number of frames stored in the buffer
 	authToken    string
 	user         string
@@ -50,7 +50,7 @@ func NewTarget(tm *TargetManager) *Target {
 	return &target
 }
 
-func (t *Target) AddStream(stream_id string, weight float32) error {
+func (t *Target) AddStream(stream_id string, weight float64) error {
 	return t.Dispatch(func() {
 		item := &QueueItem{
 			value:    stream_id,

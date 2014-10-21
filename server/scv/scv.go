@@ -126,7 +126,7 @@ func (app *Application) Shutdown() {
 type mongoStream struct {
 	Id           string  `bson:"_id"`
 	Status       string  `bson:"status",json:"status"`
-	Frames       float32 `bson:"frames",json:"frames"`
+	Frames       float64 `bson:"frames",json:"frames"`
 	ErrorCount   int     `bson:"error_count",json:"error_count"`
 	Active       bool    `bson:"active",json:"active"`
 	CreationDate int     `bson:"creation_date"`

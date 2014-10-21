@@ -3,13 +3,16 @@ package scv
 import (
 	//"time"
 	"../util"
+	// "sort"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
-	// "fmt"
 
 	"github.com/stretchr/testify/assert"
 )
+
+var _ = fmt.Printf
 
 // TODO: Add test for deleting an active stream
 // TODO: Add test for priority queue
@@ -61,13 +64,16 @@ func TestActivateStream(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
 	numStreams := 5
+	add_order := make([]string, 0)
 	for i := 0; i < numStreams; i++ {
-		go func() {
-			uuid := util.RandSeq(3)
-			target.AddStream(uuid, 0)
-		}()
+		uuid := util.RandSeq(3)
+		target.AddStream(uuid, float64(i))
+		add_order = append(add_order, uuid)
 	}
+	var mu sync.Mutex
 	var wg sync.WaitGroup
+	activation_order := make([]string, 0)
+	// we need to make sure that the activation order is correct.
 	for i := 0; i < numStreams; i++ {
 		wg.Add(1)
 		go func() {
@@ -76,6 +82,9 @@ func TestActivateStream(t *testing.T) {
 			username := util.RandSeq(5)
 			engine := util.RandSeq(5)
 			token, stream_id, err := target.ActivateStream(username, engine)
+			mu.Lock()
+			activation_order = append(activation_order, stream_id)
+			mu.Unlock()
 			assert.True(t, err == nil)
 			as, err := target.ActiveStream(stream_id)
 			assert.Equal(t, as.user, username)
@@ -91,6 +100,12 @@ func TestActivateStream(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	s := add_order
+	// activation_order should be equivalent to the reversed add_order
+	for i, j := 0, len(s)-1; i < len(s); i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+	assert.Equal(t, add_order, s)
 	target.Die()
 }
 
