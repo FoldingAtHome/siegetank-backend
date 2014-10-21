@@ -15,8 +15,6 @@ import (
 var _ = fmt.Printf
 
 // TODO: Add test for deleting an active stream
-// TODO: Add test for priority queue
-
 func TestAddRemoveStream(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
@@ -100,12 +98,21 @@ func TestActivateStream(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	s := add_order
 	// activation_order should be equivalent to the reversed add_order
-	for i, j := 0, len(s)-1; i < len(s); i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
+	for i, j := 0, len(add_order)-1; i < j; i, j = i+1, j-1 {
+		add_order[i], add_order[j] = add_order[j], add_order[i]
 	}
-	assert.Equal(t, add_order, s)
+	assert.Equal(t, add_order, activation_order)
+	// deactivate the highest stream and make sure the priority is carried over
+	best_stream := activation_order[0]
+	target.DeactivateStream(best_stream)
+	cop, _ := target.InactiveStreams()
+	_, ok := cop[best_stream]
+	assert.True(t, ok)
+	cop, _ = target.ActiveStreams()
+	_, ok = cop[best_stream]
+	assert.False(t, ok)
+	assert.Equal(t, target.inactiveStreams[0].priority, float64(numStreams-1))
 	target.Die()
 }
 

@@ -69,9 +69,10 @@ func (t *Target) RemoveStream(stream_id string) error {
 
 func (t *Target) ActivateStream(user, engine string) (token, stream_id string, err error) {
 	err2 := t.Dispatch(func() {
-		// TODO: Change to a queue
+		var entireFrames float64
 		for _, qItem := range t.inactiveStreams {
 			stream_id = qItem.value
+			entireFrames = qItem.priority
 			break
 		}
 		if stream_id == "" {
@@ -80,9 +81,10 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 		}
 		token = util.RandSeq(36)
 		as := &ActiveStream{
-			user:      user,
-			engine:    engine,
-			authToken: token,
+			user:         user,
+			engine:       engine,
+			authToken:    token,
+			entireFrames: entireFrames,
 		}
 		t.timers[stream_id] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
 			t.expirations <- stream_id
@@ -168,6 +170,8 @@ func (target *Target) deactivate(stream_id string) {
 			value:    stream_id,
 			priority: target.activeStreams[stream_id].entireFrames,
 		}
+
+		fmt.Println("deactivating stream_id", item)
 		delete(target.activeStreams, stream_id)
 		heap.Push(&target.inactiveStreams, item)
 		delete(target.timers, stream_id)
