@@ -5,22 +5,53 @@ import (
 	"container/heap"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 )
 
 var _ = fmt.Printf
 
 type ActiveStream struct {
-	sync.RWMutex
-	entireFrames float64 // number of frames across all donors
-	totalFrames  float64 // number of frames done by this donor
+	CommandQueue
+	entireFrames int     // number of completed frames (does not include partial frames)
+	donorFrames  float64 // number of frames done by this donor (including partial frames)
 	bufferFrames int     // number of frames stored in the buffer
-	authToken    string
-	user         string
-	startTime    int
-	frameHash    string
-	engine       string
+	authToken    string  // token of the ActiveStream
+	user         string  // donor id
+	startTime    int     // time the stream was activated
+	frameHash    string  // md5 hash of the last frame
+	engine       string  // core engine type the stream is assigned to
+}
+
+func NewActiveStream(user, token, engine string, entireFrames int) *ActiveStream {
+	as := &ActiveStream{
+		CommandQueue: makeCommandQueue(),
+		user:         user,
+		engine:       engine,
+		authToken:    token,
+		entireFrames: entireFrames,
+		startTime:    int(time.Now().Unix()),
+	}
+	go as.run()
+	return as
+}
+
+func (as *ActiveStream) run() {
+	for {
+		select {
+		case msg := <-as.commands:
+			msg.fn()
+			msg.wait <- struct{}{}
+		case <-as.finished:
+			return
+		}
+	}
+}
+
+func (as *ActiveStream) Frames() (frame_count int) {
+	as.Dispatch(func() {
+		frame_count = as.entireFrames
+	})
+	return
 }
 
 type Target struct {
@@ -44,13 +75,11 @@ func NewTarget(tm *TargetManager) *Target {
 		targetManager:   tm,
 	}
 	heap.Init(&target.inactiveStreams)
-	go func() {
-		target.run()
-	}()
+	go target.run()
 	return &target
 }
 
-func (t *Target) AddStream(stream_id string, weight float64) error {
+func (t *Target) AddStream(stream_id string, weight int) error {
 	return t.Dispatch(func() {
 		item := &QueueItem{
 			value:    stream_id,
@@ -69,7 +98,7 @@ func (t *Target) RemoveStream(stream_id string) error {
 
 func (t *Target) ActivateStream(user, engine string) (token, stream_id string, err error) {
 	err2 := t.Dispatch(func() {
-		var entireFrames float64
+		var entireFrames int
 		for _, qItem := range t.inactiveStreams {
 			stream_id = qItem.value
 			entireFrames = qItem.priority
@@ -80,12 +109,7 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 			return
 		}
 		token = util.RandSeq(36)
-		as := &ActiveStream{
-			user:         user,
-			engine:       engine,
-			authToken:    token,
-			entireFrames: entireFrames,
-		}
+		as := NewActiveStream(user, token, engine, entireFrames)
 		t.timers[stream_id] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
 			t.expirations <- stream_id
 		})
@@ -163,15 +187,14 @@ func (t *Target) run() {
 }
 
 func (target *Target) deactivate(stream_id string) {
-	prop, ok := target.activeStreams[stream_id]
+	activeStream, ok := target.activeStreams[stream_id]
 	if ok {
-		target.targetManager.Tokens.RemoveToken(prop.authToken)
+		target.targetManager.Tokens.RemoveToken(activeStream.authToken)
 		item := &QueueItem{
 			value:    stream_id,
 			priority: target.activeStreams[stream_id].entireFrames,
 		}
-
-		fmt.Println("deactivating stream_id", item)
+		activeStream.Die()
 		delete(target.activeStreams, stream_id)
 		heap.Push(&target.inactiveStreams, item)
 		delete(target.timers, stream_id)

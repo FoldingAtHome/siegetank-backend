@@ -14,7 +14,6 @@ import (
 
 var _ = fmt.Printf
 
-// TODO: Add test for deleting an active stream
 func TestAddRemoveStream(t *testing.T) {
 	tm := NewTargetManager()
 	target := NewTarget(tm)
@@ -65,7 +64,7 @@ func TestActivateStream(t *testing.T) {
 	add_order := make([]string, 0)
 	for i := 0; i < numStreams; i++ {
 		uuid := util.RandSeq(3)
-		target.AddStream(uuid, float64(i))
+		target.AddStream(uuid, i)
 		add_order = append(add_order, uuid)
 	}
 	var mu sync.Mutex
@@ -88,6 +87,7 @@ func TestActivateStream(t *testing.T) {
 			assert.Equal(t, as.user, username)
 			assert.Equal(t, as.engine, engine)
 			assert.Equal(t, as.authToken, token)
+			assert.True(t, as.startTime-int(time.Now().Unix()) < 2)
 			active_streams, err := target.ActiveStreams()
 			assert.True(t, err == nil)
 			_, ok := active_streams[stream_id]
@@ -112,7 +112,7 @@ func TestActivateStream(t *testing.T) {
 	cop, _ = target.ActiveStreams()
 	_, ok = cop[best_stream]
 	assert.False(t, ok)
-	assert.Equal(t, target.inactiveStreams[0].priority, float64(numStreams-1))
+	assert.Equal(t, target.inactiveStreams[0].priority, numStreams-1)
 	target.Die()
 }
 

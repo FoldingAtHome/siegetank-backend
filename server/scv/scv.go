@@ -97,6 +97,12 @@ func (app *Application) IsManager(user string) bool {
 	}
 }
 
+func (app *Application) AuthenticateCore(r *http.Request) (as *ActiveStream, err error) {
+	token := r.Header.Get("Authorization")
+	as, err = app.TM.Tokens.FindStream(token)
+	return
+}
+
 // Return a path indicating where stream files should be stored
 func (app *Application) StreamDir(stream_id string) string {
 	return filepath.Join(app.Config.Name+"_data", stream_id)
@@ -124,12 +130,12 @@ func (app *Application) Shutdown() {
 }
 
 type mongoStream struct {
-	Id           string  `bson:"_id"`
-	Status       string  `bson:"status",json:"status"`
-	Frames       float64 `bson:"frames",json:"frames"`
-	ErrorCount   int     `bson:"error_count",json:"error_count"`
-	Active       bool    `bson:"active",json:"active"`
-	CreationDate int     `bson:"creation_date"`
+	Id           string `bson:"_id"`
+	Status       string `bson:"status",json:"status"`
+	Frames       int    `bson:"frames",json:"frames"`
+	ErrorCount   int    `bson:"error_count",json:"error_count"`
+	Active       bool   `bson:"active",json:"active"`
+	CreationDate int    `bson:"creation_date"`
 }
 
 func (app *Application) StreamActivateHandler() AppHandler {
@@ -238,3 +244,23 @@ func (app *Application) GetStreamInfoHandler() AppHandler {
 		return
 	}
 }
+
+// func (app *Application) CoreStartHandler() AppHandler {
+// 	return func(w http.ResponseWriter, r *http.REquest) (err error, code int) {
+// 		as, err = app.AuthenticateCore(r)
+// 		if err != nil {
+// 			return errors.New("Bad Token"), 401
+// 		}
+// 		files := filepath.Join(app.StreamDir(stream_id), "files")
+// 		frames := as.Frames()
+// 		if frames != 0 {
+// 			frameDir := filepath.join(app.StreamDir(stream_id), str(frames))
+// 			checkpointDirs := ioutil.ReadDir(frameDir)
+// 			for k, v := range checkpointDirs
+// 			lastCheckpoint :=
+// 		} else {
+
+// 		}
+
+// 	}
+// }
