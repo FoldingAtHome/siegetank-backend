@@ -5,6 +5,8 @@ import (
 	"container/heap"
 	"errors"
 	"fmt"
+	// "sort"
+	"strconv"
 	"time"
 )
 
@@ -47,9 +49,41 @@ func (as *ActiveStream) run() {
 	}
 }
 
-func (as *ActiveStream) Frames() (frame_count int) {
+func (as *ActiveStream) LoadCheckpointFiles() (files map[string]string, err error) {
 	as.Dispatch(func() {
-		frame_count = as.entireFrames
+		if as.entireFrames > 0 {
+			frameDir := filepath.join(app.StreamDir(stream_id), str(frames))
+			checkpointDirs, err := ioutil.ReadDir(frameDir)
+			if err != nil {
+				return
+			}
+			// find the folder containing the last checkpoint
+			lastCheckpoint := 0
+			for _, fileProp := range checkpointDirs {
+				count := strconv.Atoi(fileProp.Name())
+				if count > lastcheckpoint {
+					lastCheckpoint = count
+				}
+			}
+			checkpointFiles, err := ioutil.ReadDir(filepath.join(frameDir, "checkpoint_files"))
+			if err != nil {
+				return
+			}
+			for _, fileProp := range checkpointFiles {
+				files[fileProp.Name()] = ioutil.ReadFile(filepath.join(checkpointFiles, fileProp.Name()))
+			}
+		}
+		seedDir := filepath.join(app.StreamDir(stream_id), "files")
+		seedFiles, err := ioutil.ReadDir(seedDir)
+		if err != nil {
+			return
+		}
+		for _, fileProp := range seedFiles {
+			_, ok := files[fileProp.Name()]
+			if ok == false {
+				files[fileProp.Name()] = ioutil.ReadFile(filepath.join(seedDir, fileProp.Name()))
+			}
+		}
 	})
 	return
 }

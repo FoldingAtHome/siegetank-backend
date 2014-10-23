@@ -1,3 +1,4 @@
+/* Command Queue for dealing with asynchronous methods on a locked object*/
 package scv
 
 import (

@@ -185,7 +185,7 @@ func (app *Application) StreamsHandler() AppHandler {
 		type Message struct {
 			TargetId string            `json:"target_id"`
 			Files    map[string]string `json:"files"`
-			Tags     map[string]string `json:"tags"`
+			Tags     map[string]string `json:"tags,omitempty"`
 		}
 		msg := Message{}
 		decoder := json.NewDecoder(r.Body)
@@ -245,22 +245,18 @@ func (app *Application) GetStreamInfoHandler() AppHandler {
 	}
 }
 
-// func (app *Application) CoreStartHandler() AppHandler {
-// 	return func(w http.ResponseWriter, r *http.REquest) (err error, code int) {
-// 		as, err = app.AuthenticateCore(r)
-// 		if err != nil {
-// 			return errors.New("Bad Token"), 401
-// 		}
-// 		files := filepath.Join(app.StreamDir(stream_id), "files")
-// 		frames := as.Frames()
-// 		if frames != 0 {
-// 			frameDir := filepath.join(app.StreamDir(stream_id), str(frames))
-// 			checkpointDirs := ioutil.ReadDir(frameDir)
-// 			for k, v := range checkpointDirs
-// 			lastCheckpoint :=
-// 		} else {
-
-// 		}
-
-// 	}
-// }
+func (app *Application) CoreStartHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		as, err = app.AuthenticateCore(r)
+		if err != nil {
+			return errors.New("Bad Token"), 401
+		}
+		files, err := as.LoadCheckpointFiles()
+		type Reply struct {
+			StreamId string            `json:"stream_id"`
+			TargetId string            `json:"target_id"`
+			Files    map[string][]byte `json:"files"`
+			Options  string            `json:"options, string"`
+		}
+	}
+}
