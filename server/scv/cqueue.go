@@ -1,52 +1,34 @@
 /* Command Queue for dealing with asynchronous methods on a locked object*/
-package scv
+package main
 
 import (
+	// "errors"
+	"fmt"
+	"math/rand"
+	"runtime"
+	"sync"
+	// "sync/atomic"
 	"errors"
+	"time"
 )
 
-type _message struct {
-	fn   func()
-	wait chan struct{}
-}
-
 type CommandQueue struct {
-	commands chan _message
-	finished chan struct{}
+	sync.Mutex
+	finished bool
 }
 
-func makeCommandQueue() CommandQueue {
-	q := CommandQueue{make(chan _message), make(chan struct{})}
-	return q
-}
-
-func (q *CommandQueue) Die() {
-	close(q.finished)
-}
-
-// Functions to be dispatched must not return anything. Use closures to retrieve data back out.
 func (q *CommandQueue) Dispatch(fn func()) (err error) {
-	msg := _message{fn, make(chan struct{})}
-	select {
-	case q.commands <- msg:
-		<-msg.wait
-	case <-q.finished:
-		err = errors.New("No longer accepting new tasks.")
+	q.Lock()
+	if q.finished {
+		return errors.New("No longer accepting new commands")
 	}
+	fn()
+	q.Unlock()
 	return
 }
 
-/* Example Implementation of Run()
-func (q *CommandQueue) Run() {
-    for {
-        select {
-            case msg := <-q.commands:
-                msg.fn()
-                msg.wait <- struct{}{}
-            case <- q.finished:
-                fmt.Println("Closing channel")
-                return
-        }
-    }
+func (q *CommandQueue) Die() {
+	q.Lock()
+	q.finished = true
+	q.Unlock()
 }
-*/

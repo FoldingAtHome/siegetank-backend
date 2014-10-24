@@ -6,9 +6,8 @@ import (
 )
 
 type QueueItem struct {
-	value    string
-	priority int
-	index    int
+	value *Stream
+	index int
 }
 
 type PriorityQueue []*QueueItem
@@ -18,7 +17,7 @@ func (pq PriorityQueue) Len() int {
 }
 
 func (pq PriorityQueue) Less(i, j int) bool {
-	return pq[i].priority > pq[j].priority
+	return pq[i].entireFrames > pq[j].entireFrames
 }
 
 func (pq PriorityQueue) Swap(i, j int) {
@@ -43,9 +42,9 @@ func (pq *PriorityQueue) Pop() interface{} {
 	return item
 }
 
-// update modifies the priority and value of an QueueItem in the queue.
-func (pq *PriorityQueue) update(item *QueueItem, value string, priority int) {
-	item.value = value
-	item.priority = priority
-	heap.Fix(pq, item.index)
-}
+// // update modifies the priority and value of an QueueItem in the queue.
+// func (pq *PriorityQueue) update(item *QueueItem, value string, priority int) {
+// 	item.value = value
+// 	item.entireFrames = priority
+// 	heap.Fix(pq, item.index)
+// }

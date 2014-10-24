@@ -247,16 +247,20 @@ func (app *Application) GetStreamInfoHandler() AppHandler {
 
 func (app *Application) CoreStartHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-		as, err = app.AuthenticateCore(r)
+		as, err := app.AuthenticateCore(r)
 		if err != nil {
 			return errors.New("Bad Token"), 401
 		}
-		files, err := as.LoadCheckpointFiles()
+		files, err := as.LoadCheckpointFiles(app.StreamDir(as.id))
 		type Reply struct {
-			StreamId string            `json:"stream_id"`
-			TargetId string            `json:"target_id"`
-			Files    map[string][]byte `json:"files"`
-			Options  string            `json:"options, string"`
+			StreamId string                 `json:"stream_id"`
+			TargetId string                 `json:"target_id"`
+			Files    map[string]string      `json:"files"`
+			Options  map[string]interface{} `json:"options, string"`
 		}
+		rep := Reply{
+			stream_id: as.id,
+		}
+		return
 	}
 }

@@ -8,18 +8,16 @@ import (
 // map of tokens to active streams
 type TokenManager struct {
 	sync.RWMutex
-	tokens map[string]*ActiveStream
+	tokens map[string]*Stream
 }
 
+// Not coroutine safe. You must lock yourself.
 func (t *TokenManager) AddToken(token string, stream *ActiveStream) {
-	t.Lock()
-	defer t.Unlock()
 	t.tokens[token] = stream
 }
 
+// Not coroutine safe. You must lock yourself.
 func (t *TokenManager) RemoveToken(token string) {
-	t.Lock()
-	defer t.Unlock()
 	delete(t.tokens, token)
 }
 
@@ -34,10 +32,36 @@ func (t *TokenManager) FindStream(token string) (*ActiveStream, error) {
 	}
 }
 
+// StreamManager maps stream_ids to *Stream
+type StreamManager struct {
+	sync.RWMutex
+	streams map[string]*Stream
+}
+
+func (sm *StreamManager) AddStream(stream_id string, target_id string) {
+	sm.streams[stream_id] = target_id
+}
+
+func (sm *StreamManager) RemoveStream(stream_id string) {
+	delete(sm.streams, stream_id)
+}
+
+func (sm *StreamManager) FindStream(stream_id string) (*Stream, err) {
+	sm.RLock()
+	defer sm.RUnlock()
+	streamPtr, ok := sm.streams[stream_id]
+	if ok {
+		return streamPtr, nil
+	} else {
+		return nil, errors.New("Bad Stream Id")
+	}
+}
+
 type TargetManager struct {
 	sync.RWMutex
 	targets map[string]*Target
 	Tokens  TokenManager
+	Streams StreamManager
 }
 
 func NewTargetManager() *TargetManager {
@@ -49,7 +73,7 @@ func NewTargetManager() *TargetManager {
 }
 
 // Add stream to a given target. If the target does not exist, then it is created.
-func (tm *TargetManager) AddStreamToTarget(target_id string, stream_id string, frames int) {
+func (tm *TargetManager) AddStreamToTarget(target_id string, stream *Stream, frames int) {
 	tm.Lock()
 	if _, ok := tm.targets[target_id]; ok == false {
 		tm.targets[target_id] = NewTarget(tm)
