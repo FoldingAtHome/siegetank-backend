@@ -61,8 +61,28 @@ func (stream *Stream) Deactivate() {
 	})
 }
 
+// A dispatch that is guarded against active stream failures.
+func (stream *Stream) DispatchAS(fn func()) (err error) {
+	stream.Lock()
+	defer stream.Unlock()
+	if activeStream == nil {
+		return errors.New("Stream is dead")
+	}
+	if stream.Finished {
+		return errors.New("No longer accepting new commands")
+	}
+	fn
+	return
+}
+
+func (stream *Stream) CoreFrame() (err error) {
+	stream.DispatchAS(func() {
+
+	})
+}
+
 func (stream *Stream) LoadCheckpointFiles(streamDir string) (files map[string]string, err error) {
-	stream.Dispatch(func() {
+	stream.DispatchAS(func() {
 		if stream.frames > 0 {
 			frameDir := filepath.Join(streamDir, strconv.Itoa(stream.frames))
 			checkpointDirs, err := ioutil.ReadDir(frameDir)

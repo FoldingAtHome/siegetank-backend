@@ -14,10 +14,51 @@ import (
 
 var _ = fmt.Printf
 
+/*
+Locks are structured such that:
+-Methods on Streams require only its own lock.
+-Methods on StreamManager require only its own lock.
+-Methods on TokenManager require only its own lock.
+-Methods on Targets may require its own lock, and all of the locks above.
+*/
+
+// func main() {
+// 	a := &Stream{"a", 5}
+// 	b := &Stream{"b", 2}
+// 	c := &Stream{"c", 12}
+// 	d := &Stream{"d", 12}
+// 	s := NewCustomSet(func(l, r interface{}) bool {
+// 		s1 := l.(*Stream)
+// 		s2 := r.(*Stream)
+// 		if s1.frames == s2.frames {
+// 			return s1.id < s2.id
+// 		} else {
+// 			return s1.frames < s2.frames
+// 		}
+// 	})
+// 	s.Add(a)
+// 	s.Add(b)
+// 	s.Add(c)
+// 	s.Add(d)
+// 	unboundIterator := s.Iterator()
+// 	for unboundIterator.Next() {
+// 		fmt.Printf("%d: %s\n", unboundIterator.Key(), unboundIterator.Value())
+// 	}
+// 	fmt.Println("----------")
+// 	s.Remove(c)
+// 	s.Remove(a)
+// 	s.Remove(d)
+// 	s.Remove(b)
+// 	unboundIterator = s.Iterator()
+// 	for unboundIterator.Next() {
+// 		fmt.Printf("%d: %s\n", unboundIterator.Key(), unboundIterator.Value())
+// 	}
+// }
+
 type Target struct {
 	CommandQueue
 	targetId        string                 // id of target
-	inactiveStreams PriorityQueue          // queue of inactive streams
+	inactiveStreams *SkipList              // queue of inactive streams
 	activeStreams   map[*Stream]struct{}   // set of active streams
 	timers          map[string]*time.Timer // expiration timer for each stream
 	expirations     chan string            // expiration channel for timers
@@ -25,56 +66,50 @@ type Target struct {
 	targetManager   *TargetManager
 }
 
+func StreamComp(l, r interface{}) bool {
+	s1 := l.(*Stream)
+	s2 := r.(*Stream)
+	if s1.frames == s2.frames {
+		return s1.id < s2.id
+	} else {
+		return s1.frames < s2.frames
+	}
+}
+
 func NewTarget(tm *TargetManager) *Target {
 	target := Target{
 		CommandQueue:    CommandQueue{},
-		inactiveStreams: make(PriorityQueue, 0),
+		inactiveStreams: NewCustomMap(StreamComp),
 		activeStreams:   make(map[*Stream]struct{}),
 		timers:          make(map[*time.Timer]struct{}),
 		expirations:     make(chan string),
 		ExpirationTime:  600,
 		targetManager:   tm,
 	}
-	heap.Init(&target.inactiveStreams)
 	return &target
 }
 
 func (t *Target) AddStream(stream *Stream) error {
 	return t.Dispatch(func() {
-		t.targetManager.Streams.Lock()
-		defer t.targetManager.Streams.Unlock()
-		item := &QueueItem{
-			value: stream,
-		}
-		heap.Push(&t.inactiveStreams, item)
-		t.targetManager.Streams.AddStream(stream.streamId, stream)
+		item := &QueueItem{value: stream}
+		t.inactiveStreams.Add(stream)
+		t.targetManager.AddStream(stream.streamId, stream)
 	})
 }
 
 func (t *Target) RemoveStream(stream *Stream) error {
 	return t.Dispatch(func() {
-		// This method acquires four mutexes in this order:
-		// 1. Target
-		// 2. StreamManager
-		// 3. TokenManager
-		// 4. Stream
-		// We need to lock all four because we don't want any other service
-		// to potentially access this stream in any way while it's being removed.
-		// Acquiring the stream lock itself may be the slowest if it's during
-		// an IO operation, but everything else is fast.
-		t.targetManager.Streams.Lock()
-		defer t.targetManager.Streams.Unlock()
-		t.deactivate(stream_id)
-		heap.Pop(&t.inactiveStreams)
+		t.targetManager.RemoveStream(stream.streamId)
+		t.deactivateImpl(stream_id)
+		t.inactiveStreams.Remove(stream)
 		stream.Die()
-		t.targetManager.Streams.RemoveStream(stream.streamId)
 	})
 }
 
 func (t *Target) ActivateStream(user, engine string) (token, stream_id string, err error) {
 	err2 := t.Dispatch(func() {
-		t.targetManager.Tokens.Lock()
-		defer t.targetManager.Tokens.Unlock()
+		t.targetManager.Lock()
+		defer t.targetManager.Unlock()
 		var stream *Stream
 		for _, stream = range t.inactiveStreams {
 			break
@@ -90,7 +125,7 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 			t.DeactivateStream(stream)
 		})
 		t.activeStreams[stream_id] = stream
-		t.targetManager.Tokens.AddToken(token, stream)
+		t.targetManager.tokens[token] = stream
 		heap.Pop(&t.inactiveStreams)
 	})
 	if err2 != nil {
@@ -103,14 +138,10 @@ func (t *Target) ActivateStream(user, engine string) (token, stream_id string, e
 	return
 }
 
-func (t *Target) deactivate(stream *Stream) {
-	t.targetManager.Tokens.Lock()
-	defer t.targetManager.Tokens.Unlock()
+func (t *Target) deactivateImpl(stream *Stream) {
+	t.targetManager.RemoveToken(stream.authToken)
 	stream.Deactivate()
-	target.targetManager.Tokens.RemoveToken(stream.authToken)
-	item := &QueueItem{
-		value: stream,
-	}
+	item := &QueueItem{value: stream}
 	delete(target.activeStreams, stream)
 	heap.Push(&target.inactiveStreams, item)
 	delete(target.timers, stream_id)
@@ -118,7 +149,9 @@ func (t *Target) deactivate(stream *Stream) {
 
 func (t *Target) DeactivateStream(stream *Stream) error {
 	err2 := t.Dispatch(func() {
-		t.deactivate(stream)
+		target.targetManager.Lock()
+		defer target.targetManager.Unlock()
+		t.deactivateImpl(stream)
 	})
 	return err2
 }
@@ -137,9 +170,6 @@ func (t *Target) DeactivateStream(stream *Stream) error {
 // 	return
 // }
 
-// Returns a copy. Adding to this map will not affect the actual map used by
-// the target since maps are not goroutine safe. If the caller would like to
-// iterate over the list of streams returned in here, he'd need to call Lock
 func (t *Target) ActiveStreams() (copy map[string]struct{}, err error) {
 	copy = make(map[string]struct{})
 	err = t.Dispatch(func() {
@@ -150,8 +180,6 @@ func (t *Target) ActiveStreams() (copy map[string]struct{}, err error) {
 	return
 }
 
-// Returns a copy. Adding to this mp will not affect the actual map used by
-// the target since maps are not goroutine safe.
 func (t *Target) InactiveStreams() (copy map[string]struct{}, err error) {
 	copy = make(map[string]struct{})
 	err = t.Dispatch(func() {
@@ -166,7 +194,7 @@ func (t *Target) InactiveStreams() (copy map[string]struct{}, err error) {
 // 	for {
 // 		select {
 // 		case stream_id := <-t.expirations:
-// 			t.deactivate(stream_id)
+// 			t.deactivateImpl(stream_id)
 // 		case <-t.finished:
 // 			return
 // 		}

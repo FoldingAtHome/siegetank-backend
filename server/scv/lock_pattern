@@ -1,0 +1,56 @@
+mutex logic
+===========
+
+// tm = target manager
+// t = target
+// s = stream
+
+stream create (very infrequent)
+
+tm.Lock()
+t.Lock()
+s.Lock()
+s.Unlock()
+t.Unlock()
+tm.Unlock()
+
+stream removal (very infrequent)
+
+tm.Lock()
+t.Lock()
+s.Lock()
+s.Unlock()
+t.Unlock()
+tm.Unlock()
+
+stream modify (infrequent)
+
+tm.Lock()
+tm.Unlock()
+s.Lock()
+s.Unlock()
+
+stream activation (some-what infrequent)
+
+tm.Lock() // need to look up the target
+t.Lock()
+s.Lock()
+s.Unlock()
+t.Unlock()
+tm.Unlock()
+
+activestream modify (very very frequent)
+
+tm.Lock()
+tm.Unlock()
+s.Lock()
+s.Unlock()
+
+stream deactivate (in-place)
+
+tm.Lock()
+t.Lock()
+s.Lock()
+s.Unlock()
+t.Unlock()
+tm.Unlock()

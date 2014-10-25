@@ -14,12 +14,12 @@ import (
 
 type CommandQueue struct {
 	sync.Mutex
-	finished bool
+	Finished bool
 }
 
 func (q *CommandQueue) Dispatch(fn func()) (err error) {
 	q.Lock()
-	if q.finished {
+	if q.Finished {
 		return errors.New("No longer accepting new commands")
 	}
 	fn()
@@ -29,6 +29,6 @@ func (q *CommandQueue) Dispatch(fn func()) (err error) {
 
 func (q *CommandQueue) Die() {
 	q.Lock()
-	q.finished = true
+	q.Finished = true
 	q.Unlock()
 }
