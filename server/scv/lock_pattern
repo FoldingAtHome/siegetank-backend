@@ -1,56 +1,85 @@
 mutex logic
 ===========
 
-// tm = target manager
+1. Guarantees: if an object is being modified, then it must exist.
+
+// m = manager
 // t = target
 // s = stream
 
-stream create (very infrequent)
+target create (infrequent)
+--------------------------
+m.Lock()
+t.Lock()
+t.Unlock()
+m.Unlock()
 
-tm.Lock()
+target delete (infrequent)
+--------------------------
+m.Lock()
+t.Lock()
+// for each stream in t
+// s.Lock()
+t.Unlock()
+m.Unlock()
+
+add pre-made stream to existing target (infrequent)
+--------------------------
+m.Lock()
 t.Lock()
 s.Lock()
+// create target if does not exist
+// add stream to target
+// add token to tokens
 s.Unlock()
 t.Unlock()
-tm.Unlock()
+m.Unlock()
 
-stream removal (very infrequent)
-
-tm.Lock()
+stream removal (infrequent)
+--------------------------
+m.Lock()
 t.Lock()
 s.Lock()
+// deactivate stream if active
+// deactivate stream as needed
+// mark stream as removed
 s.Unlock()
 t.Unlock()
-tm.Unlock()
+m.Unlock()
 
 stream modify (infrequent)
-
-tm.Lock()
-tm.Unlock()
+--------------------------
+m.RLock()
 s.Lock()
+// if stream has been removed, then die and do nothing.
 s.Unlock()
+m.RUnlock()
 
-stream activation (some-what infrequent)
-
-tm.Lock() // need to look up the target
+stream activation (frequent)
+--------------------------
+m.Lock() // add a token
 t.Lock()
 s.Lock()
+// activate the stream
 s.Unlock()
 t.Unlock()
-tm.Unlock()
+m.Unlock()
 
-activestream modify (very very frequent)
-
-tm.Lock()
-tm.Unlock()
+activestream modify (very frequent)
+--------------------------
+m.RLock()
 s.Lock()
+// stream may be inactive
+// stream may be removed
 s.Unlock()
+m.Unlock()
 
-stream deactivate (in-place)
-
-tm.Lock()
-t.Lock()
+stream deactivate (frequent)
+--------------------------
+m.Lock() // removing a token
+t.Lock() // changing activestreams
 s.Lock()
+// deactivate the stream
 s.Unlock()
 t.Unlock()
-tm.Unlock()
+m.Unlock()
