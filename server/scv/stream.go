@@ -1,11 +1,15 @@
 package scv
 
+import (
+	"sync"
+	"time"
+)
+
 // Cached object persisted in Mongo
 type Stream struct {
-	sync.Mutex
+	sync.RWMutex
 	streamId     string
 	targetId     string
-	owner        string
 	status       string
 	frames       int
 	errorCount   int
@@ -13,18 +17,17 @@ type Stream struct {
 	activeStream *ActiveStream
 }
 
-func NewStream(streamId, targetId, owner, status string,
+func NewStream(streamId, targetId, status string,
 	frames, errorCount, creationDate int) *Stream {
 	stream := &Stream{
 		streamId:     streamId,
 		targetId:     targetId,
-		owner:        owner,
 		status:       status,
 		frames:       frames,
 		errorCount:   errorCount,
 		creationDate: creationDate,
 	}
-	return s
+	return stream
 }
 
 type ActiveStream struct {

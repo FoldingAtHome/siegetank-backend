@@ -1,9 +1,17 @@
 package scv
 
 import (
+	"../util"
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"path/filepath"
+	"strconv"
 	"sync"
+	"time"
 )
+
+var _ = fmt.Printf
 
 // The mutex in Manager makes guarantees about the state of the system:
 // 1. If the mutex (read or write) can be acquired, then there is no other concurrent operation that could affect stream creation, deletion, activation, or deactivation, target creation and deletion.
@@ -13,9 +21,10 @@ import (
 
 type Manager struct {
 	sync.RWMutex
-	targets map[string]*Target // map of targetId to Target
-	tokens  map[string]*Stream // map of token to Stream
-	streams map[string]*Stream // map of streamId to Stream
+	targets map[string]*Target     // map of targetId to Target
+	tokens  map[string]*Stream     // map of token to Stream
+	streams map[string]*Stream     // map of streamId to Stream
+	timers  map[string]*time.Timer // map of stream timers
 }
 
 func NewManager() *Manager {
@@ -44,7 +53,7 @@ func (m *Manager) AddStream(stream *Stream, targetId string) {
 	m.streams[stream.streamId] = stream
 	t.Lock()
 	defer t.Unlock()
-	m.deactivateStreamImpl(stream)
+	m.deactivateStreamImpl(stream, t)
 	t.inactiveStreams.Add(stream)
 }
 
@@ -67,6 +76,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
 		delete(m.targets, stream.targetId)
 	}
+	return nil
 }
 
 func (m *Manager) ActivateStream(targetId, user, engine string) (token string, err error) {
@@ -80,47 +90,56 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, e
 	t.Lock()
 	defer t.Unlock()
 	iterator := t.inactiveStreams.Iterator()
-	ok := iterator.Next()
+
+	fmt.Println("DEBUG", iterator.Key())
+
+	ok = iterator.Next()
 	if ok == false {
 		err = errors.New("Target does not have streams")
 		return
 	}
-	stream := iterator.Key()
+
+	fmt.Println("DEBUG", iterator.Key())
+
+	token = util.RandSeq(36)
+
+	stream := iterator.Key().(*Stream)
 	stream.Lock()
 	defer stream.Unlock()
-	iterator.Remove(stream)
-	token = util.RandSeq(36)
+	t.inactiveStreams.Remove(stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
-	t.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
+	m.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
 		m.DeactivateStream(stream.streamId)
 	})
-	t.activeStreams[stream_id] = stream
+	t.activeStreams[stream] = struct{}{}
+	return
 }
 
 // Assumes that locks are in place.
-func (m *Manager) deactivateStreamImpl(stream *Stream, target *Target) {
-	if stream.activeStream != nil {
-		stream.activeStream = nil
-		delete(m.tokens, stream.streamId)
-		delete(t.activeStreams, stream.streamId)
-		delete(t.timers, stream.streamId)
-		target.inactiveStreams.Add(stream)
+func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
+	if s.activeStream != nil {
+		s.activeStream = nil
+		delete(m.tokens, s.streamId)
+		delete(m.timers, s.streamId)
+		delete(t.activeStreams, s)
+		t.inactiveStreams.Add(s)
 	}
 }
 
 func (m *Manager) DeactivateStream(streamId string) error {
 	m.Lock()
 	defer m.Unlock()
-	stream, ok = m.tokens[streamId]
+	stream, ok := m.tokens[streamId]
 	if ok == false {
 		return errors.New("Stream is not active")
 	}
-	t = m.targets[stream.targetId]
+	t := m.targets[stream.targetId]
 	t.Lock()
 	defer t.Unlock()
 	stream.Lock()
 	defer stream.Unlock()
 	m.deactivateStreamImpl(stream, t)
+	return nil
 }
 
 // func (m *Manager) DownloadFile(dataDir, streamId string) (files map[string]string, err error) {
@@ -141,9 +160,9 @@ func (m *Manager) LoadCheckpoints(dataDir, streamId string) (files map[string]st
 	streamDir := filepath.Join(dataDir, streamId)
 	if stream.frames > 0 {
 		frameDir := filepath.Join(streamDir, strconv.Itoa(stream.frames))
-		checkpointDirs, err := ioutil.ReadDir(frameDir)
-		if err != nil {
-			return
+		checkpointDirs, e := ioutil.ReadDir(frameDir)
+		if e != nil {
+			return nil, err
 		}
 		// find the folder containing the last checkpoint
 		lastCheckpoint := 0
@@ -154,32 +173,33 @@ func (m *Manager) LoadCheckpoints(dataDir, streamId string) (files map[string]st
 			}
 		}
 		checkpointDir := filepath.Join(frameDir, "checkpoint_files")
-		checkpointFiles, err := ioutil.ReadDir(checkpointDir)
-		if err != nil {
-			return
+		checkpointFiles, e := ioutil.ReadDir(checkpointDir)
+		if e != nil {
+			return nil, e
 		}
 		for _, fileProp := range checkpointFiles {
-			binary, err := ioutil.ReadFile(filepath.Join(checkpointDir, fileProp.Name()))
-			if err != nil {
-				return
+			binary, e := ioutil.ReadFile(filepath.Join(checkpointDir, fileProp.Name()))
+			if e != nil {
+				return nil, e
 			}
 			files[fileProp.Name()] = string(binary)
 		}
 	}
 	seedDir := filepath.Join(streamDir, "files")
-	seedFiles, err := ioutil.ReadDir(seedDir)
-	if err != nil {
-		return
+	seedFiles, e := ioutil.ReadDir(seedDir)
+	if e != nil {
+		return nil, e
 	}
 	for _, fileProp := range seedFiles {
 		// insert seedFile only if it's not already included from checkpoint
 		_, ok := files[fileProp.Name()]
 		if ok == false {
-			binary, err := ioutil.ReadFile(filepath.Join(seedDir, fileProp.Name()))
-			if err != nil {
-				return
+			binary, e := ioutil.ReadFile(filepath.Join(seedDir, fileProp.Name()))
+			if e != nil {
+				return nil, e
 			}
 			files[fileProp.Name()] = string(binary)
 		}
 	}
+	return
 }
