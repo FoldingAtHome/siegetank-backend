@@ -160,6 +160,42 @@ func TestActivateStream(t *testing.T) {
 	assert.Equal(t, m.targets[targetId].inactiveStreams.Len(), numStreams)
 }
 
+func TestStreamReadWrite(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	streamId := util.RandSeq(5)
+	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+	m.AddStream(stream, targetId, mockFunc)
+	_, err := m.ActivateStream(targetId, "yutong", "openmm")
+	assert.True(t, err == nil)
+	var wg sync.WaitGroup
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		if i%100 == 0 {
+			go func() {
+				fn := func(s *Stream) error {
+					s.frames += 1
+					return nil
+				}
+				m.ModifyStream(streamId, fn)
+				wg.Done()
+			}()
+		} else {
+			go func() {
+				var frame_count int
+				fn := func(s *Stream) error {
+					frame_count = s.frames
+					return nil
+				}
+				m.ReadStream(streamId, fn)
+				wg.Done()
+			}()
+		}
+	}
+	wg.Wait()
+	assert.Equal(t, m.streams[streamId].frames, 10)
+}
+
 // func TestEmptyActivation(t *testing.T) {
 // 	tm := NewTargetManager()
 // 	target := NewTarget(tm)

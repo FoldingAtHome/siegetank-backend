@@ -24,7 +24,6 @@ type Injector interface {
 // 2. If you acquire a read lock, you still need to lock individual targets and streams when modifying them (eg. when posting frames).
 // 3. Note that the stream or target may already have been removed by another operation, so it is important that you check the return value of anything you retrieve from the maps for existence. For example, it is possible that one goroutine is trying to deactivate the stream, while another goroutine is trying to post a frame. Both goroutines may be trying to acquire the lock at the same time. If the write goroutine acquires it first, then this means the read goroutine must verify the existence of the active stream through the token.
 // 4. A target exists in the target map if and only if one or more of its streams exists in the streams map.
-
 type Manager struct {
 	sync.RWMutex
 	targets  map[string]*Target     // map of targetId to Target
@@ -64,41 +63,35 @@ func (m *Manager) AddStream(stream *Stream, targetId string, fn func(*Stream) er
 	return fn(stream)
 }
 
-// func (m *Manager) ReadStream(streamId, callback func() error) error {
-// 	m.RLock()
-// 	defer m.RUnlock()
-// 	stream, ok := m.streams[streamId]
-// 	if ok == false {
-// 		return errors.New("stream " + streamId + " does not exist")
-// 	}
-// 	t := m.targets[stream.targetId]
-// 	t.RLock()
-// 	defer t.RUnlock()
-// 	stream.RLock()
-// 	defer stream.RUnlock()
-// 	if callback != nil {
-// 		return callback()
-// 	}
-// 	return nil
-// }
+func (m *Manager) ReadStream(streamId string, fn func(*Stream) error) error {
+	m.RLock()
+	defer m.RUnlock()
+	stream, ok := m.streams[streamId]
+	if ok == false {
+		return errors.New("stream " + streamId + " does not exist")
+	}
+	t := m.targets[stream.targetId]
+	t.RLock()
+	defer t.RUnlock()
+	stream.RLock()
+	defer stream.RUnlock()
+	return fn(stream)
+}
 
-// func (m *Manager) ModifyStream(streamId, callback func() error) error {
-// 	m.RLock()
-// 	defer m.RUnlock()
-// 	stream, ok := m.streams[streamId]
-// 	if ok == false {
-// 		return errors.New("stream " + streamId + " does not exist")
-// 	}
-// 	t := m.targets[stream.targetId]
-// 	t.Lock()
-// 	defer t.Unlock()
-// 	stream.Lock()
-// 	defer stream.Unlock()
-// 	if callback != nil {
-// 		return callback()
-// 	}
-// 	return nil
-// }
+func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
+	m.RLock()
+	defer m.RUnlock()
+	stream, ok := m.streams[streamId]
+	if ok == false {
+		return errors.New("stream " + streamId + " does not exist")
+	}
+	t := m.targets[stream.targetId]
+	t.Lock()
+	defer t.Unlock()
+	stream.Lock()
+	defer stream.Unlock()
+	return fn(stream)
+}
 
 // Remove stream. If the stream is the last stream in the target, then the
 // target is also removed.

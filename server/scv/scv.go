@@ -32,14 +32,14 @@ package scv
 // type Application struct {
 // 	Config Configuration
 // 	Mongo  *mgo.Session
-// 	TM     *TargetManager
+// 	TM     *Manager
 // 	Router *mux.Router
 
 // 	server   *Server
 // 	shutdown chan os.Signal
 // }
 
-// // SSL stuff later
+// // Add SSL stuff later
 // type Configuration struct {
 // 	MongoURI     string
 // 	Name         string
@@ -56,7 +56,7 @@ package scv
 // 	app := Application{
 // 		Config: config,
 // 		Mongo:  session,
-// 		TM:     NewTargetManager(),
+// 		TM:     NewManager(app),
 // 	}
 // 	app.Router = mux.NewRouter()
 // 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
@@ -73,6 +73,14 @@ package scv
 // 	if err, code := fn(w, r); err != nil {
 // 		http.Error(w, err.Error(), code)
 // 	}
+// }
+
+// func (app *Application) RemoveStreamService(s *Stream) error {
+// 	return nil
+// }
+
+// func (app *Application) DeactivateStreamService(s *Stream) error {
+// 	return nil
 // }
 
 // // Look up the User using the Authorization header
@@ -140,15 +148,21 @@ package scv
 
 // func (app *Application) StreamActivateHandler() AppHandler {
 // 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-
-// 		// parse
-
-// 		fn := func(s *Stream) {
-
+// 		if r.Header.Get("Authorization") != app.Config.Password {
+// 			return errors.New("Unauthorized"), 401
 // 		}
-
-// 		app.Manager.ActivateStream(msg.Token, msg.User, msg.Engine)
-
+// 		type Message struct {
+// 			TargetId string `json:"target_id"`
+// 			Engine   string `json:"engine"`
+// 			User     string `json:"user"`
+// 		}
+// 		msg := Message{}
+// 		decoder := json.NewDecoder(r.Body)
+// 		err = decoder.Decode(&msg)
+// 		if err != nil {
+// 			return errors.New("Bad request: " + err.Error()), 400
+// 		}
+// 		token, _, err := m.ActivateStream(msg.TargetId, msg.User, msg.Engine)
 // 		if err != nil {
 // 			return errors.New("Unable to activate stream: " + err.Error()), 400
 // 		}
@@ -182,40 +196,43 @@ package scv
 // 		if err != nil {
 // 			return errors.New("Bad request: " + err.Error()), 400
 // 		}
-
 // 		stream_id := util.RandSeq(36)
 // 		stream := &NewStream(streamId, msg.TargetId, "OK", 0, 0, int(time.Now().Unix()))
 
-// 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
-// 		for Directory, Content := range todo {
-// 			for filename, fileb64 := range Content {
-// 				filedata, err := base64.StdEncoding.DecodeString(fileb64)
-// 				if err != nil {
-// 					return errors.New("Unable to decode file"), 400
-// 				}
-// 				files_dir := filepath.Join(app.StreamDir(stream_id), Directory)
-// 				os.MkdirAll(files_dir, 0776)
-// 				err = ioutil.WriteFile(filepath.Join(files_dir, filename), filedata, 0776)
-// 				if err != nil {
-// 					return err, 400
+// 		insertStreamFn := func(s *Stream) error {
+// 			todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
+// 			for Directory, Content := range todo {
+// 				for filename, fileb64 := range Content {
+// 					filedata, err := base64.StdEncoding.DecodeString(fileb64)
+// 					if err != nil {
+// 						return errors.New("Unable to decode file"), 400
+// 					}
+// 					files_dir := filepath.Join(app.StreamDir(stream_id), Directory)
+// 					os.MkdirAll(files_dir, 0776)
+// 					err = ioutil.WriteFile(filepath.Join(files_dir, filename), filedata, 0776)
+// 					if err != nil {
+// 						return err, 400
+// 					}
 // 				}
 // 			}
+// 			stream := mongoStream{
+// 				Id:           stream_id,
+// 				Status:       "OK",
+// 				Frames:       0,
+// 				ErrorCount:   0,
+// 				CreationDate: int(time.Now().Unix()),
+// 			}
+// 			cursor := app.Mongo.DB("streams").C(app.Config.Name)
+// 			err = cursor.Insert(stream)
+// 			if err != nil {
+// 				os.RemoveAll(app.StreamDir(stream_id))
+// 				return errors.New("Unable insert stream into DB"), 400
+// 			}
 // 		}
-// 		stream := mongoStream{
-// 			Id:           stream_id,
-// 			Status:       "OK",
-// 			Frames:       0,
-// 			ErrorCount:   0,
-// 			CreationDate: int(time.Now().Unix()),
+// 		e := app.TM.AddStream(stream, msg.TargetId, insertstreamFn)
+// 		if e != nil {
+// 			return errors.New("Unable to Add Stream", 400)
 // 		}
-// 		cursor := app.Mongo.DB("streams").C(app.Config.Name)
-// 		err = cursor.Insert(stream)
-// 		if err != nil {
-// 			os.RemoveAll(app.StreamDir(stream_id))
-// 			return errors.New("Unable insert stream into DB"), 400
-// 		}
-// 		// Does nothing if the target already exists.
-// 		app.TM.AddStreamToTarget(msg.TargetId, stream_id, 0)
 // 		data, _ := json.Marshal(map[string]string{"stream_id": stream_id})
 // 		w.Write(data)
 // 		return
