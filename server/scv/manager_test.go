@@ -65,22 +65,39 @@ var _ = fmt.Printf
 // add test for removing a stream that is active
 // add test for auto expiration.
 
-func TestRemoveActiveStream(t *testing.T) {
-	m := NewManager()
-	targetId := util.RandSeq(5)
-	streamId := util.RandSeq(5)
-	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
-	m.AddStream(stream, targetId, nil)
-	token, err := m.ActivateStream(targetId, "yutong", "openmm")
-	m.RemoveStream(streamId, nil)
+type MockHelper struct {
 }
 
+func (m *MockHelper) AddStreamService(*Stream) error {
+	return nil
+}
+
+func (m *MockHelper) RemoveStreamService(*Stream) error {
+	return nil
+}
+
+func (m *MockHelper) DeactivateStreamService(*Stream) error {
+	return nil
+}
+
+var mockService *MockHelper = &MockHelper{}
+
+// func TestRemoveActiveStream(t *testing.T) {
+// 	m := NewManager(mockService)
+// 	targetId := util.RandSeq(5)
+// 	streamId := util.RandSeq(5)
+// 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
+// 	m.AddStream(stream, targetId)
+// 	token, err := m.ActivateStream(targetId, "yutong", "openmm")
+// 	m.RemoveStream(streamId)
+// }
+
 func TestDeactivateTimer(t *testing.T) {
-	m := NewManager()
+	m := NewManager(mockService)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
-	m.AddStream(stream, targetId, nil)
+	m.AddStream(stream, targetId)
 	sleepTime := 5
 	m.targets[targetId].ExpirationTime = sleepTime
 	token, err := m.ActivateStream(targetId, "yutong", "openmm")
@@ -97,14 +114,14 @@ func TestDeactivateTimer(t *testing.T) {
 }
 
 func TestActivateStream(t *testing.T) {
-	m := NewManager()
+	m := NewManager(mockService)
 	numStreams := 5
 	targetId := util.RandSeq(5)
 	addOrder := make([]*Stream, 0)
 	for i := 0; i < numStreams; i++ {
 		streamId := util.RandSeq(3)
 		stream := NewStream(streamId, targetId, "OK", i, 0, int(time.Now().Unix()))
-		m.AddStream(stream, targetId, nil)
+		m.AddStream(stream, targetId)
 		addOrder = append(addOrder, stream)
 	}
 	var mu sync.Mutex
@@ -141,7 +158,7 @@ func TestActivateStream(t *testing.T) {
 		wg.Add(1)
 		go func(streamId string) {
 			defer wg.Done()
-			err := m.DeactivateStream(streamId, nil)
+			err := m.DeactivateStream(streamId)
 			assert.Equal(t, err, nil)
 		}(stream.streamId)
 	}

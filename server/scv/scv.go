@@ -138,28 +138,28 @@ package scv
 // 	CreationDate int    `bson:"creation_date"`
 // }
 
-func (app *Application) StreamActivateHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+// func (app *Application) StreamActivateHandler() AppHandler {
+// 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 
-		// parse
+// 		// parse
 
-		fn := func(s *Stream) {
+// 		fn := func(s *Stream) {
 
-		}
+// 		}
 
-		app.Manager.ActivateStream(msg.Token, msg.User, msg.Engine)
+// 		app.Manager.ActivateStream(msg.Token, msg.User, msg.Engine)
 
-		if err != nil {
-			return errors.New("Unable to activate stream: " + err.Error()), 400
-		}
-		type Reply struct {
-			token string
-		}
-		data, _ := json.Marshal(map[string]string{"token": token})
-		w.Write(data)
-		return
-	}
-}
+// 		if err != nil {
+// 			return errors.New("Unable to activate stream: " + err.Error()), 400
+// 		}
+// 		type Reply struct {
+// 			token string
+// 		}
+// 		data, _ := json.Marshal(map[string]string{"token": token})
+// 		w.Write(data)
+// 		return
+// 	}
+// }
 
 // func (app *Application) StreamsHandler() AppHandler {
 // 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
