@@ -211,6 +211,23 @@ func TestActivateEmptyTarget(t *testing.T) {
 	assert.True(t, err != nil)
 }
 
+func MultiplexTest(nStreams, nActivations, nDeactivations, nResets, nModifications, nReads int) {
+	streamList := make(map[string]struct{})
+	
+	// add asynchronously
+	for t := 0; t < nTargets; t++ {
+		go
+		targetId := util.RandSeq(20)
+		for s := 0; s < nStreams; s++ {
+			streamId := util.RandSeq(3)
+			stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+			m.AddStream(stream, targetId, mockFunc)
+
+		}
+		// hehehehe
+	}
+}
+
 // func TestStreamExpiration(t *testing.T) {
 // 	tm := NewTargetManager()
 // 	target := NewTarget(tm)
