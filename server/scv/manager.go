@@ -32,6 +32,7 @@ func NewManager() *Manager {
 		targets: make(map[string]*Target),
 		tokens:  make(map[string]*Stream),
 		streams: make(map[string]*Stream),
+		timers:  make(map[string]*time.Timer),
 	}
 	return &tm
 }
@@ -40,8 +41,8 @@ func NewManager() *Manager {
 
 // Add a stream to target targetId. If the target does not exist, the manager
 // will create the target automatically. The manager also assumes ownership of
-// the stream.
-func (m *Manager) AddStream(stream *Stream, targetId string) {
+// the stream. callback can be any closure executed at the end.
+func (m *Manager) AddStream(stream *Stream, targetId string, callback func() error) error {
 	m.Lock()
 	defer m.Unlock()
 	// Create a target if it does not exist.
@@ -53,13 +54,52 @@ func (m *Manager) AddStream(stream *Stream, targetId string) {
 	m.streams[stream.streamId] = stream
 	t.Lock()
 	defer t.Unlock()
-	m.deactivateStreamImpl(stream, t)
 	t.inactiveStreams.Add(stream)
+	if callback != nil {
+		return callback()
+	}
+	return nil
 }
+
+// func (m *Manager) ReadStream(streamId, callback func() error) error {
+// 	m.RLock()
+// 	defer m.RUnlock()
+// 	stream, ok := m.streams[streamId]
+// 	if ok == false {
+// 		return errors.New("stream " + streamId + " does not exist")
+// 	}
+// 	t := m.targets[stream.targetId]
+// 	t.RLock()
+// 	defer t.RUnlock()
+// 	stream.RLock()
+// 	defer stream.RUnlock()
+// 	if callback != nil {
+// 		return callback()
+// 	}
+// 	return nil
+// }
+
+// func (m *Manager) ModifyStream(streamId, callback func() error) error {
+// 	m.RLock()
+// 	defer m.RUnlock()
+// 	stream, ok := m.streams[streamId]
+// 	if ok == false {
+// 		return errors.New("stream " + streamId + " does not exist")
+// 	}
+// 	t := m.targets[stream.targetId]
+// 	t.Lock()
+// 	defer t.Unlock()
+// 	stream.Lock()
+// 	defer stream.Unlock()
+// 	if callback != nil {
+// 		return callback()
+// 	}
+// 	return nil
+// }
 
 // Remove stream. If the stream is the last stream in the target, then the
 // target is also removed.
-func (m *Manager) RemoveStream(streamId string) error {
+func (m *Manager) RemoveStream(streamId string, callback func() error) error {
 	m.Lock()
 	defer m.Unlock()
 	stream, ok := m.streams[streamId]
@@ -69,12 +109,19 @@ func (m *Manager) RemoveStream(streamId string) error {
 	t := m.targets[stream.targetId]
 	t.Lock()
 	defer t.Unlock()
+	stream.Lock()
+	defer stream.Unlock()
 	delete(m.streams, streamId)
 	delete(m.tokens, streamId)
-	m.deactivateStreamImpl(stream, t)
-	t.inactiveStreams.Remove(stream)
+	if stream.activeStream != nil {
+		m.deactivateStreamImpl(stream, t)
+	}
+	fmt.Println(t.activeStreams, t.inactiveStreams)
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
 		delete(m.targets, stream.targetId)
+	}
+	if callback != nil {
+		return callback()
 	}
 	return nil
 }
@@ -90,25 +137,20 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, e
 	t.Lock()
 	defer t.Unlock()
 	iterator := t.inactiveStreams.Iterator()
-
-	fmt.Println("DEBUG", iterator.Key())
-
 	ok = iterator.Next()
 	if ok == false {
 		err = errors.New("Target does not have streams")
 		return
 	}
-
-	fmt.Println("DEBUG", iterator.Key())
-
 	token = util.RandSeq(36)
-
 	stream := iterator.Key().(*Stream)
 	stream.Lock()
 	defer stream.Unlock()
 	t.inactiveStreams.Remove(stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
+	m.tokens[token] = stream
 	m.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
+		// ah fuck.
 		m.DeactivateStream(stream.streamId)
 	})
 	t.activeStreams[stream] = struct{}{}
@@ -117,20 +159,21 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, e
 
 // Assumes that locks are in place.
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
-	if s.activeStream != nil {
-		s.activeStream = nil
-		delete(m.tokens, s.streamId)
-		delete(m.timers, s.streamId)
-		delete(t.activeStreams, s)
-		t.inactiveStreams.Add(s)
-	}
+	delete(m.tokens, s.activeStream.authToken)
+	delete(m.timers, s.streamId)
+	delete(t.activeStreams, s)
+	s.activeStream = nil
+	t.inactiveStreams.Add(s)
 }
 
-func (m *Manager) DeactivateStream(streamId string) error {
+func (m *Manager) DeactivateStream(streamId string, callback func() error) error {
 	m.Lock()
 	defer m.Unlock()
-	stream, ok := m.tokens[streamId]
+	stream, ok := m.streams[streamId]
 	if ok == false {
+		return errors.New("Stream does not exist")
+	}
+	if stream.activeStream == nil {
 		return errors.New("Stream is not active")
 	}
 	t := m.targets[stream.targetId]
@@ -139,8 +182,15 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	stream.Lock()
 	defer stream.Unlock()
 	m.deactivateStreamImpl(stream, t)
+	if callback != nil {
+		return callback()
+	}
 	return nil
 }
+
+// func (m *Manager) ModifyStream(streamId string, fn func()) error {
+
+// }
 
 // func (m *Manager) DownloadFile(dataDir, streamId string) (files map[string]string, err error) {
 // 	m.RLock()

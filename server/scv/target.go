@@ -27,9 +27,9 @@ func StreamComp(l, r interface{}) bool {
 	s1 := l.(*Stream)
 	s2 := r.(*Stream)
 	if s1.frames == s2.frames {
-		return s1.streamId < s2.streamId
+		return s1.streamId > s2.streamId
 	} else {
-		return s1.frames < s2.frames
+		return s1.frames > s2.frames
 	}
 }
 
@@ -38,7 +38,7 @@ func NewTarget() *Target {
 		activeStreams:   make(map[*Stream]struct{}),
 		inactiveStreams: NewCustomSet(StreamComp),
 		expirations:     make(chan string),
-		ExpirationTime:  600,
+		ExpirationTime:  900,
 	}
 	return &target
 }
