@@ -16,8 +16,20 @@ var _ = fmt.Printf
 
 var mockFunc = func(*Stream) error { return nil }
 
+type mockInterface struct{}
+
+func (m *mockInterface) RemoveStreamService(s *Stream) error {
+	return nil
+}
+
+func (m *mockInterface) DeactivateStreamService(s *Stream) error {
+	return nil
+}
+
+var intf = &mockInterface{}
+
 func TestAddRemoveStream(t *testing.T) {
-	m := NewManager(mockFunc)
+	m := NewManager(intf)
 	var wg sync.WaitGroup
 	var mutex sync.Mutex
 	streamPtrs := make(map[*Stream]struct{})
@@ -43,7 +55,7 @@ func TestAddRemoveStream(t *testing.T) {
 		wg.Add(1)
 		go func(stream_id string) {
 			defer wg.Done()
-			m.RemoveStream(stream_id, mockFunc)
+			m.RemoveStream(stream_id)
 		}(k.streamId)
 	}
 	wg.Wait()
@@ -55,30 +67,25 @@ func TestAddRemoveStream(t *testing.T) {
 	}
 }
 
-// func TestDie(t *testing.T) {
-// 	target := NewTarget()
-// 	_, err := target.ActiveStreams()
-// 	assert.True(t, err == nil)
-// 	target.Die()
-// 	_, err = target.ActiveStreams()
-// 	assert.True(t, err != nil)
-// }
-
-// add test for removing a stream that is active
-// add test for auto expiration.
-
-// func TestRemoveActiveStream(t *testing.T) {
-// 	m := NewManager(mockDeactivator)
-// 	targetId := util.RandSeq(5)
-// 	streamId := util.RandSeq(5)
-// 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
-// 	m.AddStream(stream, targetId)
-// 	token, err := m.ActivateStream(targetId, "yutong", "openmm")
-// 	m.RemoveStream(streamId)
-// }
+func TestRemoveActiveStream(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	streamId := util.RandSeq(5)
+	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
+	m.AddStream(stream, targetId, mockFunc)
+	_, err := m.ActivateStream(targetId, "yutong", "openmm")
+	assert.True(t, err == nil)
+	assert.Equal(t, len(m.tokens), 1)
+	assert.Equal(t, len(m.streams), 1)
+	m.RemoveStream(streamId)
+	_, ok := m.targets[targetId]
+	assert.False(t, ok)
+	assert.Equal(t, len(m.tokens), 0)
+	assert.Equal(t, len(m.streams), 0)
+}
 
 func TestDeactivateTimer(t *testing.T) {
-	m := NewManager(mockFunc)
+	m := NewManager(intf)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
@@ -99,7 +106,7 @@ func TestDeactivateTimer(t *testing.T) {
 }
 
 func TestActivateStream(t *testing.T) {
-	m := NewManager(mockFunc)
+	m := NewManager(intf)
 	numStreams := 5
 	targetId := util.RandSeq(5)
 	addOrder := make([]*Stream, 0)

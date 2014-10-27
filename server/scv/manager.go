@@ -13,31 +13,36 @@ import (
 
 var _ = fmt.Printf
 
+// A mechanism for allowing dependency injection. These methods will usually close other external app variables like DBs, file/io, etc.
+type Injector interface {
+	RemoveStreamService(*Stream) error
+	DeactivateStreamService(*Stream) error
+}
+
 // The mutex in Manager makes guarantees about the state of the system:
 // 1. If the mutex (read or write) can be acquired, then there is no other concurrent operation that could affect stream creation, deletion, activation, or deactivation, target creation and deletion.
 // 2. If you acquire a read lock, you still need to lock individual targets and streams when modifying them (eg. when posting frames).
 // 3. Note that the stream or target may already have been removed by another operation, so it is important that you check the return value of anything you retrieve from the maps for existence. For example, it is possible that one goroutine is trying to deactivate the stream, while another goroutine is trying to post a frame. Both goroutines may be trying to acquire the lock at the same time. If the write goroutine acquires it first, then this means the read goroutine must verify the existence of the active stream through the token.
 // 4. A target exists in the target map if and only if one or more of its streams exists in the streams map.
 
-// A mechanism for allowing dependency injection. These methods will usually close other external app variables like DBs, file/io, etc.
 type Manager struct {
 	sync.RWMutex
-	targets     map[string]*Target     // map of targetId to Target
-	tokens      map[string]*Stream     // map of token to Stream
-	streams     map[string]*Stream     // map of streamId to Stream
-	timers      map[string]*time.Timer // map of stream timers
-	deactivator func(*Stream) error    // a function that deactivates streams.
+	targets  map[string]*Target     // map of targetId to Target
+	tokens   map[string]*Stream     // map of token to Stream
+	streams  map[string]*Stream     // map of streamId to Stream
+	timers   map[string]*time.Timer // map of stream timers
+	injector Injector
 }
 
-func NewManager(fn func(*Stream) error) *Manager {
-	tm := Manager{
-		targets:     make(map[string]*Target),
-		tokens:      make(map[string]*Stream),
-		streams:     make(map[string]*Stream),
-		timers:      make(map[string]*time.Timer),
-		deactivator: fn,
+func NewManager(inj Injector) *Manager {
+	m := Manager{
+		targets:  make(map[string]*Target),
+		tokens:   make(map[string]*Stream),
+		streams:  make(map[string]*Stream),
+		timers:   make(map[string]*time.Timer),
+		injector: inj,
 	}
-	return &tm
+	return &m
 }
 
 // Add a stream to target targetId. If the target does not exist, the manager
@@ -97,7 +102,7 @@ func (m *Manager) AddStream(stream *Stream, targetId string, fn func(*Stream) er
 
 // Remove stream. If the stream is the last stream in the target, then the
 // target is also removed.
-func (m *Manager) RemoveStream(streamId string, fn func(*Stream) error) error {
+func (m *Manager) RemoveStream(streamId string) error {
 	m.Lock()
 	defer m.Unlock()
 	stream, ok := m.streams[streamId]
@@ -115,11 +120,10 @@ func (m *Manager) RemoveStream(streamId string, fn func(*Stream) error) error {
 		m.deactivateStreamImpl(stream, t)
 	}
 	t.inactiveStreams.Remove(stream)
-	fmt.Println(t.activeStreams, "|", t.inactiveStreams.Len())
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
 		delete(m.targets, stream.targetId)
 	}
-	return fn(stream)
+	return m.injector.RemoveStreamService(stream)
 }
 
 func (m *Manager) ActivateStream(targetId, user, engine string) (token string, err error) {
@@ -177,7 +181,7 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	stream.Lock()
 	defer stream.Unlock()
 	m.deactivateStreamImpl(stream, t)
-	return m.deactivator(stream)
+	return m.injector.DeactivateStreamService(stream)
 }
 
 // func (m *Manager) ModifyStream(streamId string, fn func()) error {
