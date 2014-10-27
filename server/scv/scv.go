@@ -138,38 +138,28 @@ package scv
 // 	CreationDate int    `bson:"creation_date"`
 // }
 
-// func (app *Application) StreamActivateHandler() AppHandler {
-// 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-// 		if r.Header.Get("Authorization") != app.Config.Password {
-// 			return errors.New("Unauthorized"), 401
-// 		}
-// 		type Message struct {
-// 			TargetId string `json:"target_id"`
-// 			Engine   string `json:"engine"`
-// 			User     string `json:"user"`
-// 		}
-// 		msg := Message{}
-// 		decoder := json.NewDecoder(r.Body)
-// 		err = decoder.Decode(&msg)
-// 		if err != nil {
-// 			return errors.New("Bad request: " + err.Error()), 400
-// 		}
-// 		target := app.TM.GetTarget(msg.TargetId)
-// 		if target == nil {
-// 			return errors.New("Target does not exist: " + msg.TargetId), 400
-// 		}
-// 		token, _, err := target.ActivateStream(msg.User, msg.Engine)
-// 		if err != nil {
-// 			return errors.New("Unable to activate stream: " + err.Error()), 400
-// 		}
-// 		type Reply struct {
-// 			token string
-// 		}
-// 		data, _ := json.Marshal(map[string]string{"token": token})
-// 		w.Write(data)
-// 		return
-// 	}
-// }
+func (app *Application) StreamActivateHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+
+		// parse
+
+		fn := func(s *Stream) {
+
+		}
+
+		app.Manager.ActivateStream(msg.Token, msg.User, msg.Engine)
+
+		if err != nil {
+			return errors.New("Unable to activate stream: " + err.Error()), 400
+		}
+		type Reply struct {
+			token string
+		}
+		data, _ := json.Marshal(map[string]string{"token": token})
+		w.Write(data)
+		return
+	}
+}
 
 // func (app *Application) StreamsHandler() AppHandler {
 // 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {

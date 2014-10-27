@@ -19,12 +19,20 @@ var _ = fmt.Printf
 // 3. Note that the stream or target may already have been removed by another operation, so it is important that you check the return value of anything you retrieve from the maps for existence. For example, it is possible that one goroutine is trying to deactivate the stream, while another goroutine is trying to post a frame. Both goroutines may be trying to acquire the lock at the same time. If the write goroutine acquires it first, then this means the read goroutine must verify the existence of the active stream through the token.
 // 4. A target exists in the target map if and only if one or more of its streams exists in the streams map.
 
+// Used for DI/Mocks
+type StreamHelper interface {
+	AddStream(*Stream)
+	RemoveStream(*Stream)
+	DeactivateStream(*Stream)
+}
+
 type Manager struct {
 	sync.RWMutex
 	targets map[string]*Target     // map of targetId to Target
 	tokens  map[string]*Stream     // map of token to Stream
 	streams map[string]*Stream     // map of streamId to Stream
 	timers  map[string]*time.Timer // map of stream timers
+	helper  StreamHelper
 }
 
 func NewManager() *Manager {
@@ -42,7 +50,7 @@ func NewManager() *Manager {
 // Add a stream to target targetId. If the target does not exist, the manager
 // will create the target automatically. The manager also assumes ownership of
 // the stream. callback can be any closure executed at the end.
-func (m *Manager) AddStream(stream *Stream, targetId string, callback func() error) error {
+func (m *Manager) AddStream(stream *Stream, targetId string, callback func(*Stream) error) error {
 	m.Lock()
 	defer m.Unlock()
 	// Create a target if it does not exist.
@@ -99,7 +107,7 @@ func (m *Manager) AddStream(stream *Stream, targetId string, callback func() err
 
 // Remove stream. If the stream is the last stream in the target, then the
 // target is also removed.
-func (m *Manager) RemoveStream(streamId string, callback func() error) error {
+func (m *Manager) RemoveStream(streamId string, callback func(*Stream) error) error {
 	m.Lock()
 	defer m.Unlock()
 	stream, ok := m.streams[streamId]
@@ -126,7 +134,8 @@ func (m *Manager) RemoveStream(streamId string, callback func() error) error {
 	return nil
 }
 
-func (m *Manager) ActivateStream(targetId, user, engine string) (token string, err error) {
+// This function is not the most pleasant
+func (m *Manager) ActivateStream(targetId, user, engine string, cleanup func(*Stream) error) (token string, err error) {
 	m.Lock()
 	defer m.Unlock()
 	t, ok := m.targets[targetId]
@@ -150,8 +159,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, e
 	stream.activeStream = NewActiveStream(user, token, engine)
 	m.tokens[token] = stream
 	m.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
-		// ah fuck.
-		m.DeactivateStream(stream.streamId)
+		m.DeactivateStream(stream.streamId, cleanup)
 	})
 	t.activeStreams[stream] = struct{}{}
 	return
@@ -166,7 +174,7 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	t.inactiveStreams.Add(s)
 }
 
-func (m *Manager) DeactivateStream(streamId string, callback func() error) error {
+func (m *Manager) DeactivateStream(streamId string, callback func(*Stream) error) error {
 	m.Lock()
 	defer m.Unlock()
 	stream, ok := m.streams[streamId]
@@ -183,7 +191,7 @@ func (m *Manager) DeactivateStream(streamId string, callback func() error) error
 	defer stream.Unlock()
 	m.deactivateStreamImpl(stream, t)
 	if callback != nil {
-		return callback()
+		return callback(stream)
 	}
 	return nil
 }
