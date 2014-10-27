@@ -93,6 +93,21 @@ func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
 	return fn(stream)
 }
 
+func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
+	m.RLock()
+	defer m.RUnlock()
+	stream, ok := m.tokens[token]
+	if ok == false {
+		return errors.New("invalid token: " + token)
+	}
+	t := m.targets[stream.targetId]
+	t.Lock()
+	defer t.Unlock()
+	stream.Lock()
+	defer stream.Unlock()
+	return fn(stream)
+}
+
 // Remove stream. If the stream is the last stream in the target, then the
 // target is also removed.
 func (m *Manager) RemoveStream(streamId string) error {
@@ -119,7 +134,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 	return m.injector.RemoveStreamService(stream)
 }
 
-func (m *Manager) ActivateStream(targetId, user, engine string) (token string, err error) {
+func (m *Manager) ActivateStream(targetId, user, engine string) (token string, streamId string, err error) {
 	m.Lock()
 	defer m.Unlock()
 	t, ok := m.targets[targetId]
@@ -137,6 +152,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, e
 	}
 	token = util.RandSeq(36)
 	stream := iterator.Key().(*Stream)
+	streamId = stream.streamId
 	stream.Lock()
 	defer stream.Unlock()
 	t.inactiveStreams.Remove(stream)
