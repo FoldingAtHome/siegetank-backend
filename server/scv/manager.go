@@ -20,38 +20,30 @@ var _ = fmt.Printf
 // 4. A target exists in the target map if and only if one or more of its streams exists in the streams map.
 
 // A mechanism for allowing dependency injection. These methods will usually close other external app variables like DBs, file/io, etc.
-type StreamHelper interface {
-	AddStreamService(*Stream) error
-	RemoveStreamService(*Stream) error
-	DeactivateStreamService(*Stream) error
-}
-
 type Manager struct {
 	sync.RWMutex
-	targets map[string]*Target     // map of targetId to Target
-	tokens  map[string]*Stream     // map of token to Stream
-	streams map[string]*Stream     // map of streamId to Stream
-	timers  map[string]*time.Timer // map of stream timers
-	helper  StreamHelper
+	targets     map[string]*Target     // map of targetId to Target
+	tokens      map[string]*Stream     // map of token to Stream
+	streams     map[string]*Stream     // map of streamId to Stream
+	timers      map[string]*time.Timer // map of stream timers
+	deactivator func(*Stream) error    // a function that deactivates stream
 }
 
-func NewManager(helper StreamHelper) *Manager {
+func NewManager(fn func(*Stream) error) *Manager {
 	tm := Manager{
-		targets: make(map[string]*Target),
-		tokens:  make(map[string]*Stream),
-		streams: make(map[string]*Stream),
-		timers:  make(map[string]*time.Timer),
-		helper:  helper,
+		targets:     make(map[string]*Target),
+		tokens:      make(map[string]*Stream),
+		streams:     make(map[string]*Stream),
+		timers:      make(map[string]*time.Timer),
+		deactivator: fn,
 	}
 	return &tm
 }
 
-// Guarantee:
-
 // Add a stream to target targetId. If the target does not exist, the manager
 // will create the target automatically. The manager also assumes ownership of
-// the stream. callback can be any closure executed at the end.
-func (m *Manager) AddStream(stream *Stream, targetId string) error {
+// the stream. Fn is a callback (typically a closure) executed at the end.
+func (m *Manager) AddStream(stream *Stream, targetId string, fn func(*Stream) error) error {
 	m.Lock()
 	defer m.Unlock()
 	// Create a target if it does not exist.
@@ -64,7 +56,7 @@ func (m *Manager) AddStream(stream *Stream, targetId string) error {
 	t.Lock()
 	defer t.Unlock()
 	t.inactiveStreams.Add(stream)
-	return m.helper.AddStreamService(stream)
+	return fn(stream)
 }
 
 // func (m *Manager) ReadStream(streamId, callback func() error) error {
@@ -105,7 +97,7 @@ func (m *Manager) AddStream(stream *Stream, targetId string) error {
 
 // Remove stream. If the stream is the last stream in the target, then the
 // target is also removed.
-func (m *Manager) RemoveStream(streamId string) error {
+func (m *Manager) RemoveStream(streamId string, fn func(*Stream) error) error {
 	m.Lock()
 	defer m.Unlock()
 	stream, ok := m.streams[streamId]
@@ -122,11 +114,12 @@ func (m *Manager) RemoveStream(streamId string) error {
 	if stream.activeStream != nil {
 		m.deactivateStreamImpl(stream, t)
 	}
-	fmt.Println(t.activeStreams, t.inactiveStreams)
+	t.inactiveStreams.Remove(stream)
+	fmt.Println(t.activeStreams, "|", t.inactiveStreams.Len())
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
 		delete(m.targets, stream.targetId)
 	}
-	return m.helper.RemoveStreamService(stream)
+	return fn(stream)
 }
 
 func (m *Manager) ActivateStream(targetId, user, engine string) (token string, err error) {
@@ -184,7 +177,7 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	stream.Lock()
 	defer stream.Unlock()
 	m.deactivateStreamImpl(stream, t)
-	return m.helper.DeactivateStreamService(stream)
+	return m.deactivator(stream)
 }
 
 // func (m *Manager) ModifyStream(streamId string, fn func()) error {

@@ -164,7 +164,6 @@ package scv
 // func (app *Application) StreamsHandler() AppHandler {
 // 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 // 		user, err := app.CurrentUser(r)
-
 // 		if err != nil {
 // 			return errors.New("Unable to find user."), 401
 // 		}
@@ -183,7 +182,10 @@ package scv
 // 		if err != nil {
 // 			return errors.New("Bad request: " + err.Error()), 400
 // 		}
+
 // 		stream_id := util.RandSeq(36)
+// 		stream := &NewStream(streamId, msg.TargetId, "OK", 0, 0, int(time.Now().Unix()))
+
 // 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
 // 		for Directory, Content := range todo {
 // 			for filename, fileb64 := range Content {

@@ -14,47 +14,49 @@ import (
 
 var _ = fmt.Printf
 
-// func TestAddRemoveStream(t *testing.T) {
-// 	m := NewManager()
-// 	var wg sync.WaitGroup
-// 	var mutex sync.Mutex
-// 	streamPtrs := make(map[*Stream]struct{})
-// 	targetId := util.RandSeq(36)
-// 	for i := 0; i < 10; i++ {
-// 		wg.Add(1)
-// 		go func() {
-// 			defer wg.Done()
-// 			streamId := util.RandSeq(36)
-// 			stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
-// 			mutex.Lock()
-// 			streamPtrs[stream] = struct{}{}
-// 			mutex.Unlock()
-// 			m.AddStream(stream, targetId)
-// 		}()
-// 	}
-// 	wg.Wait()
-// 	for k, _ := range streamPtrs {
-// 		assert.True(t, m.targets[targetId].inactiveStreams.Contains(k))
-// 		assert.Equal(t, m.streams[k.streamId], k)
-// 	}
-// 	for k, _ := range streamPtrs {
-// 		wg.Add(1)
-// 		go func(stream_id string) {
-// 			defer wg.Done()
-// 			m.RemoveStream(stream_id)
-// 		}(k.streamId)
-// 	}
-// 	wg.Wait()
-// 	_, ok := m.targets[targetId]
-// 	assert.False(t, ok)
-// 	for k, _ := range streamPtrs {
-// 		_, ok := m.streams[k.streamId]
-// 		assert.False(t, ok)
-// 	}
-// }
+var mockFunc = func(*Stream) error { return nil }
+
+func TestAddRemoveStream(t *testing.T) {
+	m := NewManager(mockFunc)
+	var wg sync.WaitGroup
+	var mutex sync.Mutex
+	streamPtrs := make(map[*Stream]struct{})
+	targetId := util.RandSeq(36)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			streamId := util.RandSeq(36)
+			stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+			mutex.Lock()
+			streamPtrs[stream] = struct{}{}
+			mutex.Unlock()
+			m.AddStream(stream, targetId, mockFunc)
+		}()
+	}
+	wg.Wait()
+	for k, _ := range streamPtrs {
+		assert.True(t, m.targets[targetId].inactiveStreams.Contains(k))
+		assert.Equal(t, m.streams[k.streamId], k)
+	}
+	for k, _ := range streamPtrs {
+		wg.Add(1)
+		go func(stream_id string) {
+			defer wg.Done()
+			m.RemoveStream(stream_id, mockFunc)
+		}(k.streamId)
+	}
+	wg.Wait()
+	_, ok := m.targets[targetId]
+	assert.False(t, ok)
+	for k, _ := range streamPtrs {
+		_, ok := m.streams[k.streamId]
+		assert.False(t, ok)
+	}
+}
 
 // func TestDie(t *testing.T) {
-// 	target := NewTarget(NewTargetManager())
+// 	target := NewTarget()
 // 	_, err := target.ActiveStreams()
 // 	assert.True(t, err == nil)
 // 	target.Die()
@@ -65,25 +67,8 @@ var _ = fmt.Printf
 // add test for removing a stream that is active
 // add test for auto expiration.
 
-type MockHelper struct {
-}
-
-func (m *MockHelper) AddStreamService(*Stream) error {
-	return nil
-}
-
-func (m *MockHelper) RemoveStreamService(*Stream) error {
-	return nil
-}
-
-func (m *MockHelper) DeactivateStreamService(*Stream) error {
-	return nil
-}
-
-var mockService *MockHelper = &MockHelper{}
-
 // func TestRemoveActiveStream(t *testing.T) {
-// 	m := NewManager(mockService)
+// 	m := NewManager(mockDeactivator)
 // 	targetId := util.RandSeq(5)
 // 	streamId := util.RandSeq(5)
 // 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
@@ -93,11 +78,11 @@ var mockService *MockHelper = &MockHelper{}
 // }
 
 func TestDeactivateTimer(t *testing.T) {
-	m := NewManager(mockService)
+	m := NewManager(mockFunc)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
-	m.AddStream(stream, targetId)
+	m.AddStream(stream, targetId, mockFunc)
 	sleepTime := 5
 	m.targets[targetId].ExpirationTime = sleepTime
 	token, err := m.ActivateStream(targetId, "yutong", "openmm")
@@ -114,14 +99,14 @@ func TestDeactivateTimer(t *testing.T) {
 }
 
 func TestActivateStream(t *testing.T) {
-	m := NewManager(mockService)
+	m := NewManager(mockFunc)
 	numStreams := 5
 	targetId := util.RandSeq(5)
 	addOrder := make([]*Stream, 0)
 	for i := 0; i < numStreams; i++ {
 		streamId := util.RandSeq(3)
 		stream := NewStream(streamId, targetId, "OK", i, 0, int(time.Now().Unix()))
-		m.AddStream(stream, targetId)
+		m.AddStream(stream, targetId, mockFunc)
 		addOrder = append(addOrder, stream)
 	}
 	var mu sync.Mutex
