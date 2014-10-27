@@ -26,7 +26,7 @@ type Manager struct {
 	tokens      map[string]*Stream     // map of token to Stream
 	streams     map[string]*Stream     // map of streamId to Stream
 	timers      map[string]*time.Timer // map of stream timers
-	deactivator func(*Stream) error    // a function that deactivates stream
+	deactivator func(*Stream) error    // a function that deactivates streams.
 }
 
 func NewManager(fn func(*Stream) error) *Manager {
