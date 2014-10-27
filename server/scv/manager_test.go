@@ -196,19 +196,20 @@ func TestStreamReadWrite(t *testing.T) {
 	assert.Equal(t, m.streams[streamId].frames, 10)
 }
 
-// func TestEmptyActivation(t *testing.T) {
-// 	tm := NewTargetManager()
-// 	target := NewTarget(tm)
-// 	numStreams := 3
-// 	for i := 0; i < numStreams; i++ {
-// 		stream_id := util.RandSeq(3)
-// 		target.AddStream(stream_id, 0)
-// 		_, _, err := target.ActivateStream("foo", "bar")
-// 		assert.True(t, err == nil)
-// 	}
-// 	_, _, err := target.ActivateStream("foo", "bar")
-// 	assert.True(t, err != nil)
-// }
+func TestActivateEmptyTarget(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	numStreams := 3
+	for i := 0; i < numStreams; i++ {
+		streamId := util.RandSeq(3)
+		stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+		m.AddStream(stream, targetId, mockFunc)
+		_, err := m.ActivateStream(targetId, "foo", "bar")
+		assert.True(t, err == nil)
+	}
+	_, err := m.ActivateStream(targetId, "foo", "bar")
+	assert.True(t, err != nil)
+}
 
 // func TestStreamExpiration(t *testing.T) {
 // 	tm := NewTargetManager()

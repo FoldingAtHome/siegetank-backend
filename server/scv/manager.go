@@ -177,19 +177,6 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	return m.injector.DeactivateStreamService(stream)
 }
 
-// func (m *Manager) ModifyStream(streamId string, fn func()) error {
-
-// }
-
-// func (m *Manager) DownloadFile(dataDir, streamId string) (files map[string]string, err error) {
-// 	m.RLock()
-// 	defer m.RUnlock()
-// 	stream := m.streams[streamId]
-// 	stream.RLock()
-// 	defer stream.RUnlock()
-// 	//
-// }
-
 func (m *Manager) LoadCheckpoints(dataDir, streamId string) (files map[string]string, err error) {
 	m.RLock()
 	defer m.RUnlock()

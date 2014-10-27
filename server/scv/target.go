@@ -1,19 +1,8 @@
 package scv
 
 import (
-	// "../util"
-	// "container/heap"
-	// "errors"
-	"fmt"
-	// "io/ioutil"
-	// "sort"
-	// "path/filepath"
-	// "strconv"
 	"sync"
-	// "time"
 )
-
-var _ = fmt.Printf
 
 type Target struct {
 	sync.RWMutex
