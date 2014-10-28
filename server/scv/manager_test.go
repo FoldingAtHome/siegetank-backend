@@ -6,8 +6,9 @@ import (
 	// "sort"
 	"fmt"
 	"math/rand"
-	"strings"
+	// "strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,19 +27,6 @@ func (m *mockInterface) RemoveStreamService(s *Stream) error {
 
 func (m *mockInterface) DeactivateStreamService(s *Stream) error {
 	return nil
-}
-
-func (m *mockInterface) TokenCreator(targetId string) string {
-	return targetId + ":" + util.RandSeq(36)
-}
-
-func (m *mockInterface) TokenParser(token string) string {
-	result := strings.Split(token, ":")
-	if len(result) == 0 {
-		return ""
-	} else {
-		return result[0]
-	}
 }
 
 var intf = &mockInterface{}
@@ -252,14 +240,20 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 				}()
 			}
 			// activate streams at random points in time (some of these may fail, which is fine)
-			for a := 0; a < nActivations; a++ {
+			var a int64
+			for atomic.LoadInt64(&a) < int64(nActivations) {
 				wg.Add(1)
+
+				// bad XX intrinsically racy as hell
+
 				go func() {
 					defer wg.Done()
 					// activate these streams over the span of 1 minutes
 					time.Sleep(time.Second * time.Duration(rand.Intn(secondsBetweenFrames)))
-					token, astreamId, err := m.ActivateStream(targetId, "joe", "bob")
+					token, _, err := m.ActivateStream(targetId, "joe", "bob")
 					if err == nil {
+						atomic.AddInt64(&a, 1)
+						fmt.Println("Activation #", a)
 						// wg.Add(1)
 						// // Deactivate this stream after an hour
 						// go func() {

@@ -6,8 +6,11 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"../util"
 )
 
 var _ = fmt.Printf
@@ -16,8 +19,6 @@ var _ = fmt.Printf
 type Injector interface {
 	RemoveStreamService(*Stream) error
 	DeactivateStreamService(*Stream) error
-	TokenCreator(targetId string) (token string) // generate a token
-	TokenParser(token string) (targetId string)  // generate a token
 }
 
 // The mutex in Manager makes guarantees about the state of the system:
@@ -40,6 +41,19 @@ func NewManager(inj Injector) *Manager {
 		injector: inj,
 	}
 	return &m
+}
+
+func createToken(targetId string) string {
+	return targetId + ":" + util.RandSeq(36)
+}
+
+func parseToken(token string) string {
+	result := strings.Split(token, ":")
+	if len(result) == 0 {
+		return ""
+	} else {
+		return result[0]
+	}
 }
 
 // Add a stream to target targetId. If the target does not exist, the manager
@@ -100,7 +114,7 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 	m.RLock()
 	s_time_1 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer m.RUnlock()
-	targetId := m.injector.TokenParser(token)
+	targetId := parseToken(token)
 	if targetId == "" {
 		return errors.New("invalid token format: " + token)
 	}
@@ -165,7 +179,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 		err = errors.New("Target does not have streams")
 		return
 	}
-	token = m.injector.TokenCreator(targetId)
+	token = createToken(targetId)
 	stream := iterator.Key().(*Stream)
 	streamId = stream.streamId
 	stream.Lock()
