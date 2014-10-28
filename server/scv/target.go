@@ -6,6 +6,7 @@ import (
 
 type Target struct {
 	sync.RWMutex
+	tokens          map[string]*Stream   // map of token to Stream
 	activeStreams   map[*Stream]struct{} // set of active streams
 	inactiveStreams *Set                 // queue of inactive streams
 	expirations     chan string          // expiration channel for timers
@@ -24,6 +25,7 @@ func StreamComp(l, r interface{}) bool {
 
 func NewTarget() *Target {
 	target := Target{
+		tokens:          make(map[string]*Stream),
 		activeStreams:   make(map[*Stream]struct{}),
 		inactiveStreams: NewCustomSet(StreamComp),
 		expirations:     make(chan string),

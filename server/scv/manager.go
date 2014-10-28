@@ -1,7 +1,6 @@
 package scv
 
 import (
-	"../util"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -17,6 +16,8 @@ var _ = fmt.Printf
 type Injector interface {
 	RemoveStreamService(*Stream) error
 	DeactivateStreamService(*Stream) error
+	TokenCreator(targetId string) (token string) // generate a token
+	TokenParser(token string) (targetId string)  // generate a token
 }
 
 // The mutex in Manager makes guarantees about the state of the system:
@@ -26,8 +27,8 @@ type Injector interface {
 // 4. A target exists in the target map if and only if one or more of its streams exists in the streams map.
 type Manager struct {
 	sync.RWMutex
-	targets  map[string]*Target     // map of targetId to Target
-	tokens   map[string]*Stream     // map of token to Stream
+	targets map[string]*Target // map of targetId to Target
+	//tokens   map[string]*Stream     // map of token to Stream
 	streams  map[string]*Stream     // map of streamId to Stream
 	timers   map[string]*time.Timer // map of stream timers
 	injector Injector
@@ -35,8 +36,8 @@ type Manager struct {
 
 func NewManager(inj Injector) *Manager {
 	m := Manager{
-		targets:  make(map[string]*Target),
-		tokens:   make(map[string]*Stream),
+		targets: make(map[string]*Target),
+		// tokens:   make(map[string]*Stream),
 		streams:  make(map[string]*Stream),
 		timers:   make(map[string]*time.Timer),
 		injector: inj,
@@ -98,19 +99,25 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 	m.RLock()
 	s_time_1 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer m.RUnlock()
-	stream, ok := m.tokens[token]
-	if ok == false {
-		return errors.New("invalid token: " + token)
+	targetId := m.injector.TokenParser(token)
+	if targetId == "" {
+		return errors.New("invalid token format: " + token)
 	}
-	t := m.targets[stream.targetId]
+	t := m.targets[targetId]
 	t.RLock()
 	s_time_2 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer t.RUnlock()
+	stream, ok := t.tokens[token]
+	if ok == false {
+		return errors.New("invalid token: " + token)
+	}
 	stream.Lock()
 	s_time_3 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer stream.Unlock()
 	err := fn(stream)
-	fmt.Println("m lock:", s_time_1-s_time, "t lock:", s_time_2-s_time_1, "s lock:", s_time_3-s_time_2, "total:", float64(time.Now().UnixNano())/float64(1e9)-s_time)
+	s_time_4 := float64(time.Now().UnixNano()) / float64(1e9)
+	fmt.Printf("m: %.2e t: %.2e s: %.2e fn: %.2e total: %.2e\n", s_time_1-s_time,
+		s_time_2-s_time_1, s_time_3-s_time_2, s_time_4-s_time_3, s_time_4-s_time)
 	return err
 }
 
@@ -129,7 +136,6 @@ func (m *Manager) RemoveStream(streamId string) error {
 	stream.Lock()
 	defer stream.Unlock()
 	delete(m.streams, streamId)
-	delete(m.tokens, streamId)
 	if stream.activeStream != nil {
 		m.deactivateStreamImpl(stream, t)
 	}
@@ -141,9 +147,8 @@ func (m *Manager) RemoveStream(streamId string) error {
 }
 
 func (m *Manager) ActivateStream(targetId, user, engine string) (token string, streamId string, err error) {
-	m.Lock()
-	defer m.Unlock()
-	fmt.Println("Activate Stream")
+	m.RLock()
+	defer m.RUnlock()
 	t, ok := m.targets[targetId]
 	if ok == false {
 		err = errors.New("Target does not exist")
@@ -151,20 +156,21 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 	}
 	t.Lock()
 	defer t.Unlock()
+	fmt.Println("Activating Stream")
 	iterator := t.inactiveStreams.Iterator()
 	ok = iterator.Next()
 	if ok == false {
 		err = errors.New("Target does not have streams")
 		return
 	}
-	token = util.RandSeq(36)
+	token = m.injector.TokenCreator(targetId)
 	stream := iterator.Key().(*Stream)
 	streamId = stream.streamId
 	stream.Lock()
 	defer stream.Unlock()
 	t.inactiveStreams.Remove(stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
-	m.tokens[token] = stream
+	t.tokens[token] = stream
 	m.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
 		m.DeactivateStream(stream.streamId)
 	})
@@ -174,7 +180,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 
 // Assumes that locks are in place.
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
-	delete(m.tokens, s.activeStream.authToken)
+	delete(t.tokens, s.activeStream.authToken)
 	delete(m.timers, s.streamId)
 	delete(t.activeStreams, s)
 	s.activeStream = nil
@@ -182,8 +188,8 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 }
 
 func (m *Manager) DeactivateStream(streamId string) error {
-	m.Lock()
-	defer m.Unlock()
+	m.RLock()
+	defer m.RUnlock()
 	stream, ok := m.streams[streamId]
 	fmt.Println("Deactivate Stream")
 	if ok == false {
