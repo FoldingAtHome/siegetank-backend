@@ -11,7 +11,7 @@ type Target struct {
 	activeStreams   map[*Stream]struct{} // set of active streams
 	inactiveStreams *Set                 // queue of inactive streams
 	timers          map[string]*time.Timer
-	ExpirationTime  int // expiration time in seconds
+	// ExpirationTime  int // expiration time in seconds
 }
 
 func StreamComp(l, r interface{}) bool {
@@ -30,7 +30,6 @@ func NewTarget() *Target {
 		activeStreams:   make(map[*Stream]struct{}),
 		inactiveStreams: NewCustomSet(StreamComp),
 		timers:          make(map[string]*time.Timer),
-		ExpirationTime:  900,
 	}
 	return &target
 }

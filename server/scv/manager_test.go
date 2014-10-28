@@ -86,82 +86,84 @@ func TestRemoveActiveStream(t *testing.T) {
 	assert.Equal(t, len(m.streams), 0)
 }
 
-// func TestDeactivateTimer(t *testing.T) {
-// 	m := NewManager(intf)
-// 	targetId := util.RandSeq(5)
-// 	streamId := util.RandSeq(5)
-// 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
-// 	m.AddStream(stream, targetId, mockFunc)
-// 	sleepTime := 6
-// 	m.targets[targetId].ExpirationTime = sleepTime
-// 	token, streamId, err := m.ActivateStream(targetId, "yutong", "openmm")
-// 	assert.True(t, err == nil)
-// 	stream.RLock()
-// 	assert.True(t, stream.activeStream != nil)
-// 	stream.RUnlock()
-// 	time.Sleep(time.Duration(sleepTime) * time.Second)
-// 	stream.RLock()
-// 	assert.True(t, stream.activeStream == nil)
-// 	stream.RUnlock()
-// 	_, ok := m.timers[token]
-// 	assert.False(t, ok)
-// }
+func TestDeactivateTimer(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	streamId := util.RandSeq(5)
+	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
+	m.AddStream(stream, targetId, mockFunc)
+	sleepTime := 6
+	m.expirationTime = sleepTime
+	token, streamId, err := m.ActivateStream(targetId, "yutong", "openmm")
+	assert.True(t, err == nil)
+	stream.RLock()
+	assert.True(t, stream.activeStream != nil)
+	stream.RUnlock()
+	time.Sleep(time.Duration(sleepTime) * time.Second)
+	stream.RLock()
+	assert.True(t, stream.activeStream == nil)
+	stream.RUnlock()
+	_, ok := m.targets[targetId].timers[token]
+	assert.False(t, ok)
+}
 
-// func TestActivateStream(t *testing.T) {
-// 	m := NewManager(intf)
-// 	numStreams := 5
-// 	targetId := util.RandSeq(5)
-// 	addOrder := make([]*Stream, 0)
-// 	for i := 0; i < numStreams; i++ {
-// 		streamId := util.RandSeq(3)
-// 		stream := NewStream(streamId, targetId, "OK", i, 0, int(time.Now().Unix()))
-// 		m.AddStream(stream, targetId, mockFunc)
-// 		addOrder = append(addOrder, stream)
-// 	}
-// 	var mu sync.Mutex
-// 	var wg sync.WaitGroup
-// 	activationTokens := make([]string, 0)
-// 	// we need to make sure that the activation order is correct.
-// 	for i := 0; i < numStreams; i++ {
-// 		wg.Add(1)
-// 		go func() {
-// 			defer wg.Done()
-// 			// activate a single stream
-// 			username := util.RandSeq(5)
-// 			engine := util.RandSeq(5)
-// 			token, _, err := m.ActivateStream(targetId, username, engine)
-// 			assert.True(t, err == nil)
-// 			mu.Lock()
-// 			activationTokens = append(activationTokens, token)
-// 			mu.Unlock()
-// 			m.RLock()
-// 			target :=
-// 			stream := m.targets[targetId].tokens[token]
-// 			assert.Equal(t, stream.activeStream.user, username)
-// 			assert.Equal(t, stream.activeStream.engine, engine)
-// 			assert.Equal(t, stream.activeStream.authToken, token)
-// 			assert.True(t, stream.activeStream.startTime-int(time.Now().Unix()) < 2)
-// 			m.RUnlock()
-// 		}()
-// 	}
-// 	wg.Wait()
-// 	for idx, token := range activationTokens {
-// 		s := m.targets[targetId].tokens[token]
-// 		assert.Equal(t, s, addOrder[numStreams-idx-1])
-// 	}
-// 	for _, stream := range addOrder {
-// 		wg.Add(1)
-// 		go func(streamId string) {
-// 			defer wg.Done()
-// 			err := m.DeactivateStream(streamId)
-// 			assert.Equal(t, err, nil)
-// 		}(stream.streamId)
-// 	}
-// 	wg.Wait()
-// 	assert.Equal(t, len(m.targets[targetId].tokens), 0)
-// 	assert.Equal(t, len(m.targets[targetId].activeStreams), 0)
-// 	assert.Equal(t, m.targets[targetId].inactiveStreams.Len(), numStreams)
-// }
+func TestActivateStream(t *testing.T) {
+	m := NewManager(intf)
+	numStreams := 5
+	targetId := util.RandSeq(5)
+	addOrder := make([]*Stream, 0)
+	for i := 0; i < numStreams; i++ {
+		streamId := util.RandSeq(3)
+		stream := NewStream(streamId, targetId, "OK", i, 0, int(time.Now().Unix()))
+		m.AddStream(stream, targetId, mockFunc)
+		addOrder = append(addOrder, stream)
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	activationTokens := make([]string, 0)
+	// we need to make sure that the activation order is correct.
+	for i := 0; i < numStreams; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// activate a single stream
+			username := util.RandSeq(5)
+			engine := util.RandSeq(5)
+			token, _, err := m.ActivateStream(targetId, username, engine)
+			assert.True(t, err == nil)
+			mu.Lock()
+			activationTokens = append(activationTokens, token)
+			mu.Unlock()
+			m.RLock()
+			target := m.targets[targetId]
+			target.Lock()
+			stream := target.tokens[token]
+			assert.Equal(t, stream.activeStream.user, username)
+			assert.Equal(t, stream.activeStream.engine, engine)
+			assert.Equal(t, stream.activeStream.authToken, token)
+			assert.True(t, stream.activeStream.startTime-int(time.Now().Unix()) < 2)
+			target.Unlock()
+			m.RUnlock()
+		}()
+	}
+	wg.Wait()
+	for idx, token := range activationTokens {
+		s := m.targets[targetId].tokens[token]
+		assert.Equal(t, s, addOrder[numStreams-idx-1])
+	}
+	for _, stream := range addOrder {
+		wg.Add(1)
+		go func(streamId string) {
+			defer wg.Done()
+			err := m.DeactivateStream(streamId)
+			assert.Equal(t, err, nil)
+		}(stream.streamId)
+	}
+	wg.Wait()
+	assert.Equal(t, len(m.targets[targetId].tokens), 0)
+	assert.Equal(t, len(m.targets[targetId].activeStreams), 0)
+	assert.Equal(t, m.targets[targetId].inactiveStreams.Len(), numStreams)
+}
 
 func TestStreamReadWrite(t *testing.T) {
 	m := NewManager(intf)
@@ -222,16 +224,20 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 	fmt.Println("Multiplexing...")
 	// add asynchronously
 	m := NewManager(intf)
+	// this test ends after 5 minutes
+	m.expirationTime = 300
 	var wg sync.WaitGroup
+	var count int64
 	for t := 0; t < nTargets; t++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			targetId := util.RandSeq(20)
+			var wg2 sync.WaitGroup
 			for s := 0; s < nStreams; s++ {
-				wg.Add(1)
+				wg2.Add(1)
 				go func() {
-					defer wg.Done()
+					defer wg2.Done()
 					// add streams at random points in time
 					streamId := util.RandSeq(12)
 					stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
@@ -239,38 +245,26 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 					assert.Equal(mt.t, err, nil)
 				}()
 			}
+			wg2.Wait()
 			// activate streams at random points in time (some of these may fail, which is fine)
-			var a int64
-			for atomic.LoadInt64(&a) < int64(nActivations) {
-				wg.Add(1)
-
+			for a := 0; a < nActivations; a++ {
 				// bad XX intrinsically racy as hell
-
+				wg.Add(1)
 				go func() {
 					defer wg.Done()
 					// activate these streams over the span of 1 minutes
 					time.Sleep(time.Second * time.Duration(rand.Intn(secondsBetweenFrames)))
 					token, _, err := m.ActivateStream(targetId, "joe", "bob")
 					if err == nil {
-						atomic.AddInt64(&a, 1)
-						fmt.Println("Activation #", a)
-						// wg.Add(1)
-						// // Deactivate this stream after an hour
-						// go func() {
-						// 	defer wg.Done()
-						// 	time.Sleep(time.Minute * time.Duration(60))
-						// 	// stream will self deactivate
-						// 	err := m.DeactivateStream(astreamId)
-						// 	assert.Equal(mt.t, err, nil)
-						// }()
-						// Modifying the active stream a bunch of times.
+						atomic.AddInt64(&count, 1)
+						fmt.Println("========Activated ", count)
 						wg.Add(1)
 						go func() {
 							defer wg.Done()
 							for {
 								writeFileMock := func(s *Stream) error {
 									// fmt.Println(time.Now().Unix(), "doing file io... stream:", astreamId, "target:", targetId)
-									time.Sleep(time.Duration(250) * time.Millisecond)
+									time.Sleep(time.Duration(100) * time.Millisecond)
 									return nil
 								}
 								err := m.ModifyActiveStream(token, writeFileMock)
@@ -293,7 +287,8 @@ func TestMultiplex(t *testing.T) {
 	mt := MultiplexTester{t}
 
 	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
-	mt.Multiplex(50, 20000, 2000, 300)
+	// mt.Multiplex(50, 20000, 2000, 300)
+	mt.Multiplex(10, 100, 100, 20)
 }
 
 // func TestStreamExpiration(t *testing.T) {
