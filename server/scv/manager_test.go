@@ -230,7 +230,7 @@ type MultiplexTester struct {
 	t *testing.T
 }
 
-func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations int, secondsBetweenFrames int) error {
+func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBetweenFrames int) error {
 	fmt.Println("Multiplexing...")
 	// add asynchronously
 	m := NewManager(intf)
@@ -257,17 +257,18 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations int, secon
 				go func() {
 					defer wg.Done()
 					// activate these streams over the span of 1 minutes
-					time.Sleep(time.Second * time.Duration(rand.Intn(60)))
+					time.Sleep(time.Second * time.Duration(rand.Intn(secondsBetweenFrames)))
 					token, astreamId, err := m.ActivateStream(targetId, "joe", "bob")
 					if err == nil {
-						wg.Add(1)
-						// Deactivate this stream after an hour
-						go func() {
-							defer wg.Done()
-							time.Sleep(time.Minute * time.Duration(60))
-							err := m.DeactivateStream(astreamId)
-							assert.Equal(mt.t, err, nil)
-						}()
+						// wg.Add(1)
+						// // Deactivate this stream after an hour
+						// go func() {
+						// 	defer wg.Done()
+						// 	time.Sleep(time.Minute * time.Duration(60))
+						// 	// stream will self deactivate
+						// 	err := m.DeactivateStream(astreamId)
+						// 	assert.Equal(mt.t, err, nil)
+						// }()
 						// Modifying the active stream a bunch of times.
 						wg.Add(1)
 						go func() {

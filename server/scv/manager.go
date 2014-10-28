@@ -46,7 +46,8 @@ func NewManager(inj Injector) *Manager {
 // will create the target automatically. The manager also assumes ownership of
 // the stream. Fn is a callback (typically a closure) executed at the end.
 func (m *Manager) AddStream(stream *Stream, targetId string, fn func(*Stream) error) error {
-
+	fmt.Println("Add Stream")
+	defer fmt.Println("Add Stream done")
 	m.Lock()
 	fmt.Println(time.Now().Unix(), "Adding Stream")
 	defer m.Unlock()
@@ -94,6 +95,7 @@ func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
 }
 
 func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
+	fmt.Println("Start Modify Stream")
 	s_time := float64(time.Now().UnixNano()) / float64(1e9)
 	m.RLock()
 	s_time_1 := float64(time.Now().UnixNano()) / float64(1e9)
@@ -146,6 +148,8 @@ func (m *Manager) RemoveStream(streamId string) error {
 }
 
 func (m *Manager) ActivateStream(targetId, user, engine string) (token string, streamId string, err error) {
+	fmt.Println("Activating Stream")
+	defer fmt.Println("Activating Stream Done")
 	m.RLock()
 	defer m.RUnlock()
 	t, ok := m.targets[targetId]
@@ -155,7 +159,6 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 	}
 	t.Lock()
 	defer t.Unlock()
-	fmt.Println("Activating Stream")
 	iterator := t.inactiveStreams.Iterator()
 	ok = iterator.Next()
 	if ok == false {
@@ -187,6 +190,8 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 }
 
 func (m *Manager) DeactivateStream(streamId string) error {
+	fmt.Println("Deactivating Stream")
+	defer fmt.Println("Deactivating Stream Done")
 	m.RLock()
 	defer m.RUnlock()
 	stream, ok := m.streams[streamId]
@@ -200,6 +205,7 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	t := m.targets[stream.targetId]
 	t.Lock()
 	defer t.Unlock()
+	fmt.Println("Deactivating Stream")
 	stream.Lock()
 	defer stream.Unlock()
 	m.deactivateStreamImpl(stream, t)
