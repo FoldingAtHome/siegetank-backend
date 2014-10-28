@@ -86,26 +86,32 @@ func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
 		return errors.New("stream " + streamId + " does not exist")
 	}
 	t := m.targets[stream.targetId]
-	t.Lock()
-	defer t.Unlock()
+	t.RLock()
+	defer t.RUnlock()
 	stream.Lock()
 	defer stream.Unlock()
 	return fn(stream)
 }
 
 func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
+	s_time := float64(time.Now().UnixNano()) / float64(1e9)
 	m.RLock()
+	s_time_1 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer m.RUnlock()
 	stream, ok := m.tokens[token]
 	if ok == false {
 		return errors.New("invalid token: " + token)
 	}
 	t := m.targets[stream.targetId]
-	t.Lock()
-	defer t.Unlock()
+	t.RLock()
+	s_time_2 := float64(time.Now().UnixNano()) / float64(1e9)
+	defer t.RUnlock()
 	stream.Lock()
+	s_time_3 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer stream.Unlock()
-	return fn(stream)
+	err := fn(stream)
+	fmt.Println("m lock:", s_time_1-s_time, "t lock:", s_time_2-s_time_1, "s lock:", s_time_3-s_time_2, "total:", float64(time.Now().UnixNano())/float64(1e9)-s_time)
+	return err
 }
 
 // Remove stream. If the stream is the last stream in the target, then the
@@ -137,6 +143,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 func (m *Manager) ActivateStream(targetId, user, engine string) (token string, streamId string, err error) {
 	m.Lock()
 	defer m.Unlock()
+	fmt.Println("Activate Stream")
 	t, ok := m.targets[targetId]
 	if ok == false {
 		err = errors.New("Target does not exist")
@@ -178,6 +185,7 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	m.Lock()
 	defer m.Unlock()
 	stream, ok := m.streams[streamId]
+	fmt.Println("Deactivate Stream")
 	if ok == false {
 		return errors.New("Stream does not exist")
 	}
