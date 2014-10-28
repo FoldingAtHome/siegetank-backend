@@ -119,60 +119,61 @@ func TestRemoveActiveStream(t *testing.T) {
 // 	assert.False(t, ok)
 // }
 
-func TestActivateStream(t *testing.T) {
-	m := NewManager(intf)
-	numStreams := 5
-	targetId := util.RandSeq(5)
-	addOrder := make([]*Stream, 0)
-	for i := 0; i < numStreams; i++ {
-		streamId := util.RandSeq(3)
-		stream := NewStream(streamId, targetId, "OK", i, 0, int(time.Now().Unix()))
-		m.AddStream(stream, targetId, mockFunc)
-		addOrder = append(addOrder, stream)
-	}
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	activationTokens := make([]string, 0)
-	// we need to make sure that the activation order is correct.
-	for i := 0; i < numStreams; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			// activate a single stream
-			username := util.RandSeq(5)
-			engine := util.RandSeq(5)
-			token, _, err := m.ActivateStream(targetId, username, engine)
-			assert.True(t, err == nil)
-			mu.Lock()
-			activationTokens = append(activationTokens, token)
-			mu.Unlock()
-			m.RLock()
-			stream := m.targets[targetId].tokens[token]
-			assert.Equal(t, stream.activeStream.user, username)
-			assert.Equal(t, stream.activeStream.engine, engine)
-			assert.Equal(t, stream.activeStream.authToken, token)
-			assert.True(t, stream.activeStream.startTime-int(time.Now().Unix()) < 2)
-			m.RUnlock()
-		}()
-	}
-	wg.Wait()
-	for idx, token := range activationTokens {
-		s := m.targets[targetId].tokens[token]
-		assert.Equal(t, s, addOrder[numStreams-idx-1])
-	}
-	for _, stream := range addOrder {
-		wg.Add(1)
-		go func(streamId string) {
-			defer wg.Done()
-			err := m.DeactivateStream(streamId)
-			assert.Equal(t, err, nil)
-		}(stream.streamId)
-	}
-	wg.Wait()
-	assert.Equal(t, len(m.targets[targetId].tokens), 0)
-	assert.Equal(t, len(m.targets[targetId].activeStreams), 0)
-	assert.Equal(t, m.targets[targetId].inactiveStreams.Len(), numStreams)
-}
+// func TestActivateStream(t *testing.T) {
+// 	m := NewManager(intf)
+// 	numStreams := 5
+// 	targetId := util.RandSeq(5)
+// 	addOrder := make([]*Stream, 0)
+// 	for i := 0; i < numStreams; i++ {
+// 		streamId := util.RandSeq(3)
+// 		stream := NewStream(streamId, targetId, "OK", i, 0, int(time.Now().Unix()))
+// 		m.AddStream(stream, targetId, mockFunc)
+// 		addOrder = append(addOrder, stream)
+// 	}
+// 	var mu sync.Mutex
+// 	var wg sync.WaitGroup
+// 	activationTokens := make([]string, 0)
+// 	// we need to make sure that the activation order is correct.
+// 	for i := 0; i < numStreams; i++ {
+// 		wg.Add(1)
+// 		go func() {
+// 			defer wg.Done()
+// 			// activate a single stream
+// 			username := util.RandSeq(5)
+// 			engine := util.RandSeq(5)
+// 			token, _, err := m.ActivateStream(targetId, username, engine)
+// 			assert.True(t, err == nil)
+// 			mu.Lock()
+// 			activationTokens = append(activationTokens, token)
+// 			mu.Unlock()
+// 			m.RLock()
+// 			target :=
+// 			stream := m.targets[targetId].tokens[token]
+// 			assert.Equal(t, stream.activeStream.user, username)
+// 			assert.Equal(t, stream.activeStream.engine, engine)
+// 			assert.Equal(t, stream.activeStream.authToken, token)
+// 			assert.True(t, stream.activeStream.startTime-int(time.Now().Unix()) < 2)
+// 			m.RUnlock()
+// 		}()
+// 	}
+// 	wg.Wait()
+// 	for idx, token := range activationTokens {
+// 		s := m.targets[targetId].tokens[token]
+// 		assert.Equal(t, s, addOrder[numStreams-idx-1])
+// 	}
+// 	for _, stream := range addOrder {
+// 		wg.Add(1)
+// 		go func(streamId string) {
+// 			defer wg.Done()
+// 			err := m.DeactivateStream(streamId)
+// 			assert.Equal(t, err, nil)
+// 		}(stream.streamId)
+// 	}
+// 	wg.Wait()
+// 	assert.Equal(t, len(m.targets[targetId].tokens), 0)
+// 	assert.Equal(t, len(m.targets[targetId].activeStreams), 0)
+// 	assert.Equal(t, m.targets[targetId].inactiveStreams.Len(), numStreams)
+// }
 
 func TestStreamReadWrite(t *testing.T) {
 	m := NewManager(intf)

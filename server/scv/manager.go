@@ -29,17 +29,14 @@ type Manager struct {
 	sync.RWMutex
 	targets map[string]*Target // map of targetId to Target
 	//tokens   map[string]*Stream     // map of token to Stream
-	streams  map[string]*Stream     // map of streamId to Stream
-	timers   map[string]*time.Timer // map of stream timers
+	streams  map[string]*Stream // map of streamId to Stream
 	injector Injector
 }
 
 func NewManager(inj Injector) *Manager {
 	m := Manager{
-		targets: make(map[string]*Target),
-		// tokens:   make(map[string]*Stream),
+		targets:  make(map[string]*Target),
 		streams:  make(map[string]*Stream),
-		timers:   make(map[string]*time.Timer),
 		injector: inj,
 	}
 	return &m
@@ -49,7 +46,9 @@ func NewManager(inj Injector) *Manager {
 // will create the target automatically. The manager also assumes ownership of
 // the stream. Fn is a callback (typically a closure) executed at the end.
 func (m *Manager) AddStream(stream *Stream, targetId string, fn func(*Stream) error) error {
+
 	m.Lock()
+	fmt.Println(time.Now().Unix(), "Adding Stream")
 	defer m.Unlock()
 	// Create a target if it does not exist.
 	_, ok := m.targets[targetId]
@@ -171,7 +170,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 	t.inactiveStreams.Remove(stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
 	t.tokens[token] = stream
-	m.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
+	t.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(t.ExpirationTime), func() {
 		m.DeactivateStream(stream.streamId)
 	})
 	t.activeStreams[stream] = struct{}{}
@@ -181,7 +180,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 // Assumes that locks are in place.
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	delete(t.tokens, s.activeStream.authToken)
-	delete(m.timers, s.streamId)
+	delete(t.timers, s.streamId)
 	delete(t.activeStreams, s)
 	s.activeStream = nil
 	t.inactiveStreams.Add(s)

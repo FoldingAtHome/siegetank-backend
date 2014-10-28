@@ -2,6 +2,7 @@ package scv
 
 import (
 	"sync"
+	"time"
 )
 
 type Target struct {
@@ -9,8 +10,8 @@ type Target struct {
 	tokens          map[string]*Stream   // map of token to Stream
 	activeStreams   map[*Stream]struct{} // set of active streams
 	inactiveStreams *Set                 // queue of inactive streams
-	expirations     chan string          // expiration channel for timers
-	ExpirationTime  int                  // expiration time in seconds
+	timers          map[string]*time.Timer
+	ExpirationTime  int // expiration time in seconds
 }
 
 func StreamComp(l, r interface{}) bool {
@@ -28,7 +29,7 @@ func NewTarget() *Target {
 		tokens:          make(map[string]*Stream),
 		activeStreams:   make(map[*Stream]struct{}),
 		inactiveStreams: NewCustomSet(StreamComp),
-		expirations:     make(chan string),
+		timers:          make(map[string]*time.Timer),
 		ExpirationTime:  900,
 	}
 	return &target
