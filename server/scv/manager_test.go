@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	// "strings"
 	"sync"
-	"sync/atomic"
+	// "sync/atomic"
 	"testing"
 	"time"
 
@@ -20,10 +20,6 @@ var _ = fmt.Printf
 var mockFunc = func(*Stream) error { return nil }
 
 type mockInterface struct{}
-
-func (m *mockInterface) RemoveStreamService(s *Stream) error {
-	return nil
-}
 
 func (m *mockInterface) DeactivateStreamService(s *Stream) error {
 	return nil
@@ -58,7 +54,7 @@ func TestAddRemoveStream(t *testing.T) {
 		wg.Add(1)
 		go func(stream_id string) {
 			defer wg.Done()
-			m.RemoveStream(stream_id)
+			m.RemoveStream(stream_id, mockFunc)
 		}(k.streamId)
 	}
 	wg.Wait()
@@ -77,10 +73,10 @@ func TestRemoveActiveStream(t *testing.T) {
 	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId, mockFunc)
 	_, _, err := m.ActivateStream(targetId, "yutong", "openmm")
-	assert.True(t, err == nil)
+	assert.Nil(t, err)
 	assert.Equal(t, len(m.targets[targetId].tokens), 1)
 	assert.Equal(t, len(m.streams), 1)
-	m.RemoveStream(streamId)
+	m.RemoveStream(streamId, mockFunc)
 	_, ok := m.targets[targetId]
 	assert.False(t, ok)
 	assert.Equal(t, len(m.streams), 0)
@@ -90,19 +86,22 @@ func TestDeactivateTimer(t *testing.T) {
 	m := NewManager(intf)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
-	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
+	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId, mockFunc)
 	sleepTime := 6
-	m.expirationTime = sleepTime
+	m.expirationTime = 5
 	token, streamId, err := m.ActivateStream(targetId, "yutong", "openmm")
 	assert.True(t, err == nil)
-	stream.RLock()
-	assert.True(t, stream.activeStream != nil)
-	stream.RUnlock()
+	m.ReadStream(streamId, func(s *Stream) error {
+		assert.NotNil(t, s.activeStream)
+		return nil
+	})
 	time.Sleep(time.Duration(sleepTime) * time.Second)
-	stream.RLock()
-	assert.True(t, stream.activeStream == nil)
-	stream.RUnlock()
+	m.ReadStream(streamId, func(s *Stream) error {
+		assert.Nil(t, s.activeStream)
+		return nil
+	})
+
 	_, ok := m.targets[targetId].timers[token]
 	assert.False(t, ok)
 }
@@ -130,7 +129,7 @@ func TestActivateStream(t *testing.T) {
 			username := util.RandSeq(5)
 			engine := util.RandSeq(5)
 			token, _, err := m.ActivateStream(targetId, username, engine)
-			assert.True(t, err == nil)
+			assert.Nil(t, err)
 			mu.Lock()
 			activationTokens = append(activationTokens, token)
 			mu.Unlock()
@@ -156,7 +155,7 @@ func TestActivateStream(t *testing.T) {
 		go func(streamId string) {
 			defer wg.Done()
 			err := m.DeactivateStream(streamId)
-			assert.Equal(t, err, nil)
+			assert.Nil(t, err)
 		}(stream.streamId)
 	}
 	wg.Wait()
@@ -172,7 +171,7 @@ func TestStreamReadWrite(t *testing.T) {
 	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId, mockFunc)
 	_, _, err := m.ActivateStream(targetId, "yutong", "openmm")
-	assert.True(t, err == nil)
+	assert.Nil(t, err)
 	var wg sync.WaitGroup
 	for i := 0; i < 1000; i++ {
 		wg.Add(1)
@@ -210,24 +209,46 @@ func TestActivateEmptyTarget(t *testing.T) {
 		stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
 		m.AddStream(stream, targetId, mockFunc)
 		_, _, err := m.ActivateStream(targetId, "foo", "bar")
-		assert.True(t, err == nil)
+		assert.Nil(t, err)
 	}
 	_, _, err := m.ActivateStream(targetId, "foo", "bar")
-	assert.True(t, err != nil)
+	assert.NotNil(t, err)
 }
 
 type MultiplexTester struct {
 	t *testing.T
 }
 
+type Stats struct {
+	sync.Mutex
+	count float64
+	sum   float64
+}
+
+func (s *Stats) Add(val float64) {
+	s.Lock()
+	s.count += 1.0
+	s.sum += val
+	s.Unlock()
+}
+
+func (s *Stats) Mean() float64 {
+	s.Lock()
+	defer s.Unlock()
+	return s.sum / s.count
+}
+
 func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBetweenFrames int) error {
+
 	fmt.Println("Multiplexing...")
 	// add asynchronously
 	m := NewManager(intf)
 	// this test ends after 5 minutes
 	m.expirationTime = 300
+	testDurationInMilliseconds := int64(900)
+	modifyStreamStats := Stats{}
+	activateStreamStats := Stats{}
 	var wg sync.WaitGroup
-	var count int64
 	for t := 0; t < nTargets; t++ {
 		wg.Add(1)
 		go func() {
@@ -242,7 +263,7 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 					streamId := util.RandSeq(12)
 					stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
 					err := m.AddStream(stream, targetId, mockFunc)
-					assert.Equal(mt.t, err, nil)
+					assert.Nil(mt.t, err)
 				}()
 			}
 			wg2.Wait()
@@ -254,22 +275,25 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 					defer wg.Done()
 					// activate these streams over the span of 1 minutes
 					time.Sleep(time.Second * time.Duration(rand.Intn(secondsBetweenFrames)))
+					k := time.Now().UnixNano()
 					token, _, err := m.ActivateStream(targetId, "joe", "bob")
 					if err == nil {
-						atomic.AddInt64(&count, 1)
-						fmt.Println("========Activated ", count)
+						activateStreamStats.Add(float64(time.Now().UnixNano() - k))
 						wg.Add(1)
 						go func() {
 							defer wg.Done()
 							for {
 								writeFileMock := func(s *Stream) error {
 									// fmt.Println(time.Now().Unix(), "doing file io... stream:", astreamId, "target:", targetId)
-									time.Sleep(time.Duration(100) * time.Millisecond)
+									time.Sleep(time.Duration(testDurationInMilliseconds) * time.Millisecond)
 									return nil
 								}
+								s := time.Now().UnixNano()
 								err := m.ModifyActiveStream(token, writeFileMock)
 								if err != nil {
 									break
+								} else {
+									modifyStreamStats.Add(float64(time.Now().UnixNano() - s))
 								}
 								time.Sleep(time.Second * time.Duration(secondsBetweenFrames))
 							}
@@ -280,6 +304,9 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 		}()
 	}
 	wg.Wait()
+	assert.True(mt.t, activateStreamStats.Mean()/float64(1e6) < 10)
+	assert.True(mt.t, modifyStreamStats.Mean()/float64(1e6)-float64(testDurationInMilliseconds) < 0.01*float64(testDurationInMilliseconds))
+
 	return nil
 }
 
