@@ -24,6 +24,14 @@ func StreamComp(l, r interface{}) bool {
 	}
 }
 
+func (t *Target) deactivateStreamImpl(s *Stream) {
+	delete(t.tokens, s.activeStream.authToken)
+	delete(t.timers, s.streamId)
+	delete(t.activeStreams, s)
+	s.activeStream = nil
+	t.inactiveStreams.Add(s)
+}
+
 func NewTarget() *Target {
 	target := Target{
 		tokens:          make(map[string]*Stream),

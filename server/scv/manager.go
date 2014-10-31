@@ -56,27 +56,56 @@ func parseToken(token string) string {
 	}
 }
 
-// Add a stream to target targetId. If the target does not exist, the manager
-// will create the target automatically. The manager also assumes ownership of
-// the stream. Fn is a callback (typically a closure) executed at the end. The
-// stream is only inserted at the end if fn does not return an error
-func (m *Manager) AddStream(stream *Stream, targetId string, fn func(*Stream) error) error {
+/*
+Add a stream to the manager. If the stream exists, then nothing happens. Otherwise, if the target does not exist, a target
+is created for this stream. It is assumed that the respective persistent structures (dbs, files) for this
+stream has already been created and ready to go. It is assumed that while AddStream is called, no other goroutine is manipulating
+this particular stream pointer.
+*/
+func (m *Manager) AddStream(stream *Stream, targetId string) error {
 	m.Lock()
 	defer m.Unlock()
-	// Create a target if it does not exist.
-	_, ok := m.targets[targetId]
+	_, ok := m.streams[stream.streamId]
+	if ok == true {
+		return errors.New("stream " + stream.streamId + " already exists")
+	}
+	m.streams[stream.streamId] = stream
+	_, ok = m.targets[targetId]
 	if ok == false {
 		m.targets[targetId] = NewTarget()
 	}
 	t := m.targets[targetId]
-	m.streams[stream.streamId] = stream
 	t.Lock()
 	defer t.Unlock()
-	err := fn(stream)
-	if err == nil {
-		t.inactiveStreams.Add(stream)
+	t.inactiveStreams.Add(stream)
+	return nil
+}
+
+/*
+Remove stream a from the manager. The stream is immediately removed. It is up to the calling function to specify clean-up behavior.
+We need to lock the stream here because other functions may be using it.
+*/
+func (m *Manager) RemoveStream(streamId string) error {
+	m.Lock()
+	defer m.Unlock()
+	stream, ok := m.streams[streamId]
+	if ok == false {
+		return errors.New("stream " + streamId + " does not exist")
 	}
-	return err
+	t := m.targets[stream.targetId]
+	t.Lock()
+	defer t.Unlock()
+	stream.Lock()
+	defer stream.Unlock()
+	delete(m.streams, streamId)
+	if stream.activeStream != nil {
+		t.deactivateStreamImpl(stream)
+	}
+	t.inactiveStreams.Remove(stream)
+	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
+		delete(m.targets, stream.targetId)
+	}
+	return nil
 }
 
 func (m *Manager) ReadStream(streamId string, fn func(*Stream) error) error {
@@ -129,32 +158,6 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 	t.RUnlock()
 	m.RUnlock()
 	defer stream.Unlock()
-	return fn(stream)
-}
-
-// Remove stream. If the stream is the last stream in the target, then the
-// target is also removed. Use case. This can be used to semantically 1) stop a stream (in which fn() would do thing
-// and 2) completely remove a stream.
-func (m *Manager) RemoveStream(streamId string, fn func(*Stream) error) error {
-	m.Lock()
-	defer m.Unlock()
-	stream, ok := m.streams[streamId]
-	if ok == false {
-		return errors.New("stream " + streamId + " does not exist")
-	}
-	t := m.targets[stream.targetId]
-	t.Lock()
-	defer t.Unlock()
-	stream.Lock()
-	defer stream.Unlock()
-	delete(m.streams, streamId)
-	if stream.activeStream != nil {
-		m.deactivateStreamImpl(stream, t)
-	}
-	t.inactiveStreams.Remove(stream)
-	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
-		delete(m.targets, stream.targetId)
-	}
 	return fn(stream)
 }
 
@@ -222,7 +225,7 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	stream.Lock()
 	defer stream.Unlock()
 	m.RUnlock()
-	m.deactivateStreamImpl(stream, t)
+	t.deactivateStreamImpl(stream)
 	t.Unlock()
 	// this could potentially be a really long running service, so we don't want it to block the target or the manager
 	return m.injector.DeactivateStreamService(stream)
