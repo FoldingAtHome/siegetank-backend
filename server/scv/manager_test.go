@@ -116,6 +116,29 @@ func TestDeactivateTimer(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestReadModifyStream(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	streamId := util.RandSeq(5)
+	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+	m.AddStream(stream, targetId)
+	err := m.ModifyActiveStream("bad_token", mockFunc)
+	assert.NotNil(t, err)
+	err = m.ModifyActiveStream("bad_token:asdf", mockFunc)
+	assert.NotNil(t, err)
+	err = m.ReadStream("bad_stream", mockFunc)
+	assert.NotNil(t, err)
+	err = m.ModifyStream("bad_stream", mockFunc)
+	assert.NotNil(t, err)
+	err = m.RemoveStream("bad_stream")
+	assert.NotNil(t, err)
+	err = m.ReadStream(streamId, mockFunc)
+	assert.Nil(t, err)
+	err = m.ModifyStream(streamId, mockFunc)
+	assert.Nil(t, err)
+	m.RemoveStream(streamId)
+}
+
 func TestActivateStream(t *testing.T) {
 	m := NewManager(intf)
 	numStreams := 5

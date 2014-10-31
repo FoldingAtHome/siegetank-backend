@@ -49,7 +49,7 @@ func createToken(targetId string) string {
 
 func parseToken(token string) string {
 	result := strings.Split(token, ":")
-	if len(result) == 0 {
+	if len(result) < 2 {
 		return ""
 	} else {
 		return result[0]
@@ -82,7 +82,7 @@ func (m *Manager) AddStream(stream *Stream, targetId string) error {
 }
 
 /*
-Remove stream a from the manager. The stream is immediately removed. It is up to the calling function to specify clean-up behavior.
+Remove a stream from the manager. The stream is immediately removed. It is up to the calling function to specify clean-up behavior.
 We need to lock the stream here because other functions may be using it.
 */
 func (m *Manager) RemoveStream(streamId string) error {
@@ -110,30 +110,32 @@ func (m *Manager) RemoveStream(streamId string) error {
 
 func (m *Manager) ReadStream(streamId string, fn func(*Stream) error) error {
 	m.RLock()
-	defer m.RUnlock()
 	stream, ok := m.streams[streamId]
 	if ok == false {
+		m.RUnlock()
 		return errors.New("stream " + streamId + " does not exist")
 	}
 	t := m.targets[stream.targetId]
 	t.RLock()
-	defer t.RUnlock()
 	stream.RLock()
+	t.RUnlock()
+	m.RUnlock()
 	defer stream.RUnlock()
 	return fn(stream)
 }
 
 func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
 	m.RLock()
-	defer m.RUnlock()
 	stream, ok := m.streams[streamId]
 	if ok == false {
+		m.RUnlock()
 		return errors.New("stream " + streamId + " does not exist")
 	}
 	t := m.targets[stream.targetId]
 	t.RLock()
-	defer t.RUnlock()
-	stream.Lock()
+	stream.Lock() // Acquire a write lock
+	t.RUnlock()
+	m.RUnlock()
 	defer stream.Unlock()
 	return fn(stream)
 }
@@ -143,9 +145,13 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 	targetId := parseToken(token)
 	if targetId == "" {
 		m.RUnlock()
-		return errors.New("invalid token format: " + token)
+		return errors.New("invalid token: " + token)
 	}
-	t := m.targets[targetId]
+	t, ok := m.targets[targetId]
+	if ok == false {
+		m.RUnlock()
+		return errors.New("invalid parsed target: " + targetId)
+	}
 	t.RLock()
 	stream, ok := t.tokens[token]
 	if ok == false {
