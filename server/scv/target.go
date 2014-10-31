@@ -17,16 +17,16 @@ type Target struct {
 func StreamComp(l, r interface{}) bool {
 	s1 := l.(*Stream)
 	s2 := r.(*Stream)
-	if s1.frames == s2.frames {
-		return s1.streamId > s2.streamId
+	if s1.Frames == s2.Frames {
+		return s1.StreamId > s2.StreamId
 	} else {
-		return s1.frames > s2.frames
+		return s1.Frames > s2.Frames
 	}
 }
 
 func (t *Target) deactivateStreamImpl(s *Stream) {
 	delete(t.tokens, s.activeStream.authToken)
-	delete(t.timers, s.streamId)
+	delete(t.timers, s.StreamId)
 	delete(t.activeStreams, s)
 	s.activeStream = nil
 	t.inactiveStreams.Add(s)

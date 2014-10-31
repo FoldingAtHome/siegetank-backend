@@ -58,20 +58,20 @@ func TestAddRemoveStream(t *testing.T) {
 	wg.Wait()
 	for k, _ := range streamPtrs {
 		assert.True(t, m.targets[targetId].inactiveStreams.Contains(k))
-		assert.Equal(t, m.streams[k.streamId], k)
+		assert.Equal(t, m.streams[k.StreamId], k)
 	}
 	for k, _ := range streamPtrs {
 		wg.Add(1)
 		go func(stream_id string) {
 			defer wg.Done()
 			m.RemoveStream(stream_id)
-		}(k.streamId)
+		}(k.StreamId)
 	}
 	wg.Wait()
 	_, ok := m.targets[targetId]
 	assert.False(t, ok)
 	for k, _ := range streamPtrs {
-		_, ok := m.streams[k.streamId]
+		_, ok := m.streams[k.StreamId]
 		assert.False(t, ok)
 	}
 }
@@ -189,7 +189,7 @@ func TestActivateStream(t *testing.T) {
 			defer wg.Done()
 			err := m.DeactivateStream(streamId)
 			assert.Nil(t, err)
-		}(stream.streamId)
+		}(stream.StreamId)
 	}
 	wg.Wait()
 	assert.Equal(t, len(m.targets[targetId].tokens), 0)
@@ -211,7 +211,7 @@ func TestStreamReadWrite(t *testing.T) {
 		if i%100 == 0 {
 			go func() {
 				fn := func(s *Stream) error {
-					s.frames += 1
+					s.Frames += 1
 					return nil
 				}
 				m.ModifyStream(streamId, fn)
@@ -221,7 +221,7 @@ func TestStreamReadWrite(t *testing.T) {
 			go func() {
 				var frame_count int
 				fn := func(s *Stream) error {
-					frame_count = s.frames
+					frame_count = s.Frames
 					return nil
 				}
 				m.ReadStream(streamId, fn)
@@ -230,7 +230,7 @@ func TestStreamReadWrite(t *testing.T) {
 		}
 	}
 	wg.Wait()
-	assert.Equal(t, m.streams[streamId].frames, 10)
+	assert.Equal(t, m.streams[streamId].Frames, 10)
 }
 
 func TestActivateEmptyTarget(t *testing.T) {
@@ -272,8 +272,6 @@ func (s *Stats) Mean() float64 {
 }
 
 func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBetweenFrames int) error {
-
-	fmt.Println("Multiplexing...")
 	// add asynchronously
 	m := NewManager(intf)
 	// this test ends after 5 minutes
@@ -343,13 +341,13 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 	return nil
 }
 
-func TestMultiplex(t *testing.T) {
-	mt := MultiplexTester{t}
+// func TestMultiplex(t *testing.T) {
+// 	mt := MultiplexTester{t}
 
-	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
-	// mt.Multiplex(50, 20000, 2000, 300)
-	mt.Multiplex(10, 100, 100, 20)
-}
+// 	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
+// 	// mt.Multiplex(50, 20000, 2000, 300)
+// 	mt.Multiplex(10, 100, 100, 20)
+// }
 
 // func TestStreamExpiration(t *testing.T) {
 // 	tm := NewTargetManager()

@@ -65,11 +65,11 @@ this particular stream pointer.
 func (m *Manager) AddStream(stream *Stream, targetId string) error {
 	m.Lock()
 	defer m.Unlock()
-	_, ok := m.streams[stream.streamId]
+	_, ok := m.streams[stream.StreamId]
 	if ok == true {
-		return errors.New("stream " + stream.streamId + " already exists")
+		return errors.New("stream " + stream.StreamId + " already exists")
 	}
-	m.streams[stream.streamId] = stream
+	m.streams[stream.StreamId] = stream
 	_, ok = m.targets[targetId]
 	if ok == false {
 		m.targets[targetId] = NewTarget()
@@ -92,7 +92,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 	if ok == false {
 		return errors.New("stream " + streamId + " does not exist")
 	}
-	t := m.targets[stream.targetId]
+	t := m.targets[stream.TargetId]
 	t.Lock()
 	defer t.Unlock()
 	stream.Lock()
@@ -103,7 +103,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 	}
 	t.inactiveStreams.Remove(stream)
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
-		delete(m.targets, stream.targetId)
+		delete(m.targets, stream.TargetId)
 	}
 	return nil
 }
@@ -115,7 +115,7 @@ func (m *Manager) ReadStream(streamId string, fn func(*Stream) error) error {
 		m.RUnlock()
 		return errors.New("stream " + streamId + " does not exist")
 	}
-	t := m.targets[stream.targetId]
+	t := m.targets[stream.TargetId]
 	t.RLock()
 	stream.RLock()
 	t.RUnlock()
@@ -131,7 +131,7 @@ func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
 		m.RUnlock()
 		return errors.New("stream " + streamId + " does not exist")
 	}
-	t := m.targets[stream.targetId]
+	t := m.targets[stream.TargetId]
 	t.RLock()
 	stream.Lock() // Acquire a write lock
 	t.RUnlock()
@@ -188,15 +188,15 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 	}
 	token = createToken(targetId)
 	stream := iterator.Key().(*Stream)
-	streamId = stream.streamId
+	streamId = stream.StreamId
 	stream.Lock()
 	// s_time_3 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer stream.Unlock()
 	t.inactiveStreams.Remove(stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
 	t.tokens[token] = stream
-	t.timers[stream.streamId] = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
-		m.DeactivateStream(stream.streamId)
+	t.timers[stream.StreamId] = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
+		m.DeactivateStream(stream.StreamId)
 	})
 	t.activeStreams[stream] = struct{}{}
 	// s_time_4 := float64(time.Now().UnixNano()) / float64(1e9)
@@ -208,7 +208,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 // Assumes that locks are in place.
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	delete(t.tokens, s.activeStream.authToken)
-	delete(t.timers, s.streamId)
+	delete(t.timers, s.StreamId)
 	delete(t.activeStreams, s)
 	s.activeStream = nil
 	t.inactiveStreams.Add(s)
@@ -226,7 +226,7 @@ func (m *Manager) DeactivateStream(streamId string) error {
 		m.RUnlock()
 		return errors.New("Stream is not active")
 	}
-	t := m.targets[stream.targetId]
+	t := m.targets[stream.TargetId]
 	t.Lock()
 	stream.Lock()
 	defer stream.Unlock()
@@ -244,8 +244,8 @@ func (m *Manager) LoadCheckpoints(dataDir, streamId string) (files map[string]st
 	stream.RLock()
 	defer stream.RUnlock()
 	streamDir := filepath.Join(dataDir, streamId)
-	if stream.frames > 0 {
-		frameDir := filepath.Join(streamDir, strconv.Itoa(stream.frames))
+	if stream.Frames > 0 {
+		frameDir := filepath.Join(streamDir, strconv.Itoa(stream.Frames))
 		checkpointDirs, e := ioutil.ReadDir(frameDir)
 		if e != nil {
 			return nil, err
