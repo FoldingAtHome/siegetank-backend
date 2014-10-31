@@ -62,7 +62,7 @@ func NewApplication(config Configuration) *Application {
 	app.Router = mux.NewRouter()
 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
 	app.Router.Handle("/streams/info/{stream_id}", app.GetStreamInfoHandler()).Methods("GET")
-	// app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
+	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
 	app.server = NewServer("127.0.0.1:12345", app.Router)
 
 	return &app
@@ -143,34 +143,34 @@ func (app *Application) Shutdown() {
 // 	CreationDate int    `bson:"creation_date"`
 // }
 
-// func (app *Application) StreamActivateHandler() AppHandler {
-// 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-// 		if r.Header.Get("Authorization") != app.Config.Password {
-// 			return errors.New("Unauthorized"), 401
-// 		}
-// 		type Message struct {
-// 			TargetId string `json:"target_id"`
-// 			Engine   string `json:"engine"`
-// 			User     string `json:"user"`
-// 		}
-// 		msg := Message{}
-// 		decoder := json.NewDecoder(r.Body)
-// 		err = decoder.Decode(&msg)
-// 		if err != nil {
-// 			return errors.New("Bad request: " + err.Error()), 400
-// 		}
-// 		token, _, err := m.ActivateStream(msg.TargetId, msg.User, msg.Engine)
-// 		if err != nil {
-// 			return errors.New("Unable to activate stream: " + err.Error()), 400
-// 		}
-// 		type Reply struct {
-// 			token string
-// 		}
-// 		data, _ := json.Marshal(map[string]string{"token": token})
-// 		w.Write(data)
-// 		return
-// 	}
-// }
+func (app *Application) StreamActivateHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		if r.Header.Get("Authorization") != app.Config.Password {
+			return errors.New("Unauthorized"), 401
+		}
+		type Message struct {
+			TargetId string `json:"target_id"`
+			Engine   string `json:"engine"`
+			User     string `json:"user"`
+		}
+		msg := Message{}
+		decoder := json.NewDecoder(r.Body)
+		err = decoder.Decode(&msg)
+		if err != nil {
+			return errors.New("Bad request: " + err.Error()), 400
+		}
+		token, _, err := app.Manager.ActivateStream(msg.TargetId, msg.User, msg.Engine)
+		if err != nil {
+			return errors.New("Unable to activate stream: " + err.Error()), 400
+		}
+		type Reply struct {
+			token string
+		}
+		data, _ := json.Marshal(map[string]string{"token": token})
+		w.Write(data)
+		return
+	}
+}
 
 func (app *Application) StreamsHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {

@@ -1,19 +1,19 @@
 package scv
 
 import (
-	"os"
-	"time"
-	// "sync"
-	"../util"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	// "sync"
+	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"../util"
 )
 
 var _ = fmt.Printf
@@ -103,27 +103,27 @@ func (f *Fixture) shutdown() {
 // 	assert.Equal(t, w.Code, 400)
 // }
 
-// func (f *Fixture) activateStream(target_id, engine, user, cc_token string) (token string, code int) {
-// 	type Message struct {
-// 		TargetId string `json:"target_id"`
-// 		Engine   string `json:"engine"`
-// 		User     string `json:"user"`
-// 	}
-// 	msg := Message{target_id, engine, user}
-// 	data, _ := json.Marshal(msg)
-// 	req, _ := http.NewRequest("POST", "/streams/activate", bytes.NewBuffer(data))
-// 	req.Header.Add("Authorization", cc_token)
-// 	w := httptest.NewRecorder()
-// 	f.app.Router.ServeHTTP(w, req)
-// 	code = w.Code
-// 	if code != 200 {
-// 		return
-// 	}
-// 	result := make(map[string]string)
-// 	json.Unmarshal(w.Body.Bytes(), &result)
-// 	token = result["token"]
-// 	return
-// }
+func (f *Fixture) activateStream(target_id, engine, user, cc_token string) (token string, code int) {
+	type Message struct {
+		TargetId string `json:"target_id"`
+		Engine   string `json:"engine"`
+		User     string `json:"user"`
+	}
+	msg := Message{target_id, engine, user}
+	data, _ := json.Marshal(msg)
+	req, _ := http.NewRequest("POST", "/streams/activate", bytes.NewBuffer(data))
+	req.Header.Add("Authorization", cc_token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	code = w.Code
+	if code != 200 {
+		return
+	}
+	result := make(map[string]string)
+	json.Unmarshal(w.Body.Bytes(), &result)
+	token = result["token"]
+	return
+}
 
 func (f *Fixture) getStream(stream_id string) (result Stream, code int) {
 	req, _ := http.NewRequest("GET", "/streams/info/"+stream_id, nil)
@@ -179,32 +179,31 @@ func TestPostStream(t *testing.T) {
 	assert.Equal(t, code, 200)
 }
 
-// func TestPostStreamAsync(t *testing.T) {
-// 	f := NewFixture()
-// 	defer f.shutdown()
-// 	token := f.addManager("yutong", 1)
-// 	start := int(time.Now().Unix())
-// 	var wg sync.WaitGroup
-// 	for i := 0; i < 10; i++ {
-// 		wg.Add(1)
-// 		go func() {
-// 			jsonData := `{"target_id":"12345",
-// 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
-// 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-// 			stream_id, code := f.postStream(token, jsonData)
-// 			assert.Equal(t, code, 200)
-// 			mgo_stream, code := f.getStream(stream_id)
-// 			assert.Equal(t, code, 200)
-// 			assert.Equal(t, "OK", mgo_stream.Status)
-// 			assert.Equal(t, 0, mgo_stream.Frames)
-// 			assert.Equal(t, 0, mgo_stream.ErrorCount)
-// 			assert.Equal(t, false, mgo_stream.Active)
-// 			assert.True(t, mgo_stream.CreationDate-start < 1)
-// 			wg.Done()
-// 		}()
-// 	}
-// 	wg.Wait()
-// }
+func TestPostStreamAsync(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	start := int(time.Now().Unix())
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			jsonData := `{"target_id":"12345",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+			stream_id, code := f.postStream(token, jsonData)
+			assert.Equal(t, code, 200)
+			mStream, code := f.getStream(stream_id)
+			assert.Equal(t, code, 200)
+			assert.Equal(t, "OK", mStream.Status)
+			assert.Equal(t, 0, mStream.Frames)
+			assert.Equal(t, 0, mStream.ErrorCount)
+			assert.True(t, mStream.CreationDate-start < 1)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
 
 // func TestFaultyStreamActivation(t *testing.T) {
 // 	f := NewFixture()
@@ -235,48 +234,45 @@ func TestPostStream(t *testing.T) {
 // 	assert.Equal(t, code, 400)
 // }
 
-// func TestStreamActivation(t *testing.T) {
-// 	f := NewFixture()
-// 	defer f.shutdown()
-// 	token := f.addManager("yutong", 1)
-// 	var mu sync.Mutex
-// 	stream_ids := make([]string, 10, 10)
-// 	var wg sync.WaitGroup
-// 	target_id := "123456"
-// 	for i := 0; i < 10; i++ {
-// 		wg.Add(1)
-// 		go func() {
-// 			jsonData := `{"target_id":"` + target_id + `",
-// 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
-// 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-// 			stream_id, code := f.postStream(token, jsonData)
-// 			mu.Lock()
-// 			stream_ids = append(stream_ids, stream_id)
-// 			mu.Unlock()
-// 			assert.Equal(t, code, 200)
-// 			wg.Done()
-// 		}()
-// 	}
-// 	wg.Wait()
-// 	// activate 10 times asynchronously
-// 	for i := 0; i < 10; i++ {
-// 		wg.Add(1)
-// 		go func() {
-// 			engine := util.RandSeq(12)
-// 			user := util.RandSeq(12)
-// 			token, code := f.activateStream(target_id, engine, user, f.app.Config.Password)
-// 			assert.Equal(t, code, 200)
-// 			// make sure tokens are in target manager
-// 			as, err := f.app.TM.Tokens.FindStream(token)
-// 			assert.Equal(t, err, nil)
-// 			assert.Equal(t, as.user, user)
-// 			assert.Equal(t, as.engine, engine)
-// 			assert.True(t, as.startTime-int(time.Now().Unix()) < 2)
-// 			// TODO: Add test when priority queue is implemented
-// 			wg.Done()
-// 		}()
-// 	}
-// 	wg.Wait()
-// 	_, code := f.activateStream(target_id, "random", "guy", f.app.Config.Password)
-// 	assert.Equal(t, code, 400)
-// }
+func TestStreamActivation(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	var mu sync.Mutex
+	stream_ids := make(map[string]struct{})
+	var wg sync.WaitGroup
+	target_id := "123456"
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+			stream_id, code := f.postStream(token, jsonData)
+			mu.Lock()
+			stream_ids[stream_id] = struct{}{}
+			mu.Unlock()
+			assert.Equal(t, code, 200)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+
+	tokens := make(map[string]struct{})
+
+	// activate 10 times asynchronously
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			engine := util.RandSeq(12)
+			user := util.RandSeq(12)
+			token, code := f.activateStream(target_id, engine, user, f.app.Config.Password)
+			assert.Equal(t, code, 200)
+			tokens[token] = struct{}{}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	_, code := f.activateStream(target_id, "random", "guy", f.app.Config.Password)
+	assert.Equal(t, code, 400)
+}

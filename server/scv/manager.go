@@ -205,6 +205,24 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 	return
 }
 
+// // This returns by copy
+// func (m *Manager) ActiveStreams(targetId string) (result map[ActiveStream]struct{}, err error) {
+// 	m.RLock()
+// 	defer m.RUnlock()
+// 	t, ok := m.targets[targetId]
+// 	if ok == false {
+// 		err = errors.New("Target does not exist")
+// 		return
+// 	}
+// 	t.RLock()
+// 	defer t.RUnlock()
+// 	result = make(map[ActiveStream]struct{})
+// 	for token := range t.tokens {
+// 		result[*t.tokens[token].activeStream] = struct{}{}
+// 	}
+// 	return
+// }
+
 // Assumes that locks are in place.
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	delete(t.tokens, s.activeStream.authToken)
