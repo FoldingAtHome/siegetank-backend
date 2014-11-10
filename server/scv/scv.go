@@ -1,17 +1,17 @@
 package scv
 
 import (
-	"encoding/base64"
+	// "encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	// "io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -61,8 +61,9 @@ func NewApplication(config Configuration) *Application {
 	app.Manager = NewManager(&app)
 	app.Router = mux.NewRouter()
 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
-	app.Router.Handle("/streams/info/{stream_id}", app.GetStreamInfoHandler()).Methods("GET")
+	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
+	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.server = NewServer("127.0.0.1:12345", app.Router)
 
 	return &app
@@ -134,15 +135,6 @@ func (app *Application) Shutdown() {
 	app.Mongo.Close()
 }
 
-// type mongoStream struct {
-// 	Id           string `bson:"_id"`
-// 	Status       string `bson:"status",json:"status"`
-// 	Frames       int    `bson:"frames",json:"frames"`
-// 	ErrorCount   int    `bson:"error_count",json:"error_count"`
-// 	Active       bool   `bson:"active",json:"active"`
-// 	CreationDate int    `bson:"creation_date"`
-// }
-
 func (app *Application) StreamActivateHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		if r.Header.Get("Authorization") != app.Config.Password {
@@ -167,6 +159,87 @@ func (app *Application) StreamActivateHandler() AppHandler {
 			token string
 		}
 		data, _ := json.Marshal(map[string]string{"token": token})
+		w.Write(data)
+		return
+	}
+}
+
+func (app *Application) CoreStartHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		token := r.Header.Get("Authorization")
+		type Reply struct {
+			StreamId string            `json:"stream_id"`
+			TargetId string            `json:"target_id"`
+			Files    map[string]string `json:"files"`
+			Options  interface{}       `json:"options"`
+		}
+		rep := Reply{
+			Files:   make(map[string]string),
+			Options: make(map[string]interface{}),
+		}
+		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+			rep.StreamId = stream.StreamId
+			rep.TargetId = stream.TargetId
+			// Load stream's options from Mongo
+			cursor := app.Mongo.DB("data").C("targets")
+			mgoRes := make(map[string]interface{})
+			if err = cursor.Find(bson.M{"_id": stream.TargetId}).One(&mgoRes); err != nil {
+				fmt.Println(err)
+				return errors.New("Cannot load target's options")
+			}
+			rep.Options = mgoRes["options"]
+			// Load the streams' files
+			if stream.Frames > 0 {
+				frameDir := filepath.Join(app.StreamDir(rep.StreamId), strconv.Itoa(stream.Frames))
+				checkpointDirs, e := ioutil.ReadDir(frameDir)
+				if e != nil {
+					return errors.New("Cannot read frames directory")
+				}
+				// find the folder containing the last checkpoint
+				lastCheckpoint := 0
+				for _, fileProp := range checkpointDirs {
+					count, _ := strconv.Atoi(fileProp.Name())
+					if count > lastCheckpoint {
+						lastCheckpoint = count
+					}
+				}
+				checkpointDir := filepath.Join(frameDir, "checkpoint_files")
+				checkpointFiles, e := ioutil.ReadDir(checkpointDir)
+				if e != nil {
+					return errors.New("Cannot load checkpoint directory")
+				}
+				for _, fileProp := range checkpointFiles {
+					binary, e := ioutil.ReadFile(filepath.Join(checkpointDir, fileProp.Name()))
+					if e != nil {
+						return errors.New("Cannot read checkpoint file")
+					}
+					rep.Files[fileProp.Name()] = string(binary)
+				}
+			}
+			seedDir := filepath.Join(app.StreamDir(rep.StreamId), "files")
+			seedFiles, e := ioutil.ReadDir(seedDir)
+			if e != nil {
+				return errors.New("Cannot read seed directory")
+			}
+			for _, fileProp := range seedFiles {
+				_, ok := rep.Files[fileProp.Name()]
+				if ok == false {
+					binary, e := ioutil.ReadFile(filepath.Join(seedDir, fileProp.Name()))
+					if e != nil {
+						return errors.New("Cannot read seed files")
+					}
+					rep.Files[fileProp.Name()] = string(binary)
+				}
+			}
+			return nil
+		})
+		if e != nil {
+			return e, 400
+		}
+		data, e := json.Marshal(rep)
+		if e != nil {
+			return e, 400
+		}
 		w.Write(data)
 		return
 	}
@@ -199,13 +272,9 @@ func (app *Application) StreamsHandler() AppHandler {
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
 		for Directory, Content := range todo {
 			for filename, fileb64 := range Content {
-				filedata, err := base64.StdEncoding.DecodeString(fileb64)
-				if err != nil {
-					return errors.New("Unable to decode file"), 400
-				}
 				files_dir := filepath.Join(app.StreamDir(streamId), Directory)
 				os.MkdirAll(files_dir, 0776)
-				err = ioutil.WriteFile(filepath.Join(files_dir, filename), filedata, 0776)
+				err = ioutil.WriteFile(filepath.Join(files_dir, filename), []byte(fileb64), 0776)
 				if err != nil {
 					return err, 400
 				}
@@ -229,7 +298,7 @@ func (app *Application) StreamsHandler() AppHandler {
 	}
 }
 
-func (app *Application) GetStreamInfoHandler() AppHandler {
+func (app *Application) StreamInfoHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		//cursor := app.Mongo.DB("streams").C(app.Config.Name)
 		//msg := mongoStream{}

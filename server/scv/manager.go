@@ -3,9 +3,6 @@ package scv
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -160,7 +157,6 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 		return errors.New("invalid token: " + token)
 	}
 	stream.Lock()
-	// DeactivateStream/ActivateStreamHandler can muck around with other streams here, but just not this particular stream.
 	t.RUnlock()
 	m.RUnlock()
 	defer stream.Unlock()
@@ -168,9 +164,7 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 }
 
 func (m *Manager) ActivateStream(targetId, user, engine string) (token string, streamId string, err error) {
-	// s_time := float64(time.Now().UnixNano()) / float64(1e9)
 	m.RLock()
-	// s_time_1 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer m.RUnlock()
 	t, ok := m.targets[targetId]
 	if ok == false {
@@ -178,7 +172,6 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 		return
 	}
 	t.Lock()
-	// s_time_2 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer t.Unlock()
 	iterator := t.inactiveStreams.Iterator()
 	ok = iterator.Next()
@@ -190,7 +183,6 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 	stream := iterator.Key().(*Stream)
 	streamId = stream.StreamId
 	stream.Lock()
-	// s_time_3 := float64(time.Now().UnixNano()) / float64(1e9)
 	defer stream.Unlock()
 	t.inactiveStreams.Remove(stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
@@ -199,9 +191,6 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 		m.DeactivateStream(stream.StreamId)
 	})
 	t.activeStreams[stream] = struct{}{}
-	// s_time_4 := float64(time.Now().UnixNano()) / float64(1e9)
-	// fmt.Printf("activa | m: %.2e t: %.2e s: %.2e fn: %.2e total: %.2e\n", s_time_1-s_time,
-	// s_time_2-s_time_1, s_time_3-s_time_2, s_time_4-s_time_3, s_time_4-s_time)
 	return
 }
 
@@ -253,57 +242,4 @@ func (m *Manager) DeactivateStream(streamId string) error {
 	t.Unlock()
 	// this could potentially be a really long running service, so we don't want it to block the target or the manager
 	return m.injector.DeactivateStreamService(stream)
-}
-
-func (m *Manager) LoadCheckpoints(dataDir, streamId string) (files map[string]string, err error) {
-	m.RLock()
-	defer m.RUnlock()
-	stream := m.streams[streamId]
-	stream.RLock()
-	defer stream.RUnlock()
-	streamDir := filepath.Join(dataDir, streamId)
-	if stream.Frames > 0 {
-		frameDir := filepath.Join(streamDir, strconv.Itoa(stream.Frames))
-		checkpointDirs, e := ioutil.ReadDir(frameDir)
-		if e != nil {
-			return nil, err
-		}
-		// find the folder containing the last checkpoint
-		lastCheckpoint := 0
-		for _, fileProp := range checkpointDirs {
-			count, _ := strconv.Atoi(fileProp.Name())
-			if count > lastCheckpoint {
-				lastCheckpoint = count
-			}
-		}
-		checkpointDir := filepath.Join(frameDir, "checkpoint_files")
-		checkpointFiles, e := ioutil.ReadDir(checkpointDir)
-		if e != nil {
-			return nil, e
-		}
-		for _, fileProp := range checkpointFiles {
-			binary, e := ioutil.ReadFile(filepath.Join(checkpointDir, fileProp.Name()))
-			if e != nil {
-				return nil, e
-			}
-			files[fileProp.Name()] = string(binary)
-		}
-	}
-	seedDir := filepath.Join(streamDir, "files")
-	seedFiles, e := ioutil.ReadDir(seedDir)
-	if e != nil {
-		return nil, e
-	}
-	for _, fileProp := range seedFiles {
-		// insert seedFile only if it's not already included from checkpoint
-		_, ok := files[fileProp.Name()]
-		if ok == false {
-			binary, e := ioutil.ReadFile(filepath.Join(seedDir, fileProp.Name()))
-			if e != nil {
-				return nil, e
-			}
-			files[fileProp.Name()] = string(binary)
-		}
-	}
-	return
 }

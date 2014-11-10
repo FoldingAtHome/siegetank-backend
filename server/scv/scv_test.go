@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"../util"
+	"github.com/stretchr/testify/assert"
+	"gopkg.in/mgo.v2/bson"
 )
 
 var _ = fmt.Printf
@@ -274,4 +274,35 @@ func TestStreamActivation(t *testing.T) {
 	wg.Wait()
 	_, code := f.activateStream(target_id, "random", "guy", f.app.Config.Password)
 	assert.Equal(t, code, 400)
+}
+
+func TestBadCoreStart(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	req, _ := http.NewRequest("GET", "/core/start", nil)
+	req.Header.Add("Authorization", "bad_token")
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	assert.Equal(t, w.Code, 400)
+}
+
+func TestCoreStart(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	f.postStream(auth_token, jsonData)
+	cursor := f.app.Mongo.DB("data").C("targets")
+	subfield := map[string]string{"nested": "bar"}
+	cursor.Insert(bson.M{"_id": target_id, "options": subfield})
+	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
+	assert.Equal(t, code, 200)
+	req, _ := http.NewRequest("GET", "/core/start", nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	assert.Equal(t, w.Code, 200)
 }
