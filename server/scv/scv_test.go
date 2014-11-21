@@ -300,9 +300,43 @@ func TestCoreStart(t *testing.T) {
 	cursor.Insert(bson.M{"_id": target_id, "options": subfield})
 	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	assert.Equal(t, code, 200)
-	req, _ := http.NewRequest("GET", "/core/start", nil)
-	req.Header.Add("Authorization", token)
-	w := httptest.NewRecorder()
-	f.app.Router.ServeHTTP(w, req)
-	assert.Equal(t, w.Code, 200)
+
+	{
+		req, _ := http.NewRequest("GET", "/core/start", nil)
+		req.Header.Add("Authorization", token)
+		w := httptest.NewRecorder()
+		f.app.Router.ServeHTTP(w, req)
+		assert.Equal(t, w.Code, 200)
+	}
+
+	{
+		dataBuffer := bytes.NewBuffer([]byte("12345678"))
+		req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
+		req.Header.Add("Authorization", token)
+		req.Header.Add("Content-MD5", "1234")
+		w := httptest.NewRecorder()
+		f.app.Router.ServeHTTP(w, req)
+		assert.Equal(t, w.Code, 400)
+	}
+
+	{
+		dataBuffer := bytes.NewBuffer([]byte("12345678"))
+		req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
+		req.Header.Add("Authorization", token)
+		req.Header.Add("Content-MD5", "25d55ad283aa400af464c76d713c07ad")
+		w := httptest.NewRecorder()
+		f.app.Router.ServeHTTP(w, req)
+		assert.Equal(t, w.Code, 200)
+	}
+
+	{
+		dataBuffer := bytes.NewBuffer([]byte("12345678"))
+		req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
+		req.Header.Add("Authorization", token)
+		req.Header.Add("Content-MD5", "25d55ad283aa400af464c76d713c07ad")
+		w := httptest.NewRecorder()
+		f.app.Router.ServeHTTP(w, req)
+		assert.Equal(t, w.Code, 400)
+	}
+
 }

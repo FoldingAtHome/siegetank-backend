@@ -2,9 +2,12 @@ package scv
 
 import (
 	// "encoding/base64"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -64,6 +67,7 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
+	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.server = NewServer("127.0.0.1:12345", app.Router)
 
 	return &app
@@ -160,6 +164,30 @@ func (app *Application) StreamActivateHandler() AppHandler {
 		}
 		data, _ := json.Marshal(map[string]string{"token": token})
 		w.Write(data)
+		return
+	}
+}
+
+func (app *Application) CoreFrameHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		token := r.Header.Get("Authorization")
+		md5String := r.Header.Get("Content-MD5")
+		body, _ := ioutil.ReadAll(r.Body)
+		h := md5.New()
+		io.WriteString(h, string(body))
+		if md5String != hex.EncodeToString(h.Sum(nil)) {
+			return errors.New("MD5 mismatch"), 400
+		}
+		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+			if md5String == stream.activeStream.frameHash {
+				return errors.New("POSTed same frame twice")
+			}
+			stream.activeStream.frameHash = md5String
+			return nil
+		})
+		if e != nil {
+			return e, 400
+		}
 		return
 	}
 }
