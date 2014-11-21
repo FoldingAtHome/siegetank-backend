@@ -2,8 +2,11 @@ package scv
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -129,6 +132,19 @@ func (f *Fixture) getStream(stream_id string) (result Stream, code int) {
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	json.Unmarshal(w.Body.Bytes(), &result)
+	code = w.Code
+	return
+}
+
+func (f *Fixture) postFrame(token string, data string) (code int) {
+	dataBuffer := bytes.NewBuffer([]byte(data))
+	req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
+	h := md5.New()
+	io.WriteString(h, string(data))
+	req.Header.Add("Authorization", token)
+	req.Header.Add("Content-MD5", hex.EncodeToString(h.Sum(nil)))
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
 	return
 }
@@ -319,24 +335,7 @@ func TestCoreStart(t *testing.T) {
 		assert.Equal(t, w.Code, 400)
 	}
 
-	{
-		dataBuffer := bytes.NewBuffer([]byte("12345678"))
-		req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
-		req.Header.Add("Authorization", token)
-		req.Header.Add("Content-MD5", "25d55ad283aa400af464c76d713c07ad")
-		w := httptest.NewRecorder()
-		f.app.Router.ServeHTTP(w, req)
-		assert.Equal(t, w.Code, 200)
-	}
-
-	{
-		dataBuffer := bytes.NewBuffer([]byte("12345678"))
-		req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
-		req.Header.Add("Authorization", token)
-		req.Header.Add("Content-MD5", "25d55ad283aa400af464c76d713c07ad")
-		w := httptest.NewRecorder()
-		f.app.Router.ServeHTTP(w, req)
-		assert.Equal(t, w.Code, 400)
-	}
+	assert.Equal(t, f.postFrame(token, "12345678"), 200)
+	assert.Equal(t, f.postFrame(token, "12345678"), 400)
 
 }
