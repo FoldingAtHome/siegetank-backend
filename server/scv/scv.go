@@ -1,8 +1,10 @@
 package scv
 
 import (
-	// "encoding/base64"
+	"bytes"
+	"compress/gzip"
 	"crypto/md5"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -168,6 +170,12 @@ func (app *Application) StreamActivateHandler() AppHandler {
 	}
 }
 
+func splitExt(path string) (root string, ext string) {
+	ext = filepath.Ext(path)
+	root = path[0 : len(path)-len(ext)]
+	return
+}
+
 func (app *Application) CoreFrameHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		token := r.Header.Get("Authorization")
@@ -179,10 +187,59 @@ func (app *Application) CoreFrameHandler() AppHandler {
 			return errors.New("MD5 mismatch"), 400
 		}
 		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+			type Message struct {
+				Files  map[string]string `json:"files"`
+				Frames int               `json:"frames"`
+			}
+			msg := Message{Frames: 1}
+			decoder := json.NewDecoder(bytes.NewReader(body))
+			err := decoder.Decode(&msg)
+			if err != nil {
+				return errors.New("Could not decode JSON")
+			}
 			if md5String == stream.activeStream.frameHash {
 				return errors.New("POSTed same frame twice")
 			}
 			stream.activeStream.frameHash = md5String
+			for filename, filestring := range msg.Files {
+				root, ext := splitExt(filename)
+				filebin := []byte(filestring)
+				if ext == ".b64" {
+					filename = root
+					reader := base64.NewDecoder(base64.StdEncoding, bytes.NewReader(filebin))
+					filecopy, err := ioutil.ReadAll(reader)
+					if err != nil {
+						return err
+					}
+					filebin = filecopy
+					root, ext := splitExt(filename)
+					if ext == ".gz" {
+						filename = root
+						reader, err := gzip.NewReader(bytes.NewReader(filebin))
+						defer reader.Close()
+						if err != nil {
+							return err
+						}
+						filecopy, err := ioutil.ReadAll(reader)
+						if err != nil {
+							return err
+						}
+						filebin = filecopy
+					}
+				}
+				dir := filepath.Join(app.StreamDir(stream.StreamId), "buffer_files")
+				os.MkdirAll(dir, 0776)
+				filename = filepath.Join(dir, filename)
+				file, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0776)
+				if err != nil {
+					return err
+				}
+				_, err = file.Write(filebin)
+				if err != nil {
+					return err
+				}
+			}
+			stream.activeStream.bufferFrames += 1
 			return nil
 		})
 		if e != nil {

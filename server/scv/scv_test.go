@@ -146,6 +146,9 @@ func (f *Fixture) postFrame(token string, data string) (code int) {
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
+	if code != 200 {
+		fmt.Println(w.Body)
+	}
 	return
 }
 
@@ -335,7 +338,9 @@ func TestCoreStart(t *testing.T) {
 		assert.Equal(t, w.Code, 400)
 	}
 
-	assert.Equal(t, f.postFrame(token, "12345678"), 200)
 	assert.Equal(t, f.postFrame(token, "12345678"), 400)
+
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 400)
 
 }
