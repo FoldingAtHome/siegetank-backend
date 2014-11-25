@@ -68,8 +68,10 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
 	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
+	app.Router.Handle("/streams/download/{stream_id}/{file:.+}", app.StreamDownloadHandler()).Methods("GET")
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
+	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
 	app.server = NewServer("127.0.0.1:12345", app.Router)
 
 	return &app
@@ -96,6 +98,17 @@ func (app *Application) CurrentUser(r *http.Request) (user string, err error) {
 		return
 	}
 	user = result["_id"].(string)
+	return
+}
+
+func (app *Application) StreamOwner(stream *Stream) (user string, err error) {
+	cursor := app.Mongo.DB("data").C("targets")
+	result := make(map[string]interface{})
+	fmt.Println(stream.TargetId)
+	if err := cursor.Find(bson.M{"_id": stream.TargetId}).One(&result); err != nil {
+		return "", errors.New("Unable to read from Mongo")
+	}
+	user = result["owner"].(string)
 	return
 }
 
@@ -176,6 +189,22 @@ func splitExt(path string) (root string, ext string) {
 	return
 }
 
+func maxCheckpoint(path string) (int, error) {
+	checkpointDirs, e := ioutil.ReadDir(path)
+	if e != nil {
+		return 0, errors.New("Cannot read frames directory")
+	}
+	// find the folder containing the last checkpoint
+	lastCheckpoint := 0
+	for _, fileProp := range checkpointDirs {
+		count, _ := strconv.Atoi(fileProp.Name())
+		if count > lastCheckpoint {
+			lastCheckpoint = count
+		}
+	}
+	return lastCheckpoint, nil
+}
+
 func (app *Application) CoreFrameHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		token := r.Header.Get("Authorization")
@@ -249,6 +278,105 @@ func (app *Application) CoreFrameHandler() AppHandler {
 	}
 }
 
+func (app *Application) StreamDownloadHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		streamId := mux.Vars(r)["stream_id"]
+		file := mux.Vars(r)["file"]
+		// fmt.Println(streamId, file)
+		absStreamDir, _ := filepath.Abs(filepath.Join(app.StreamDir(streamId)))
+		requestedFile, _ := filepath.Abs(filepath.Join(app.StreamDir(streamId), file))
+		if len(requestedFile) < len(absStreamDir) {
+			return errors.New("Invalid file path"), 400
+		}
+		if requestedFile[0:len(absStreamDir)] != absStreamDir {
+			return errors.New("Invalid file path."), 400
+		}
+		user, err := app.CurrentUser(r)
+		fmt.Println(user, err)
+		if err != nil {
+			return errors.New("Unable to find user."), 401
+		}
+		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
+			owner, err := app.StreamOwner(stream)
+			if err != nil {
+				return errors.New("Unable to find stream's owner.")
+			}
+			if owner != user {
+				return errors.New("You do not own this stream.")
+			}
+			binary, e := ioutil.ReadFile(requestedFile)
+			if e != nil {
+				return errors.New("Unable to read file")
+			}
+			w.Write(binary)
+			return nil
+		})
+		if e != nil {
+			return e, 400
+		}
+		return
+	}
+}
+
+func (app *Application) CoreCheckpointHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		token := r.Header.Get("Authorization")
+		md5String := r.Header.Get("Content-MD5")
+		body, _ := ioutil.ReadAll(r.Body)
+		h := md5.New()
+		io.WriteString(h, string(body))
+		if md5String != hex.EncodeToString(h.Sum(nil)) {
+			return errors.New("MD5 mismatch"), 400
+		}
+		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+			streamDir := app.StreamDir(stream.StreamId)
+			bufferDir := filepath.Join(streamDir, "buffer_files")
+			checkpointDir := filepath.Join(app.StreamDir(stream.StreamId), "checkpoint_files")
+			os.MkdirAll(checkpointDir, 0776)
+			type Message struct {
+				Files  map[string]string `json:"files"`
+				Frames float64           `json:"frames"`
+			}
+			msg := Message{}
+			decoder := json.NewDecoder(bytes.NewReader(body))
+			err := decoder.Decode(&msg)
+			if err != nil {
+				return errors.New("Could not decode JSON")
+			}
+			for filename, filestring := range msg.Files {
+				fileDir := filepath.Join(checkpointDir, filename)
+				fileBin := []byte(filestring)
+				ioutil.WriteFile(fileDir, fileBin, 0776)
+			}
+			bufferFrames := stream.activeStream.bufferFrames
+			sumFrames := stream.Frames + bufferFrames
+			partition := filepath.Join(streamDir, strconv.Itoa(sumFrames))
+			os.MkdirAll(partition, 0766)
+			var renameDir string
+			if bufferFrames == 0 {
+				lastCheckpoint, err := maxCheckpoint(partition)
+				if err != nil {
+					renameDir = filepath.Join(partition, strconv.Itoa(lastCheckpoint+1))
+				} else {
+					renameDir = filepath.Join(partition, "1")
+				}
+			} else {
+				renameDir = filepath.Join(partition, "0")
+			}
+			os.Rename(bufferDir, renameDir)
+			stream.Frames = sumFrames
+			stream.activeStream.donorFrames += msg.Frames
+			stream.activeStream.bufferFrames = 0
+			// TODO: update frame count in MongoDB
+			return nil
+		})
+		if e != nil {
+			return e, 400
+		}
+		return
+	}
+}
+
 func (app *Application) CoreStartHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		token := r.Header.Get("Authorization")
@@ -276,19 +404,8 @@ func (app *Application) CoreStartHandler() AppHandler {
 			// Load the streams' files
 			if stream.Frames > 0 {
 				frameDir := filepath.Join(app.StreamDir(rep.StreamId), strconv.Itoa(stream.Frames))
-				checkpointDirs, e := ioutil.ReadDir(frameDir)
-				if e != nil {
-					return errors.New("Cannot read frames directory")
-				}
-				// find the folder containing the last checkpoint
-				lastCheckpoint := 0
-				for _, fileProp := range checkpointDirs {
-					count, _ := strconv.Atoi(fileProp.Name())
-					if count > lastCheckpoint {
-						lastCheckpoint = count
-					}
-				}
-				checkpointDir := filepath.Join(frameDir, "checkpoint_files")
+				lastCheckpoint, _ := maxCheckpoint(frameDir)
+				checkpointDir := filepath.Join(frameDir, strconv.Itoa(lastCheckpoint), "checkpoint_files")
 				checkpointFiles, e := ioutil.ReadDir(checkpointDir)
 				if e != nil {
 					return errors.New("Cannot load checkpoint directory")

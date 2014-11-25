@@ -37,6 +37,15 @@ func (f *Fixture) addUser(user string) (token string) {
 	return
 }
 
+func (f *Fixture) addTarget(targetId, owner string) {
+	type Msg struct {
+		Id    string `bson:"_id"`
+		Owner string `bson:"owner"`
+	}
+	f.app.Mongo.DB("data").C("targets").Insert(Msg{targetId, owner})
+	return
+}
+
 func (f *Fixture) addManager(user string, weight int) (token string) {
 	token = f.addUser(user)
 	type Msg struct {
@@ -103,6 +112,21 @@ func TestPostBadStream(t *testing.T) {
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	assert.Equal(t, w.Code, 400)
+}
+
+func (f *Fixture) download(token, streamId, file string) (data []byte, code int) {
+	base := "/streams/download/" + streamId + "/" + file
+	req, _ := http.NewRequest("GET", base, nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	code = w.Code
+	if code != 200 {
+		fmt.Println(w.Body)
+		return
+	}
+	data = w.Body.Bytes()
+	return
 }
 
 func (f *Fixture) activateStream(target_id, engine, user, cc_token string) (token string, code int) {
@@ -195,6 +219,29 @@ func TestPostStream(t *testing.T) {
 		"tags": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	stream_id, code = f.postStream(token, jsonData)
 	assert.Equal(t, code, 200)
+}
+
+func TestDownload(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	f.addTarget("12345", "yutong")
+	jsonData := `{"target_id":"12345",
+		"files": {"openmm": "b123",
+		"amber": "b234"}}`
+	stream_id, code := f.postStream(token, jsonData)
+
+	data, code := f.download("bad_token", stream_id, "files/openmm")
+	assert.Equal(t, code, 401)
+
+	data, code = f.download(token, stream_id, "files/openmm")
+	assert.Equal(t, code, 200)
+	assert.Equal(t, data, []byte("b123"))
+
+	data, code = f.download(token, stream_id, "files/amber")
+	assert.Equal(t, code, 200)
+	assert.Equal(t, data, []byte("b234"))
+
 }
 
 func TestPostStreamAsync(t *testing.T) {
@@ -342,5 +389,4 @@ func TestCoreStart(t *testing.T) {
 
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 400)
-
 }
