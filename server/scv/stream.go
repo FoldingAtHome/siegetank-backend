@@ -8,6 +8,7 @@ import (
 // Cached object persisted in Mongo
 type Stream struct {
 	sync.RWMutex `json:"-" bson:"-"`
+	Owner        string `json:"-" bson:"-"`
 	StreamId     string `json:"-" bson:"_id"`
 	TargetId     string `json:"target_id" bson:"target_id"`
 	Status       string `json:"stats" bson:"status"`
@@ -17,7 +18,7 @@ type Stream struct {
 	activeStream *ActiveStream
 }
 
-func NewStream(streamId, targetId, status string,
+func NewStream(streamId, targetId, owner, status string,
 	frames, errorCount, creationDate int) *Stream {
 	stream := &Stream{
 		StreamId:     streamId,
@@ -26,6 +27,7 @@ func NewStream(streamId, targetId, status string,
 		Frames:       frames,
 		ErrorCount:   errorCount,
 		CreationDate: creationDate,
+		Owner:        owner,
 	}
 	return stream
 }

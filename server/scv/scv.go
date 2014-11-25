@@ -101,16 +101,18 @@ func (app *Application) CurrentUser(r *http.Request) (user string, err error) {
 	return
 }
 
-func (app *Application) StreamOwner(stream *Stream) (user string, err error) {
-	cursor := app.Mongo.DB("data").C("targets")
-	result := make(map[string]interface{})
-	fmt.Println(stream.TargetId)
-	if err := cursor.Find(bson.M{"_id": stream.TargetId}).One(&result); err != nil {
-		return "", errors.New("Unable to read from Mongo")
-	}
-	user = result["owner"].(string)
-	return
-}
+// func (app *Application) StreamOwner(stream *Stream) (user string, err error) {
+// 	// cursor := app.Mongo.DB("data").C("targets")
+// 	// result := make(map[string]interface{})
+
+// 	// fmt.Println(stream.TargetId)
+// 	// if err := cursor.Find(bson.M{"_id": stream.TargetId}).One(&result); err != nil {
+// 	// 	return "", errors.New("Unable to read from Mongo")
+// 	// }
+// 	// user = result["owner"].(string)
+// 	return app.Manager.targets[stream.TargetId].owner
+// 	// return
+// }
 
 func (app *Application) IsManager(user string) bool {
 	cursor := app.Mongo.DB("users").C("managers")
@@ -297,11 +299,11 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			return errors.New("Unable to find user."), 401
 		}
 		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
-			owner, err := app.StreamOwner(stream)
 			if err != nil {
 				return errors.New("Unable to find stream's owner.")
 			}
-			if owner != user {
+			if stream.Owner != user {
+				fmt.Println(stream.Owner)
 				return errors.New("You do not own this stream.")
 			}
 			binary, e := ioutil.ReadFile(requestedFile)
@@ -470,7 +472,7 @@ func (app *Application) StreamsHandler() AppHandler {
 		}
 		streamId := util.RandSeq(36)
 		// Add files to disk
-		stream := NewStream(streamId, msg.TargetId, "OK", 0, 0, int(time.Now().Unix()))
+		stream := NewStream(streamId, msg.TargetId, user, "OK", 0, 0, int(time.Now().Unix()))
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
 		for Directory, Content := range todo {
 			for filename, fileb64 := range Content {

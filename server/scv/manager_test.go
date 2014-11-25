@@ -30,7 +30,7 @@ func TestAddSameStream(t *testing.T) {
 	m := NewManager(intf)
 	targetId := util.RandSeq(36)
 	streamId := util.RandSeq(36)
-	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+	stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 	err := m.AddStream(stream, targetId)
 	assert.Nil(t, err)
 	err = m.AddStream(stream, targetId)
@@ -48,7 +48,7 @@ func TestAddRemoveStream(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			streamId := util.RandSeq(36)
-			stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+			stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 			mutex.Lock()
 			streamPtrs[stream] = struct{}{}
 			mutex.Unlock()
@@ -80,7 +80,7 @@ func TestRemoveActiveStream(t *testing.T) {
 	m := NewManager(intf)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
-	stream := NewStream(streamId, targetId, "OK", 5, 0, int(time.Now().Unix()))
+	stream := NewStream(streamId, targetId, "none", "OK", 5, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId)
 	_, _, err := m.ActivateStream(targetId, "yutong", "openmm")
 	assert.Nil(t, err)
@@ -96,7 +96,7 @@ func TestDeactivateTimer(t *testing.T) {
 	m := NewManager(intf)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
-	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+	stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId)
 	sleepTime := 6
 	m.expirationTime = 5
@@ -120,7 +120,7 @@ func TestReadModifyStream(t *testing.T) {
 	m := NewManager(intf)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
-	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+	stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId)
 	err := m.ModifyActiveStream("bad_token", mockFunc)
 	assert.NotNil(t, err)
@@ -146,7 +146,7 @@ func TestActivateStream(t *testing.T) {
 	addOrder := make([]*Stream, 0)
 	for i := 0; i < numStreams; i++ {
 		streamId := util.RandSeq(3)
-		stream := NewStream(streamId, targetId, "OK", i, 0, int(time.Now().Unix()))
+		stream := NewStream(streamId, targetId, "none", "OK", i, 0, int(time.Now().Unix()))
 		m.AddStream(stream, targetId)
 		addOrder = append(addOrder, stream)
 	}
@@ -201,7 +201,7 @@ func TestStreamReadWrite(t *testing.T) {
 	m := NewManager(intf)
 	targetId := util.RandSeq(5)
 	streamId := util.RandSeq(5)
-	stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+	stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId)
 	_, _, err := m.ActivateStream(targetId, "yutong", "openmm")
 	assert.Nil(t, err)
@@ -239,7 +239,7 @@ func TestActivateEmptyTarget(t *testing.T) {
 	numStreams := 3
 	for i := 0; i < numStreams; i++ {
 		streamId := util.RandSeq(3)
-		stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+		stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 		m.AddStream(stream, targetId)
 		_, _, err := m.ActivateStream(targetId, "foo", "bar")
 		assert.Nil(t, err)
@@ -292,7 +292,7 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 					defer wg2.Done()
 					// add streams at random points in time
 					streamId := util.RandSeq(12)
-					stream := NewStream(streamId, targetId, "OK", 0, 0, int(time.Now().Unix()))
+					stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 					err := m.AddStream(stream, targetId)
 					assert.Nil(mt.t, err)
 				}()
