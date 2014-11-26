@@ -378,11 +378,17 @@ func TestStreamCycle(t *testing.T) {
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("1234567890"))
 
 	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
-
-	time.Sleep(time.Duration(20) * time.Second)
+	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.donorFrames, 0.234)
+	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 0)
 
 	assert.Equal(t, f.download(auth_token, stream_id, "2/0/some_file"), []byte("1234567890"))
 	assert.Equal(t, f.download(auth_token, stream_id, "2/0/checkpoint_files/chkpt"), []byte("data"))
+
+	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.123}`), 200)
+	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.donorFrames, 0.234+0.123)
+	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 0)
+	assert.Equal(t, f.download(auth_token, stream_id, "2/1/checkpoint_files/chkpt"), []byte("data"))
+
 	// assert.Equal(t, f.download(auth_token, stream_id, "0/some_file"), []byte("1234567890"))
 
 	// assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
