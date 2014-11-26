@@ -389,9 +389,12 @@ func TestStreamCycle(t *testing.T) {
 	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 0)
 	assert.Equal(t, f.download(auth_token, stream_id, "2/1/checkpoint_files/chkpt"), []byte("data"))
 
-	// assert.Equal(t, f.download(auth_token, stream_id, "0/some_file"), []byte("1234567890"))
-
-	// assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
+	// test posting base64 encoded
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.b64": "MTIzNDU="}}`), 200)
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.b64": "Njc4OTA="}}`), 200)
+	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("1234567890"))
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.gz.b64": "H4sIAOX+dVQC/zM0MjYxBQAcOvXLBQAAAA=="}}`), 200)
+	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("123456789012345"))
 
 }
 
