@@ -101,19 +101,6 @@ func (app *Application) CurrentUser(r *http.Request) (user string, err error) {
 	return
 }
 
-// func (app *Application) StreamOwner(stream *Stream) (user string, err error) {
-// 	// cursor := app.Mongo.DB("data").C("targets")
-// 	// result := make(map[string]interface{})
-
-// 	// fmt.Println(stream.TargetId)
-// 	// if err := cursor.Find(bson.M{"_id": stream.TargetId}).One(&result); err != nil {
-// 	// 	return "", errors.New("Unable to read from Mongo")
-// 	// }
-// 	// user = result["owner"].(string)
-// 	return app.Manager.targets[stream.TargetId].owner
-// 	// return
-// }
-
 func (app *Application) IsManager(user string) bool {
 	cursor := app.Mongo.DB("users").C("managers")
 	result := make(map[string]interface{})
@@ -333,7 +320,7 @@ func (app *Application) CoreCheckpointHandler() AppHandler {
 		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
 			streamDir := app.StreamDir(stream.StreamId)
 			bufferDir := filepath.Join(streamDir, "buffer_files")
-			checkpointDir := filepath.Join(app.StreamDir(stream.StreamId), "checkpoint_files")
+			checkpointDir := filepath.Join(bufferDir, "checkpoint_files")
 			os.MkdirAll(checkpointDir, 0776)
 			type Message struct {
 				Files  map[string]string `json:"files"`
@@ -365,6 +352,7 @@ func (app *Application) CoreCheckpointHandler() AppHandler {
 			} else {
 				renameDir = filepath.Join(partition, "0")
 			}
+			fmt.Println(bufferDir, renameDir)
 			os.Rename(bufferDir, renameDir)
 			stream.Frames = sumFrames
 			stream.activeStream.donorFrames += msg.Frames

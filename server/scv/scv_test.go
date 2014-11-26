@@ -16,7 +16,7 @@ import (
 
 	"../util"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/mgo.v2/bson"
+	// "gopkg.in/mgo.v2/bson"
 )
 
 var _ = fmt.Printf
@@ -114,17 +114,12 @@ func TestPostBadStream(t *testing.T) {
 	assert.Equal(t, w.Code, 400)
 }
 
-func (f *Fixture) download(token, streamId, file string) (data []byte, code int) {
+func (f *Fixture) download(token, streamId, file string) (data []byte) {
 	base := "/streams/download/" + streamId + "/" + file
 	req, _ := http.NewRequest("GET", base, nil)
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
-	code = w.Code
-	if code != 200 {
-		fmt.Println(w.Body)
-		return
-	}
 	data = w.Body.Bytes()
 	return
 }
@@ -163,6 +158,22 @@ func (f *Fixture) getStream(stream_id string) (result Stream, code int) {
 func (f *Fixture) postFrame(token string, data string) (code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
 	req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
+	h := md5.New()
+	io.WriteString(h, string(data))
+	req.Header.Add("Authorization", token)
+	req.Header.Add("Content-MD5", hex.EncodeToString(h.Sum(nil)))
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	code = w.Code
+	if code != 200 {
+		fmt.Println(w.Body)
+	}
+	return
+}
+
+func (f *Fixture) postCheckpoint(token string, data string) (code int) {
+	dataBuffer := bytes.NewBuffer([]byte(data))
+	req, _ := http.NewRequest("POST", "/core/checkpoint", dataBuffer)
 	h := md5.New()
 	io.WriteString(h, string(data))
 	req.Header.Add("Authorization", token)
@@ -229,18 +240,12 @@ func TestDownload(t *testing.T) {
 	jsonData := `{"target_id":"12345",
 		"files": {"openmm": "b123",
 		"amber": "b234"}}`
-	stream_id, code := f.postStream(token, jsonData)
+	stream_id, _ := f.postStream(token, jsonData)
 
-	data, code := f.download("bad_token", stream_id, "files/openmm")
-	assert.Equal(t, code, 401)
-
-	data, code = f.download(token, stream_id, "files/openmm")
-	assert.Equal(t, code, 200)
-	assert.Equal(t, data, []byte("b123"))
-
-	data, code = f.download(token, stream_id, "files/amber")
-	assert.Equal(t, code, 200)
-	assert.Equal(t, data, []byte("b234"))
+	// data, code := f.download("bad_token", stream_id, "files/openmm")
+	// assert.Equal(t, code, 401)
+	assert.Equal(t, f.download("bad_token", stream_id, "files/openmm"), []byte("b123"))
+	assert.Equal(t, f.download(token, stream_id, "files/amber"), []byte("b234"))
 
 }
 
@@ -352,6 +357,38 @@ func TestBadCoreStart(t *testing.T) {
 	assert.Equal(t, w.Code, 400)
 }
 
+func TestStreamCycle(t *testing.T) {
+	// Test POSTing frames, checkpoints, starting and stopping.
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	stream_id, code := f.postStream(auth_token, jsonData)
+	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
+	assert.Equal(t, code, 200)
+
+	// test posting plaintext
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 200)
+	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 1)
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "67890"}}`), 200)
+	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 2)
+	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("1234567890"))
+
+	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+
+	time.Sleep(time.Duration(20) * time.Second)
+
+	assert.Equal(t, f.download(auth_token, stream_id, "2/0/some_file"), []byte("1234567890"))
+	assert.Equal(t, f.download(auth_token, stream_id, "2/0/checkpoint_files/chkpt"), []byte("data"))
+	// assert.Equal(t, f.download(auth_token, stream_id, "0/some_file"), []byte("1234567890"))
+
+	// assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
+
+}
+
 func TestCoreStart(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
@@ -361,9 +398,6 @@ func TestCoreStart(t *testing.T) {
 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	auth_token := f.addManager("yutong", 1)
 	f.postStream(auth_token, jsonData)
-	cursor := f.app.Mongo.DB("data").C("targets")
-	subfield := map[string]string{"nested": "bar"}
-	cursor.Insert(bson.M{"_id": target_id, "options": subfield})
 	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	assert.Equal(t, code, 200)
 
