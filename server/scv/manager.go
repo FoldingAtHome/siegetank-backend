@@ -99,7 +99,6 @@ func (m *Manager) RemoveStream(streamId string) error {
 	delete(m.streams, streamId)
 	if stream.activeStream != nil {
 		m.deactivateStreamImpl(stream, t)
-		// m.deactivateStreamImplSLock(stream)
 	}
 	t.inactiveStreams.Remove(stream)
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
@@ -267,29 +266,20 @@ func (m *Manager) DeactivateStream(token string) error {
 	defer m.RLock()
 	targetId := parseToken(token)
 	if targetId == "" {
-		//m.RUnlock()
 		return errors.New("invalid token: " + token)
 	}
 	t, ok := m.targets[targetId]
 	if ok == false {
-		//m.RUnlock()
 		return errors.New("invalid parsed target: " + targetId)
 	}
 	t.Lock()
 	defer t.Unlock()
 	stream, ok := t.tokens[token]
 	if ok == false {
-		//t.Unlock()
-		//m.RUnlock()
 		return errors.New("invalid token: " + token)
 	}
 	stream.Lock()
 	defer stream.Unlock()
 	m.deactivateStreamImpl(stream, t)
-	// t.Unlock()
-	// m.RUnlock()
-	// m.deactivateStreamImplSLock(stream)
-	// stream.Unlock()
-	// remove these mutexes as early as possible to reduce blocking
 	return nil
 }

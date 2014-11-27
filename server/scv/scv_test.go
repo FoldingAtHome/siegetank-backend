@@ -16,7 +16,7 @@ import (
 
 	"../util"
 	"github.com/stretchr/testify/assert"
-	// "gopkg.in/mgo.v2/bson"
+	"gopkg.in/mgo.v2/bson"
 )
 
 var _ = fmt.Printf
@@ -71,6 +71,7 @@ func NewFixture() *Fixture {
 	for _, name := range db_names {
 		f.app.Mongo.DB(name).DropDatabase()
 	}
+	go f.app.RecordStatsService()
 	return &f
 }
 
@@ -120,7 +121,11 @@ func (f *Fixture) download(token, streamId, file string) (data []byte) {
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
-	data = w.Body.Bytes()
+	if w.Code == 200 {
+		data = w.Body.Bytes()
+	} else {
+		data = make([]byte, 0)
+	}
 	return
 }
 
@@ -165,9 +170,6 @@ func (f *Fixture) postFrame(token string, data string) (code int) {
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
-	if code != 200 {
-		fmt.Println(w.Body)
-	}
 	return
 }
 
@@ -181,9 +183,6 @@ func (f *Fixture) postCheckpoint(token string, data string) (code int) {
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
-	if code != 200 {
-		fmt.Println(w.Body)
-	}
 	return
 }
 
@@ -203,9 +202,13 @@ func (f *Fixture) postStream(token string, data string) (stream_id string, code 
 	return
 }
 
-// func (f *Fixture) stopStream(token string, data string) (code int) {
-// 	req, _ := http.NewRequest("method", urlStr, body)
-// }
+func (f *Fixture) stopStream(token string) (code int) {
+	req, _ := http.NewRequest("PUT", "/core/stop", nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	return w.Code
+}
 
 func TestPostStream(t *testing.T) {
 	f := NewFixture()
@@ -342,7 +345,9 @@ func TestStreamActivation(t *testing.T) {
 			user := util.RandSeq(12)
 			token, code := f.activateStream(target_id, engine, user, f.app.Config.Password)
 			assert.Equal(t, code, 200)
+			mu.Lock()
 			tokens[token] = struct{}{}
+			mu.Unlock()
 			wg.Done()
 		}()
 	}
@@ -365,12 +370,15 @@ func TestStreamCycle(t *testing.T) {
 	// Test POSTing frames, checkpoints, starting and stopping.
 	f := NewFixture()
 	defer f.shutdown()
+
 	target_id := "12345"
 	jsonData := `{"target_id":"` + target_id + `",
 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	auth_token := f.addManager("yutong", 1)
+
 	stream_id, code := f.postStream(auth_token, jsonData)
+
 	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	assert.Equal(t, code, 200)
 
@@ -400,6 +408,23 @@ func TestStreamCycle(t *testing.T) {
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.gz.b64": "H4sIAOX+dVQC/zM0MjYxBQAcOvXLBQAAAA=="}}`), 200)
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("123456789012345"))
 
+	assert.Equal(t, f.stopStream(token), 200)
+
+	// check stats
+	time.Sleep(time.Second * 1)
+	cursor := f.app.Mongo.DB("stats").C(target_id)
+	result := make(map[string]interface{})
+	cursor.Find(bson.M{"stream": stream_id}).One(&result)
+	fmt.Println("stats:", result)
+
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 400)
+	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 400)
+	assert.Nil(t, f.app.Manager.streams[stream_id].activeStream, nil)
+
+	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("123456789012345"))
+	// test that activating a stream removes buffer_files
+	token, code = f.activateStream(target_id, "a", "b", f.app.Config.Password)
+	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte(""))
 }
 
 func TestCoreStart(t *testing.T) {
@@ -420,7 +445,6 @@ func TestCoreStart(t *testing.T) {
 		req.Header.Add("Authorization", token)
 		w := httptest.NewRecorder()
 		f.app.Router.ServeHTTP(w, req)
-		fmt.Println("??", w.Body)
 		assert.Equal(t, w.Code, 200)
 	}
 

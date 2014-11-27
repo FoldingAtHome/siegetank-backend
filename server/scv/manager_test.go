@@ -341,13 +341,13 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 	return nil
 }
 
-func TestMultiplex(t *testing.T) {
-	mt := MultiplexTester{t}
+// func TestMultiplex(t *testing.T) {
+// 	mt := MultiplexTester{t}
 
-	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
-	// mt.Multiplex(50, 20000, 2000, 300)
-	mt.Multiplex(10, 100, 100, 20)
-}
+// 	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
+// 	// mt.Multiplex(50, 20000, 2000, 300)
+// 	mt.Multiplex(10, 100, 100, 20)
+// }
 
 // func TestStreamExpiration(t *testing.T) {
 // 	tm := NewTargetManager()

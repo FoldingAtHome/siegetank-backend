@@ -17,6 +17,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
+	// "reflect"
 	"strconv"
 	"time"
 
@@ -41,10 +43,12 @@ type Application struct {
 	Manager *Manager
 	Router  *mux.Router
 
-	server   *Server
-	stats    list.List
-	shutdown chan os.Signal
-	finish   bool
+	server     *Server
+	stats      *list.List
+	statsWG    sync.WaitGroup
+	statsMutex sync.Mutex
+	shutdown   chan os.Signal
+	finish     chan struct{}
 }
 
 type Stats struct {
@@ -58,39 +62,50 @@ type Stats struct {
 }
 
 func (app *Application) DeactivateStreamService(s *Stream) error {
-	// Record Stats
 	stat := Stats{
 		Engine:    s.activeStream.engine,
 		User:      s.activeStream.user,
 		StartTime: s.activeStream.startTime,
 		EndTime:   int(time.Now().Unix()),
 		Frames:    s.activeStream.donorFrames,
-		Stream:    s.TargetId,
-		targetId:  s.StreamId,
+		Stream:    s.StreamId,
+		targetId:  s.TargetId,
 	}
-	ele := list.Element{Value: stat}
-	app.stats.PushBack(&ele)
+	app.statsMutex.Lock()
+	app.stats.PushBack(interface{}(stat))
+	app.statsMutex.Unlock()
 	return nil
 }
 
-func (app *Application) RecordStatsService() {
-	for app.finish == false {
-		for app.stats.Len() > 0 {
-			ele := app.stats.Front()
-			s := ele.Value.(Stats)
-			cursor := app.Mongo.DB("stats").C(s.targetId)
-			err := cursor.Insert(s)
-			if err == nil {
-				app.stats.Remove(ele)
-			} else {
-				time.Sleep(1 * time.Second)
-			}
+func (app *Application) drainStats() {
+	// fmt.Println("Draining stats...")
+	app.statsMutex.Lock()
+	for app.stats.Len() > 0 {
+		ele := app.stats.Front()
+		s := ele.Value.(Stats)
+		cursor := app.Mongo.DB("stats").C(s.targetId)
+		err := cursor.Insert(s)
+		if err == nil {
+			app.stats.Remove(ele)
+		} else {
+			time.Sleep(1 * time.Second)
 		}
 	}
+	app.statsMutex.Unlock()
 }
 
-func (app *Application) RemoveBufferFiles(s *Stream) {
-	os.RemoveAll(filepath.Join(app.StreamDir(s.StreamId), "buffer_files"))
+func (app *Application) RecordStatsService() {
+	defer app.statsWG.Done()
+	for {
+		select {
+		case <-app.finish:
+			app.drainStats()
+			return
+		default:
+			app.drainStats()
+			time.Sleep(1 * time.Second)
+		}
+	}
 }
 
 // Add SSL stuff later
@@ -111,6 +126,8 @@ func NewApplication(config Configuration) *Application {
 		Config:  config,
 		Mongo:   session,
 		Manager: nil,
+		stats:   list.New(),
+		finish:  make(chan struct{}),
 	}
 	app.Manager = NewManager(&app)
 	app.Router = mux.NewRouter()
@@ -121,9 +138,9 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
-	// app.Router.Handle("/core/stop", app.CoreStopHandler()).Methods("PUT")
+	app.Router.Handle("/core/stop", app.CoreStopHandler()).Methods("PUT")
 	app.server = NewServer("127.0.0.1:12345", app.Router)
-
+	app.statsWG.Add(1)
 	return &app
 }
 
@@ -157,12 +174,6 @@ func (app *Application) IsManager(user string) bool {
 	}
 }
 
-// func (app *Application) AuthenticateCore(r *http.Request) (s *Stream, err error) {
-// 	token := r.Header.Get("Authorization")
-// 	s, err = app.Manager.Tokens.FindStream(token)
-// 	return
-// }
-
 // Return a path indicating where stream files should be stored
 func (app *Application) StreamDir(stream_id string) string {
 	return filepath.Join(app.Config.Name+"_data", stream_id)
@@ -186,9 +197,10 @@ func (app *Application) Run() {
 
 func (app *Application) Shutdown() {
 	// Order matters.
-	app.finish = true
 	app.server.Close()
 	app.Mongo.Close()
+	close(app.finish)
+	app.statsWG.Wait()
 }
 
 func (app *Application) StreamActivateHandler() AppHandler {
@@ -333,7 +345,6 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			return errors.New("Invalid file path."), 400
 		}
 		user, err := app.CurrentUser(r)
-		fmt.Println(user, err)
 		if err != nil {
 			return errors.New("Unable to find user."), 401
 		}
@@ -342,7 +353,6 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 				return errors.New("Unable to find stream's owner.")
 			}
 			if stream.Owner != user {
-				fmt.Println(stream.Owner)
 				return errors.New("You do not own this stream.")
 			}
 			binary, e := ioutil.ReadFile(requestedFile)
@@ -404,7 +414,6 @@ func (app *Application) CoreCheckpointHandler() AppHandler {
 			} else {
 				renameDir = filepath.Join(partition, "0")
 			}
-			fmt.Println(bufferDir, renameDir)
 			os.Rename(bufferDir, renameDir)
 			stream.Frames = sumFrames
 			stream.activeStream.donorFrames += msg.Frames
