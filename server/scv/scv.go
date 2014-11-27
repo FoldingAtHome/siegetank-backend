@@ -3,6 +3,7 @@ package scv
 import (
 	"bytes"
 	"compress/gzip"
+	"container/list"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
@@ -41,7 +42,55 @@ type Application struct {
 	Router  *mux.Router
 
 	server   *Server
+	stats    list.List
 	shutdown chan os.Signal
+	finish   bool
+}
+
+type Stats struct {
+	Engine    string  `bson:"engine"`
+	User      string  `bson:"user"`
+	StartTime int     `bson:"start_time"`
+	EndTime   int     `bson:"end_time"`
+	Frames    float64 `bson:"frames"`
+	Stream    string  `bson:"stream"`
+	targetId  string  `bson:"-"`
+}
+
+func (app *Application) DeactivateStreamService(s *Stream) error {
+	// Record Stats
+	stat := Stats{
+		Engine:    s.activeStream.engine,
+		User:      s.activeStream.user,
+		StartTime: s.activeStream.startTime,
+		EndTime:   int(time.Now().Unix()),
+		Frames:    s.activeStream.donorFrames,
+		Stream:    s.TargetId,
+		targetId:  s.StreamId,
+	}
+	ele := list.Element{Value: stat}
+	app.stats.PushBack(&ele)
+	return nil
+}
+
+func (app *Application) RecordStatsService() {
+	for app.finish == false {
+		for app.stats.Len() > 0 {
+			ele := app.stats.Front()
+			s := ele.Value.(Stats)
+			cursor := app.Mongo.DB("stats").C(s.targetId)
+			err := cursor.Insert(s)
+			if err == nil {
+				app.stats.Remove(ele)
+			} else {
+				time.Sleep(1 * time.Second)
+			}
+		}
+	}
+}
+
+func (app *Application) RemoveBufferFiles(s *Stream) {
+	os.RemoveAll(filepath.Join(app.StreamDir(s.StreamId), "buffer_files"))
 }
 
 // Add SSL stuff later
@@ -86,10 +135,6 @@ func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (app *Application) DeactivateStreamService(s *Stream) error {
-	return nil
-}
-
 // Look up the User using the Authorization header
 func (app *Application) CurrentUser(r *http.Request) (user string, err error) {
 	token := r.Header.Get("Authorization")
@@ -132,6 +177,7 @@ func (app *Application) Run() {
 			log.Println("ListenAndServe: ", err)
 		}
 	}()
+	go app.RecordStatsService()
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)
 	<-c
@@ -140,6 +186,7 @@ func (app *Application) Run() {
 
 func (app *Application) Shutdown() {
 	// Order matters.
+	app.finish = true
 	app.server.Close()
 	app.Mongo.Close()
 }
@@ -160,7 +207,11 @@ func (app *Application) StreamActivateHandler() AppHandler {
 		if err != nil {
 			return errors.New("Bad request: " + err.Error()), 400
 		}
-		token, _, err := app.Manager.ActivateStream(msg.TargetId, msg.User, msg.Engine)
+		fn := func(s *Stream) error {
+			err := os.RemoveAll(filepath.Join(app.StreamDir(s.StreamId), "buffer_files"))
+			return err
+		}
+		token, _, err := app.Manager.ActivateStream(msg.TargetId, msg.User, msg.Engine, fn)
 		if err != nil {
 			return errors.New("Unable to activate stream: " + err.Error()), 400
 		}
@@ -437,11 +488,16 @@ func (app *Application) CoreStartHandler() AppHandler {
 	}
 }
 
-// func (app *Application) CoreStopHandler() AppHandler {
-// 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-// 		app.Manager.DeactivateStream(streamId)
-// 	}
-// }
+func (app *Application) CoreStopHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+		token := r.Header.Get("Authorization")
+		e := app.Manager.DeactivateStream(token)
+		if e != nil {
+			return e, 400
+		}
+		return
+	}
+}
 
 func (app *Application) StreamsHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {

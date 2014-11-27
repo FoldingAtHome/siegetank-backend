@@ -82,7 +82,7 @@ func TestRemoveActiveStream(t *testing.T) {
 	streamId := util.RandSeq(5)
 	stream := NewStream(streamId, targetId, "none", "OK", 5, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId)
-	_, _, err := m.ActivateStream(targetId, "yutong", "openmm")
+	_, _, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
 	assert.Nil(t, err)
 	assert.Equal(t, len(m.targets[targetId].tokens), 1)
 	assert.Equal(t, len(m.streams), 1)
@@ -100,7 +100,7 @@ func TestDeactivateTimer(t *testing.T) {
 	m.AddStream(stream, targetId)
 	sleepTime := 6
 	m.expirationTime = 5
-	token, streamId, err := m.ActivateStream(targetId, "yutong", "openmm")
+	token, streamId, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
 	assert.True(t, err == nil)
 	m.ReadStream(streamId, func(s *Stream) error {
 		assert.NotNil(t, s.activeStream)
@@ -161,7 +161,7 @@ func TestActivateStream(t *testing.T) {
 			// activate a single stream
 			username := util.RandSeq(5)
 			engine := util.RandSeq(5)
-			token, _, err := m.ActivateStream(targetId, username, engine)
+			token, _, err := m.ActivateStream(targetId, username, engine, mockFunc)
 			assert.Nil(t, err)
 			mu.Lock()
 			activationTokens = append(activationTokens, token)
@@ -203,7 +203,7 @@ func TestStreamReadWrite(t *testing.T) {
 	streamId := util.RandSeq(5)
 	stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId)
-	_, _, err := m.ActivateStream(targetId, "yutong", "openmm")
+	_, _, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
 	assert.Nil(t, err)
 	var wg sync.WaitGroup
 	for i := 0; i < 1000; i++ {
@@ -241,10 +241,10 @@ func TestActivateEmptyTarget(t *testing.T) {
 		streamId := util.RandSeq(3)
 		stream := NewStream(streamId, targetId, "none", "OK", 0, 0, int(time.Now().Unix()))
 		m.AddStream(stream, targetId)
-		_, _, err := m.ActivateStream(targetId, "foo", "bar")
+		_, _, err := m.ActivateStream(targetId, "foo", "bar", mockFunc)
 		assert.Nil(t, err)
 	}
-	_, _, err := m.ActivateStream(targetId, "foo", "bar")
+	_, _, err := m.ActivateStream(targetId, "foo", "bar", mockFunc)
 	assert.NotNil(t, err)
 }
 
@@ -252,20 +252,20 @@ type MultiplexTester struct {
 	t *testing.T
 }
 
-type Stats struct {
+type testStats struct {
 	sync.Mutex
 	count float64
 	sum   float64
 }
 
-func (s *Stats) Add(val float64) {
+func (s *testStats) Add(val float64) {
 	s.Lock()
 	s.count += 1.0
 	s.sum += val
 	s.Unlock()
 }
 
-func (s *Stats) Mean() float64 {
+func (s *testStats) Mean() float64 {
 	s.Lock()
 	defer s.Unlock()
 	return s.sum / s.count
@@ -277,8 +277,8 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 	// this test ends after 5 minutes
 	m.expirationTime = 300
 	testDurationInMilliseconds := int64(900)
-	modifyStreamStats := Stats{}
-	activateStreamStats := Stats{}
+	modifyStreamStats := testStats{}
+	activateStreamStats := testStats{}
 	var wg sync.WaitGroup
 	for t := 0; t < nTargets; t++ {
 		wg.Add(1)
@@ -307,7 +307,7 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 					// activate these streams over the span of 1 minutes
 					time.Sleep(time.Second * time.Duration(rand.Intn(secondsBetweenFrames)))
 					k := time.Now().UnixNano()
-					token, _, err := m.ActivateStream(targetId, "joe", "bob")
+					token, _, err := m.ActivateStream(targetId, "joe", "bob", mockFunc)
 					if err == nil {
 						activateStreamStats.Add(float64(time.Now().UnixNano() - k))
 						wg.Add(1)
@@ -341,13 +341,13 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 	return nil
 }
 
-// func TestMultiplex(t *testing.T) {
-// 	mt := MultiplexTester{t}
+func TestMultiplex(t *testing.T) {
+	mt := MultiplexTester{t}
 
-// 	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
-// 	// mt.Multiplex(50, 20000, 2000, 300)
-// 	mt.Multiplex(10, 100, 100, 20)
-// }
+	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
+	// mt.Multiplex(50, 20000, 2000, 300)
+	mt.Multiplex(10, 100, 100, 20)
+}
 
 // func TestStreamExpiration(t *testing.T) {
 // 	tm := NewTargetManager()

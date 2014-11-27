@@ -14,6 +14,7 @@ var _ = fmt.Printf
 
 // A mechanism for allowing dependency injection. These methods will usually close other external app variables like DBs, file/io, etc.
 type Injector interface {
+	// insert into mongo, remove buffered files, etc.
 	DeactivateStreamService(*Stream) error
 }
 
@@ -79,8 +80,9 @@ func (m *Manager) AddStream(stream *Stream, targetId string) error {
 }
 
 /*
-Remove a stream from the manager. The stream is immediately removed. It is up to the calling function to specify clean-up behavior.
-We need to lock the stream here because other functions may be using it.
+Remove a stream from the manager. The stream is immediately removed from memory.
+However, its data (including files and what not) still persist on disk. It is up
+to the caller to take care of subsequent cleanup.
 */
 func (m *Manager) RemoveStream(streamId string) error {
 	m.Lock()
@@ -96,7 +98,8 @@ func (m *Manager) RemoveStream(streamId string) error {
 	defer stream.Unlock()
 	delete(m.streams, streamId)
 	if stream.activeStream != nil {
-		t.deactivateStreamImpl(stream)
+		m.deactivateStreamImpl(stream, t)
+		// m.deactivateStreamImplSLock(stream)
 	}
 	t.inactiveStreams.Remove(stream)
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
@@ -163,27 +166,28 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 	return fn(stream)
 }
 
-func (m *Manager) ActivateStream(targetId, user, engine string) (token string, streamId string, err error) {
+func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream) error) (token string, streamId string, err error) {
 	m.RLock()
-	defer m.RUnlock()
+	//defer m.RUnlock()
 	t, ok := m.targets[targetId]
 	if ok == false {
+		m.RUnlock()
 		err = errors.New("Target does not exist")
 		return
 	}
 	t.Lock()
-	defer t.Unlock()
+	//defer t.Unlock()
 	iterator := t.inactiveStreams.Iterator()
 	ok = iterator.Next()
 	if ok == false {
+		t.Unlock()
+		m.RUnlock()
 		err = errors.New("Target does not have streams")
 		return
 	}
 	token = createToken(targetId)
 	stream := iterator.Key().(*Stream)
 	streamId = stream.StreamId
-	stream.Lock()
-	defer stream.Unlock()
 	t.inactiveStreams.Remove(stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
 	t.tokens[token] = stream
@@ -191,6 +195,11 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 		m.DeactivateStream(token)
 	})
 	t.activeStreams[stream] = struct{}{}
+	stream.Lock()
+	defer stream.Unlock()
+	t.Unlock()
+	m.RUnlock()
+	err = fn(stream)
 	return
 }
 
@@ -212,14 +221,20 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 // 	return
 // }
 
-// Assumes that locks are in place.
+// Assumes that locks are in place for target and manager
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	delete(t.tokens, s.activeStream.authToken)
 	delete(t.timers, s.StreamId)
 	delete(t.activeStreams, s)
+	m.injector.DeactivateStreamService(s)
 	s.activeStream = nil
 	t.inactiveStreams.Add(s)
 }
+
+// // Assumes that locks are in place for the stream
+// func (m *Manager) deactivateStreamImplSLock(s *Stream) {
+
+// }
 
 // func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
 // 	m.RLock()
@@ -249,27 +264,32 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 
 func (m *Manager) DeactivateStream(token string) error {
 	m.RLock()
+	defer m.RLock()
 	targetId := parseToken(token)
 	if targetId == "" {
-		m.RUnlock()
+		//m.RUnlock()
 		return errors.New("invalid token: " + token)
 	}
 	t, ok := m.targets[targetId]
 	if ok == false {
-		m.RUnlock()
+		//m.RUnlock()
 		return errors.New("invalid parsed target: " + targetId)
 	}
 	t.Lock()
+	defer t.Unlock()
 	stream, ok := t.tokens[token]
 	if ok == false {
-		t.Unlock()
-		m.RUnlock()
+		//t.Unlock()
+		//m.RUnlock()
 		return errors.New("invalid token: " + token)
 	}
 	stream.Lock()
 	defer stream.Unlock()
-	t.deactivateStreamImpl(stream)
-	t.Unlock()
-	m.RUnlock()
-	return m.injector.DeactivateStreamService(stream)
+	m.deactivateStreamImpl(stream, t)
+	// t.Unlock()
+	// m.RUnlock()
+	// m.deactivateStreamImplSLock(stream)
+	// stream.Unlock()
+	// remove these mutexes as early as possible to reduce blocking
+	return nil
 }

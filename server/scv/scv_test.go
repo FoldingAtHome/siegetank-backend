@@ -203,6 +203,10 @@ func (f *Fixture) postStream(token string, data string) (stream_id string, code 
 	return
 }
 
+// func (f *Fixture) stopStream(token string, data string) (code int) {
+// 	req, _ := http.NewRequest("method", urlStr, body)
+// }
+
 func TestPostStream(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
@@ -431,7 +435,6 @@ func TestCoreStart(t *testing.T) {
 	}
 
 	assert.Equal(t, f.postFrame(token, "12345678"), 400)
-
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 400)
 }
