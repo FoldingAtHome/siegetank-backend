@@ -37,7 +37,7 @@ func (f *Fixture) addUser(user string) (token string) {
 	return
 }
 
-func (f *Fixture) addTarget(targetId, owner string) {
+func (f *Fixture) addTarget(targetId, owner, options string) {
 	type Msg struct {
 		Id    string `bson:"_id"`
 		Owner string `bson:"owner"`
@@ -236,7 +236,7 @@ func TestDownload(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
 	token := f.addManager("yutong", 1)
-	f.addTarget("12345", "yutong")
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
 	jsonData := `{"target_id":"12345",
 		"files": {"openmm": "b123",
 		"amber": "b234"}}`
@@ -244,7 +244,7 @@ func TestDownload(t *testing.T) {
 
 	// data, code := f.download("bad_token", stream_id, "files/openmm")
 	// assert.Equal(t, code, 401)
-	assert.Equal(t, f.download("bad_token", stream_id, "files/openmm"), []byte("b123"))
+	assert.Equal(t, f.download(token, stream_id, "files/openmm"), []byte("b123"))
 	assert.Equal(t, f.download(token, stream_id, "files/amber"), []byte("b234"))
 
 }
@@ -402,6 +402,7 @@ func TestCoreStart(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
 	target_id := "12345"
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
 	jsonData := `{"target_id":"` + target_id + `",
 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
@@ -415,6 +416,7 @@ func TestCoreStart(t *testing.T) {
 		req.Header.Add("Authorization", token)
 		w := httptest.NewRecorder()
 		f.app.Router.ServeHTTP(w, req)
+		fmt.Println("??", w.Body)
 		assert.Equal(t, w.Code, 200)
 	}
 

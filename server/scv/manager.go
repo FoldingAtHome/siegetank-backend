@@ -188,7 +188,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string) (token string, s
 	stream.activeStream = NewActiveStream(user, token, engine)
 	t.tokens[token] = stream
 	t.timers[stream.StreamId] = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
-		m.DeactivateStream(stream.StreamId)
+		m.DeactivateStream(token)
 	})
 	t.activeStreams[stream] = struct{}{}
 	return
@@ -221,25 +221,55 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	t.inactiveStreams.Add(s)
 }
 
-func (m *Manager) DeactivateStream(streamId string) error {
+// func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
+// 	m.RLock()
+// 	targetId := parseToken(token)
+// 	if targetId == "" {
+// 		m.RUnlock()
+// 		return errors.New("invalid token: " + token)
+// 	}
+// 	t, ok := m.targets[targetId]
+// 	if ok == false {
+// 		m.RUnlock()
+// 		return errors.New("invalid parsed target: " + targetId)
+// 	}
+// 	t.RLock()
+// 	stream, ok := t.tokens[token]
+// 	if ok == false {
+// 		t.RUnlock()
+// 		m.RUnlock()
+// 		return errors.New("invalid token: " + token)
+// 	}
+// 	stream.Lock()
+// 	t.RUnlock()
+// 	m.RUnlock()
+// 	defer stream.Unlock()
+// 	return fn(stream)
+// }
+
+func (m *Manager) DeactivateStream(token string) error {
 	m.RLock()
-	stream, ok := m.streams[streamId]
-	// It's not the prettiest code when we can't use defer m.RUnlock, but it is performance critical.
+	targetId := parseToken(token)
+	if targetId == "" {
+		m.RUnlock()
+		return errors.New("invalid token: " + token)
+	}
+	t, ok := m.targets[targetId]
 	if ok == false {
 		m.RUnlock()
-		return errors.New("Stream does not exist")
+		return errors.New("invalid parsed target: " + targetId)
 	}
-	if stream.activeStream == nil {
-		m.RUnlock()
-		return errors.New("Stream is not active")
-	}
-	t := m.targets[stream.TargetId]
 	t.Lock()
+	stream, ok := t.tokens[token]
+	if ok == false {
+		t.Unlock()
+		m.RUnlock()
+		return errors.New("invalid token: " + token)
+	}
 	stream.Lock()
 	defer stream.Unlock()
-	m.RUnlock()
 	t.deactivateStreamImpl(stream)
 	t.Unlock()
-	// this could potentially be a really long running service, so we don't want it to block the target or the manager
+	m.RUnlock()
 	return m.injector.DeactivateStreamService(stream)
 }

@@ -72,6 +72,7 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
+	// app.Router.Handle("/core/stop", app.CoreStopHandler()).Methods("PUT")
 	app.server = NewServer("127.0.0.1:12345", app.Router)
 
 	return &app
@@ -387,7 +388,6 @@ func (app *Application) CoreStartHandler() AppHandler {
 			cursor := app.Mongo.DB("data").C("targets")
 			mgoRes := make(map[string]interface{})
 			if err = cursor.Find(bson.M{"_id": stream.TargetId}).One(&mgoRes); err != nil {
-				fmt.Println(err)
 				return errors.New("Cannot load target's options")
 			}
 			rep.Options = mgoRes["options"]
@@ -436,6 +436,12 @@ func (app *Application) CoreStartHandler() AppHandler {
 		return
 	}
 }
+
+// func (app *Application) CoreStopHandler() AppHandler {
+// 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+// 		app.Manager.DeactivateStream(streamId)
+// 	}
+// }
 
 func (app *Application) StreamsHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {

@@ -185,11 +185,11 @@ func TestActivateStream(t *testing.T) {
 	}
 	for _, stream := range addOrder {
 		wg.Add(1)
-		go func(streamId string) {
+		go func(token string) {
 			defer wg.Done()
-			err := m.DeactivateStream(streamId)
+			err := m.DeactivateStream(token)
 			assert.Nil(t, err)
-		}(stream.StreamId)
+		}(stream.activeStream.authToken)
 	}
 	wg.Wait()
 	assert.Equal(t, len(m.targets[targetId].tokens), 0)
