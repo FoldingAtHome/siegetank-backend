@@ -196,11 +196,11 @@ func (app *Application) Run() {
 }
 
 func (app *Application) Shutdown() {
-	// Order matters.
+	// Order matters here!
 	app.server.Close()
-	app.Mongo.Close()
 	close(app.finish)
 	app.statsWG.Wait()
+	app.Mongo.Close()
 }
 
 func (app *Application) StreamActivateHandler() AppHandler {
@@ -269,6 +269,7 @@ func (app *Application) CoreFrameHandler() AppHandler {
 			return errors.New("MD5 mismatch"), 400
 		}
 		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+			fmt.Println("Core Frame Post")
 			type Message struct {
 				Files  map[string]string `json:"files"`
 				Frames int               `json:"frames"`
@@ -313,6 +314,7 @@ func (app *Application) CoreFrameHandler() AppHandler {
 				os.MkdirAll(dir, 0776)
 				filename = filepath.Join(dir, filename)
 				file, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0776)
+				defer file.Close()
 				if err != nil {
 					return err
 				}
@@ -349,6 +351,7 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			return errors.New("Unable to find user."), 401
 		}
 		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
+			fmt.Println("Core Download")
 			if err != nil {
 				return errors.New("Unable to find stream's owner.")
 			}
@@ -357,7 +360,7 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			}
 			binary, e := ioutil.ReadFile(requestedFile)
 			if e != nil {
-				return errors.New("Unable to read file")
+				return errors.New("Unable to read file.")
 			}
 			w.Write(binary)
 			return nil

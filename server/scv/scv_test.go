@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -124,6 +125,7 @@ func (f *Fixture) download(token, streamId, file string) (data []byte) {
 	if w.Code == 200 {
 		data = w.Body.Bytes()
 	} else {
+		fmt.Println(w.Body)
 		data = make([]byte, 0)
 	}
 	return
@@ -170,6 +172,9 @@ func (f *Fixture) postFrame(token string, data string) (code int) {
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
+	if code != 200 {
+		fmt.Println(w.Body)
+	}
 	return
 }
 
@@ -210,6 +215,22 @@ func (f *Fixture) stopStream(token string) (code int) {
 	return w.Code
 }
 
+func (f *Fixture) coreStart(token string) (streamId string, code int) {
+	req, _ := http.NewRequest("GET", "/core/start", nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	code = w.Code
+	if code != 200 {
+		fmt.Println(code, w.Body)
+		return
+	}
+	stream_map := make(map[string]interface{})
+	json.Unmarshal(w.Body.Bytes(), &stream_map)
+	streamId = stream_map["stream_id"].(string)
+	return
+}
+
 func TestPostStream(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
@@ -248,7 +269,6 @@ func TestDownload(t *testing.T) {
 		"files": {"openmm": "b123",
 		"amber": "b234"}}`
 	stream_id, _ := f.postStream(token, jsonData)
-
 	// data, code := f.download("bad_token", stream_id, "files/openmm")
 	// assert.Equal(t, code, 401)
 	assert.Equal(t, f.download(token, stream_id, "files/openmm"), []byte("b123"))
@@ -366,6 +386,63 @@ func TestBadCoreStart(t *testing.T) {
 	assert.Equal(t, w.Code, 400)
 }
 
+func TestHammerTime(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	f.addTarget(target_id, "yutong", `{"options": {"steps_per_frame": 1}}`)
+
+	// token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
+	streams := make([]string, 0)
+	nStreams := 10
+
+	for i := 0; i < nStreams; i++ {
+		stream_id, code := f.postStream(auth_token, jsonData)
+		assert.Equal(t, code, 200)
+		streams = append(streams, stream_id)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < nStreams; i++ {
+		wg.Add(1)
+		go func() {
+			var nFrames int
+			var concatebin string
+			token, code := f.activateStream(target_id, "some_engine", "some_user", f.app.Config.Password)
+			assert.Equal(t, code, 200)
+			streamId, code := f.coreStart(token)
+			// fmt.Println("starting", streamId)
+			fCount := 492
+			nFrames += fCount
+			for j := 0; j < fCount; j++ {
+				data := util.RandSeq(12)
+				concatebin += data
+				assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
+			}
+			assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+			fCount = 14
+			// nFrames += fCount
+			for j := 0; j < fCount; j++ {
+				data := util.RandSeq(12)
+				assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
+			}
+			assert.Equal(t, f.stopStream(token), 200)
+			// time.Sleep(10 * time.Second)
+			// fmt.Println("wow", nFrames)
+			frameBin := f.download(auth_token, streamId, strconv.Itoa(nFrames)+"/0/some_file")
+			assert.NotEqual(t, frameBin, "")
+			assert.Equal(t, concatebin, string(frameBin))
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+
 func TestStreamCycle(t *testing.T) {
 	// Test POSTing frames, checkpoints, starting and stopping.
 	f := NewFixture()
@@ -415,6 +492,10 @@ func TestStreamCycle(t *testing.T) {
 	cursor := f.app.Mongo.DB("stats").C(target_id)
 	result := make(map[string]interface{})
 	cursor.Find(bson.M{"stream": stream_id}).One(&result)
+
+	// assert.Equal(result["frames"].(float64), 0.234+0.123)
+	// assert.Equal(result["engine"].(string), "a")
+	// assert.Equal(result["user"].(string), "b")
 	fmt.Println("stats:", result)
 
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 400)
