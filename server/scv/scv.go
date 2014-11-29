@@ -372,6 +372,17 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 	}
 }
 
+func pathExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func (app *Application) CoreCheckpointHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		token := r.Header.Get("Authorization")
@@ -407,9 +418,11 @@ func (app *Application) CoreCheckpointHandler() AppHandler {
 			partition := filepath.Join(streamDir, strconv.Itoa(sumFrames))
 			os.MkdirAll(partition, 0766)
 			var renameDir string
+
 			if bufferFrames == 0 {
-				lastCheckpoint, err := maxCheckpoint(partition)
-				if err != nil {
+				exist, _ := pathExists(partition)
+				if exist {
+					lastCheckpoint, _ := maxCheckpoint(partition)
 					renameDir = filepath.Join(partition, strconv.Itoa(lastCheckpoint+1))
 				} else {
 					renameDir = filepath.Join(partition, "1")
