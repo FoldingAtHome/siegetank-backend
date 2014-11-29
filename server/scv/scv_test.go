@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
@@ -120,7 +121,6 @@ func TestPostBadStream(t *testing.T) {
 
 func (f *Fixture) download(token, streamId, file string) (data []byte) {
 	base := "/streams/download/" + streamId + "/" + file
-	// fmt.Println(base)
 	req, _ := http.NewRequest("GET", base, nil)
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
@@ -128,7 +128,6 @@ func (f *Fixture) download(token, streamId, file string) (data []byte) {
 	if w.Code == 200 {
 		data = w.Body.Bytes()
 	} else {
-		fmt.Println("HEY WTF", w.Body)
 		data = make([]byte, 0)
 	}
 	return
@@ -229,7 +228,6 @@ func (f *Fixture) coreStart(token string) (streamId string, code int) {
 	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
 	if code != 200 {
-		fmt.Println(code, w.Body)
 		return
 	}
 	stream_map := make(map[string]interface{})
@@ -406,9 +404,9 @@ func TestHammerTime(t *testing.T) {
 
 	// token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	streams := make([]string, 0)
-	nStreams := 10
-	nActivations := 30
-	nCycles := 5
+	nStreams := 11
+	nActivations := 29
+	nCycles := 12
 
 	for i := 0; i < nStreams; i++ {
 		stream_id, code := f.postStream(auth_token, jsonData)
@@ -434,9 +432,8 @@ func TestHammerTime(t *testing.T) {
 					for j := 0; j < fCount; j++ {
 						data := util.RandSeq(4)
 						concatBin += data
-						fmt.Println("Post Frame")
 						assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
-						time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+						time.Sleep(time.Duration(rand.Intn(20)) * time.Millisecond)
 					}
 					mu.Lock()
 					frameCounts[streamId] += fCount
@@ -448,7 +445,6 @@ func TestHammerTime(t *testing.T) {
 					}
 					consChkpt := consecutiveCheckpoints[streamId]
 					mu.Unlock()
-					fmt.Println("Post Checkpoint")
 					assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
 
 					if fCount > 0 {
@@ -458,9 +454,7 @@ func TestHammerTime(t *testing.T) {
 						}
 						assert.Equal(t, concatBin, string(frameBin))
 					}
-
 					url := strconv.Itoa(nFrames) + "/" + strconv.Itoa(consChkpt) + "/checkpoint_files/chkpt"
-					fmt.Println(streamId, url)
 					chkptBin := f.download(auth_token, streamId, url)
 					assert.Equal(t, "data", string(chkptBin))
 				}
@@ -470,8 +464,6 @@ func TestHammerTime(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	fmt.Println(frameCounts)
-	// f.shutdown()
 }
 
 func TestStreamCheckpoint(t *testing.T) {
@@ -487,8 +479,6 @@ func TestStreamCheckpoint(t *testing.T) {
 	assert.Equal(t, code, 200)
 	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data1"}, "frames": 0.234}`), 200)
 	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data2"}, "frames": 0.234}`), 200)
-	url := "0/1/checkpoint_files/chkpt"
-	fmt.Println(streamId, url)
 	chkptBin := f.download(auth_token, streamId, "0/1/checkpoint_files/chkpt")
 	assert.Equal(t, string(chkptBin), "data1")
 	chkptBin = f.download(auth_token, streamId, "0/2/checkpoint_files/chkpt")
@@ -508,7 +498,9 @@ func TestStreamCycle(t *testing.T) {
 
 	stream_id, code := f.postStream(auth_token, jsonData)
 
-	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
+	start_time := int(time.Now().Unix())
+
+	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
 
 	// test posting plaintext
@@ -539,16 +531,19 @@ func TestStreamCycle(t *testing.T) {
 
 	assert.Equal(t, f.stopStream(token), 200)
 
+	end_time := int(time.Now().Unix())
+
 	// check stats
 	time.Sleep(time.Second * 1)
 	cursor := f.app.Mongo.DB("stats").C(target_id)
 	result := make(map[string]interface{})
 	cursor.Find(bson.M{"stream": stream_id}).One(&result)
 
-	// assert.Equal(result["frames"].(float64), 0.234+0.123)
-	// assert.Equal(result["engine"].(string), "a")
-	// assert.Equal(result["user"].(string), "b")
-	fmt.Println("stats:", result)
+	assert.Equal(t, result["frames"].(float64), 0.234+0.123)
+	assert.Equal(t, result["engine"].(string), "some_engine")
+	assert.Equal(t, result["user"].(string), "some_donor")
+	assert.True(t, math.Abs(float64(result["start_time"].(int)-start_time)) < 1)
+	assert.True(t, math.Abs(float64(result["end_time"].(int)-end_time)) < 1)
 
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 400)
 	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 400)

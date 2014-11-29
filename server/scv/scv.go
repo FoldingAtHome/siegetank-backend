@@ -78,7 +78,6 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 }
 
 func (app *Application) drainStats() {
-	// fmt.Println("Draining stats...")
 	app.statsMutex.Lock()
 	for app.stats.Len() > 0 {
 		ele := app.stats.Front()
@@ -269,7 +268,6 @@ func (app *Application) CoreFrameHandler() AppHandler {
 			return errors.New("MD5 mismatch"), 400
 		}
 		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
-			// fmt.Println("Core Frame Post", stream.StreamId)
 			type Message struct {
 				Files  map[string]string `json:"files"`
 				Frames int               `json:"frames"`
@@ -337,7 +335,6 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
 		streamId := mux.Vars(r)["stream_id"]
 		file := mux.Vars(r)["file"]
-		// fmt.Println(streamId, file)
 		absStreamDir, _ := filepath.Abs(filepath.Join(app.StreamDir(streamId)))
 		requestedFile, _ := filepath.Abs(filepath.Join(app.StreamDir(streamId), file))
 		if len(requestedFile) < len(absStreamDir) {
@@ -351,7 +348,6 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			return errors.New("Unable to find user."), 401
 		}
 		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
-			fmt.Println("Core Download")
 			if err != nil {
 				return errors.New("Unable to find stream's owner.")
 			}
