@@ -393,7 +393,7 @@ func TestBadCoreStart(t *testing.T) {
 
 func TestHammerTime(t *testing.T) {
 	f := NewFixture()
-	// defer f.shutdown()
+	defer f.shutdown()
 
 	target_id := "12345"
 	jsonData := `{"target_id":"` + target_id + `",
@@ -402,7 +402,6 @@ func TestHammerTime(t *testing.T) {
 	auth_token := f.addManager("yutong", 1)
 	f.addTarget(target_id, "yutong", `{"options": {"steps_per_frame": 1}}`)
 
-	// token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	streams := make([]string, 0)
 	nStreams := 11
 	nActivations := 29
@@ -427,10 +426,9 @@ func TestHammerTime(t *testing.T) {
 				streamId, code := f.coreStart(token)
 				for i := 0; i < nCycles; i++ {
 					var concatBin string
-					// fCount := rand.Intn(100)
 					fCount := rand.Intn(4)
 					for j := 0; j < fCount; j++ {
-						data := util.RandSeq(4)
+						data := util.RandSeq(10)
 						concatBin += data
 						assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
 						time.Sleep(time.Duration(rand.Intn(20)) * time.Millisecond)
