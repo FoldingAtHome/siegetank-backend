@@ -176,7 +176,7 @@ func (app *Application) IsManager(user string) bool {
 
 // Return a path indicating where stream files should be stored
 func (app *Application) StreamDir(stream_id string) string {
-	return filepath.Join(app.Config.Name+"_data", stream_id)
+	return filepath.Join(app.Config.Name+"_data", "streams", stream_id)
 }
 
 // Run starts the server. Listens and Serves asynchronously. And sets up necessary
@@ -269,7 +269,7 @@ func (app *Application) CoreFrameHandler() AppHandler {
 			return errors.New("MD5 mismatch"), 400
 		}
 		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
-			fmt.Println("Core Frame Post")
+			// fmt.Println("Core Frame Post", stream.StreamId)
 			type Message struct {
 				Files  map[string]string `json:"files"`
 				Frames int               `json:"frames"`

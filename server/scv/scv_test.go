@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -72,6 +73,7 @@ func NewFixture() *Fixture {
 	for _, name := range db_names {
 		f.app.Mongo.DB(name).DropDatabase()
 	}
+	os.RemoveAll(f.app.Config.Name + "_data")
 	go f.app.RecordStatsService()
 	return &f
 }
@@ -118,6 +120,7 @@ func TestPostBadStream(t *testing.T) {
 
 func (f *Fixture) download(token, streamId, file string) (data []byte) {
 	base := "/streams/download/" + streamId + "/" + file
+	// fmt.Println(base)
 	req, _ := http.NewRequest("GET", base, nil)
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
@@ -125,10 +128,14 @@ func (f *Fixture) download(token, streamId, file string) (data []byte) {
 	if w.Code == 200 {
 		data = w.Body.Bytes()
 	} else {
-		fmt.Println(w.Body)
+		fmt.Println("HEY WTF", w.Body)
 		data = make([]byte, 0)
 	}
 	return
+}
+
+func (f *Fixture) downloadFrame(token, streamId, file string, frame int) (data []byte) {
+	return f.download(token, streamId, strconv.Itoa(frame)+"/0/"+file)
 }
 
 func (f *Fixture) activateStream(target_id, engine, user, cc_token string) (token string, code int) {
@@ -399,7 +406,7 @@ func TestHammerTime(t *testing.T) {
 
 	// token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	streams := make([]string, 0)
-	nStreams := 10
+	nStreams := 5
 
 	for i := 0; i < nStreams; i++ {
 		stream_id, code := f.postStream(auth_token, jsonData)
@@ -408,39 +415,54 @@ func TestHammerTime(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+	frameCounts := make(map[string]int)
 	for i := 0; i < nStreams; i++ {
 		wg.Add(1)
 		go func() {
-			var nFrames int
-			var concatebin string
-			token, code := f.activateStream(target_id, "some_engine", "some_user", f.app.Config.Password)
-			assert.Equal(t, code, 200)
-			streamId, code := f.coreStart(token)
-			// fmt.Println("starting", streamId)
-			fCount := 492
-			nFrames += fCount
-			for j := 0; j < fCount; j++ {
-				data := util.RandSeq(12)
-				concatebin += data
-				assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
+			// var nFrames int
+			nActivations := 10
+			for j := 0; j < nActivations; j++ {
+				token, code := f.activateStream(target_id, "some_engine", "some_user", f.app.Config.Password)
+				assert.Equal(t, code, 200)
+				streamId, code := f.coreStart(token)
+				fmt.Println("Activatd Stream", streamId)
+				nCycles := 5
+				for i := 0; i < nCycles; i++ {
+					var concatBin string
+					// fCount := rand.Intn(100)
+					fCount := rand.Intn(10) + 1
+					for j := 0; j < fCount; j++ {
+						data := util.RandSeq(4)
+						concatBin += data
+						assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
+						time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+					}
+					mu.Lock()
+					frameCounts[streamId] += fCount
+					nFrames := frameCounts[streamId]
+					mu.Unlock()
+					assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+
+					if fCount > 0 {
+						frameBin := f.downloadFrame(auth_token, streamId, "some_file", nFrames)
+						if concatBin != string(frameBin) {
+							fmt.Println(streamId, nFrames, "EXPECTED", concatBin, "GOT", string(frameBin))
+						}
+						assert.Equal(t, concatBin, string(frameBin))
+					}
+
+					// chkptBin := f.download(auth_token, streamId, strconv.Itoa(nFrames)+"/0/checkpoint_files/chkpt")
+					// assert.Equal(t, "data", string(chkptBin))
+				}
+				assert.Equal(t, f.stopStream(token), 200)
 			}
-			assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
-			fCount = 14
-			// nFrames += fCount
-			for j := 0; j < fCount; j++ {
-				data := util.RandSeq(12)
-				assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
-			}
-			assert.Equal(t, f.stopStream(token), 200)
-			// time.Sleep(10 * time.Second)
-			// fmt.Println("wow", nFrames)
-			frameBin := f.download(auth_token, streamId, strconv.Itoa(nFrames)+"/0/some_file")
-			assert.NotEqual(t, frameBin, "")
-			assert.Equal(t, concatebin, string(frameBin))
 			wg.Done()
 		}()
 	}
 	wg.Wait()
+	fmt.Println(frameCounts)
+	// f.shutdown()
 }
 
 func TestStreamCycle(t *testing.T) {
