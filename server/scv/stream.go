@@ -11,19 +11,19 @@ type Stream struct {
 	Owner        string `json:"-" bson:"-"`                 // constant (safe to read without mutex)
 	StreamId     string `json:"-" bson:"_id"`               // constant
 	TargetId     string `json:"target_id" bson:"target_id"` // constant
-	Status       string `json:"stats" bson:"status"`
-	Frames       int    `json:"frames" bson:"frames"`
-	ErrorCount   int    `json:"error_count" bson:"error_count"`
-	CreationDate int    `json:"creation_date" bson:"creation_date"`
+	// Status       string `json:"stats" bson:"status"`
+	Frames       int `json:"frames" bson:"frames"`
+	ErrorCount   int `json:"error_count" bson:"error_count"`
+	CreationDate int `json:"creation_date" bson:"creation_date"`
 	activeStream *ActiveStream
 }
 
-func NewStream(streamId, targetId, owner, status string,
+func NewStream(streamId, targetId, owner string,
 	frames, errorCount, creationDate int) *Stream {
 	stream := &Stream{
-		StreamId:     streamId,
-		TargetId:     targetId,
-		Status:       status,
+		StreamId: streamId,
+		TargetId: targetId,
+		// Status:       status,
 		Frames:       frames,
 		ErrorCount:   errorCount,
 		CreationDate: creationDate,

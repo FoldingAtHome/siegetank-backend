@@ -127,8 +127,8 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
 	app.Router.Handle("/streams/download/{stream_id}/{file:.+}", app.StreamDownloadHandler()).Methods("GET")
-	// app.Router.Handle("/streams/enable/{stream_id}", app.StreamEnableHandler()).Methods("PUT")
-	// app.Router.Handle("/streams/disable/{stream_id}", app.StreamDisableHandler()).Methods("PUT")
+	app.Router.Handle("/streams/start/{stream_id}", app.StreamEnableHandler()).Methods("PUT")
+	app.Router.Handle("/streams/stop/{stream_id}", app.StreamDisableHandler()).Methods("PUT")
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
@@ -513,27 +513,37 @@ func (app *Application) CoreStopHandler() AppHandler {
 	}
 }
 
-// func (app *Application) StreamStartHandler() AppHandler {
-// 	return func(w http.ResponseWriter, r *http.Request) (err error) {
-// 		user, auth_err := app.CurrentManager(r)
-// 		if auth_err != nil {
-// 			return auth_err
-// 		}
-// 		streamId := mux.Vars(r)["stream_id"]
-// 		return app.Manager.ModifyStream(streamId, func(stream *Stream) error {
-// 			if stream.Status == "OK" {
-// 				return nil
-// 			} else {
-// 				stream.Status == "OK"
+func (app *Application) StreamEnableHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+		streamId := mux.Vars(r)["stream_id"]
+		e := app.Manager.EnableStream(streamId, user)
+		if e != nil {
+			return e
+		}
+		cursor := app.Mongo.DB("streams").C(app.Config.Name)
+		return cursor.UpdateId(streamId, bson.M{"status": "OK"})
+	}
+}
 
-// 			}
-// 		})
-// 		if e != nil {
-// 			return e, 400
-// 		}
-// 		return nil, 200
-// 	}
-// }
+func (app *Application) StreamDisableHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+		streamId := mux.Vars(r)["stream_id"]
+		e := app.Manager.DisableStream(streamId, user)
+		if e != nil {
+			return e
+		}
+		cursor := app.Mongo.DB("streams").C(app.Config.Name)
+		return cursor.UpdateId(streamId, bson.M{"status": "STOPPED"})
+	}
+}
 
 func (app *Application) StreamsHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
@@ -554,7 +564,7 @@ func (app *Application) StreamsHandler() AppHandler {
 		}
 		streamId := util.RandSeq(36)
 		// Add files to disk
-		stream := NewStream(streamId, msg.TargetId, user, "OK", 0, 0, int(time.Now().Unix()))
+		stream := NewStream(streamId, msg.TargetId, user, 0, 0, int(time.Now().Unix()))
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
 		for Directory, Content := range todo {
 			for filename, fileb64 := range Content {

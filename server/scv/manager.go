@@ -83,10 +83,10 @@ func (m *Manager) AddStream(stream *Stream, targetId string, enabled bool) error
 	return nil
 }
 
-// We are lucky that constant variables generally don't need mutexes
-func (m *Manager) DisableStream(streamId string) error {
-	m.Lock()
-	defer m.Unlock()
+// Idempotent, does nothing if stream is already disabled
+func (m *Manager) DisableStream(streamId, user string) error {
+	m.RLock()
+	defer m.RUnlock()
 	stream, ok := m.streams[streamId]
 	if ok == false {
 		return errors.New("stream " + streamId + " does not exist")
@@ -94,11 +94,14 @@ func (m *Manager) DisableStream(streamId string) error {
 	t := m.targets[stream.TargetId]
 	t.Lock()
 	defer t.Unlock()
-	stream.RLock()
-	defer stream.RUnlock()
+	stream.Lock()
+	defer stream.Unlock()
+	if user != stream.Owner {
+		return errors.New("you do not own this stream.")
+	}
 	_, isDisabled := t.disabledStreams[stream]
 	if isDisabled {
-		return errors.New("stream " + streamId + " is already disabled")
+		return nil
 	}
 	if stream.activeStream != nil {
 		m.deactivateStreamImpl(stream, t)
@@ -108,9 +111,10 @@ func (m *Manager) DisableStream(streamId string) error {
 	return nil
 }
 
-func (m *Manager) EnableStream(streamId string) error {
-	m.Lock()
-	defer m.Unlock()
+// Idempotent, does nothing if stream is already disabled
+func (m *Manager) EnableStream(streamId, user string) error {
+	m.RLock()
+	defer m.RUnlock()
 	stream, ok := m.streams[streamId]
 	if ok == false {
 		return errors.New("stream " + streamId + " does not exist")
@@ -118,12 +122,15 @@ func (m *Manager) EnableStream(streamId string) error {
 	t := m.targets[stream.TargetId]
 	t.Lock()
 	defer t.Unlock()
-	stream.RLock()
-	defer stream.RUnlock()
+	stream.Lock()
+	defer stream.Unlock()
+	if user != stream.Owner {
+		return errors.New("you do not own this stream.")
+	}
 	_, isActive := t.activeStreams[stream]
 	isInactive := t.inactiveStreams.Contains(stream)
 	if isActive || isInactive {
-		return errors.New("stream " + streamId + " is already enabled")
+		return nil
 	}
 	delete(t.disabledStreams, stream)
 	t.inactiveStreams.Add(stream)
@@ -280,37 +287,6 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	s.activeStream = nil
 	t.inactiveStreams.Add(s)
 }
-
-// // Assumes that locks are in place for the stream
-// func (m *Manager) deactivateStreamImplSLock(s *Stream) {
-
-// }
-
-// func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
-// 	m.RLock()
-// 	targetId := parseToken(token)
-// 	if targetId == "" {
-// 		m.RUnlock()
-// 		return errors.New("invalid token: " + token)
-// 	}
-// 	t, ok := m.targets[targetId]
-// 	if ok == false {
-// 		m.RUnlock()
-// 		return errors.New("invalid parsed target: " + targetId)
-// 	}
-// 	t.RLock()
-// 	stream, ok := t.tokens[token]
-// 	if ok == false {
-// 		t.RUnlock()
-// 		m.RUnlock()
-// 		return errors.New("invalid token: " + token)
-// 	}
-// 	stream.Lock()
-// 	t.RUnlock()
-// 	m.RUnlock()
-// 	defer stream.Unlock()
-// 	return fn(stream)
-// }
 
 func (m *Manager) DeactivateStream(token string) error {
 	m.RLock()
