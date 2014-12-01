@@ -127,6 +127,8 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
 	app.Router.Handle("/streams/download/{stream_id}/{file:.+}", app.StreamDownloadHandler()).Methods("GET")
+	// app.Router.Handle("/streams/enable/{stream_id}", app.StreamEnableHandler()).Methods("PUT")
+	// app.Router.Handle("/streams/disable/{stream_id}", app.StreamDisableHandler()).Methods("PUT")
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
@@ -512,15 +514,18 @@ func (app *Application) CoreStopHandler() AppHandler {
 }
 
 // func (app *Application) StreamStartHandler() AppHandler {
-// 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+// 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 // 		user, auth_err := app.CurrentManager(r)
 // 		if auth_err != nil {
-// 			return auth_err, 401
+// 			return auth_err
 // 		}
 // 		streamId := mux.Vars(r)["stream_id"]
-// 		e := app.Manager.ModifyStream(streamId, func(stream *Stream) error {
+// 		return app.Manager.ModifyStream(streamId, func(stream *Stream) error {
 // 			if stream.Status == "OK" {
 // 				return nil
+// 			} else {
+// 				stream.Status == "OK"
+
 // 			}
 // 		})
 // 		if e != nil {
@@ -569,7 +574,7 @@ func (app *Application) StreamsHandler() AppHandler {
 			return errors.New("Unable insert stream into DB")
 		}
 		// Insert stream into Manager after ensuring state is correct.
-		e := app.Manager.AddStream(stream, msg.TargetId)
+		e := app.Manager.AddStream(stream, msg.TargetId, true)
 		if e != nil {
 			return e
 		}

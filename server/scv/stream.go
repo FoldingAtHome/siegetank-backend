@@ -8,9 +8,9 @@ import (
 // Cached object persisted in Mongo
 type Stream struct {
 	sync.RWMutex `json:"-" bson:"-"`
-	Owner        string `json:"-" bson:"-"`
-	StreamId     string `json:"-" bson:"_id"`
-	TargetId     string `json:"target_id" bson:"target_id"`
+	Owner        string `json:"-" bson:"-"`                 // constant (safe to read without mutex)
+	StreamId     string `json:"-" bson:"_id"`               // constant
+	TargetId     string `json:"target_id" bson:"target_id"` // constant
 	Status       string `json:"stats" bson:"status"`
 	Frames       int    `json:"frames" bson:"frames"`
 	ErrorCount   int    `json:"error_count" bson:"error_count"`

@@ -60,7 +60,7 @@ is created for this stream. It is assumed that the respective persistent structu
 stream has already been created and ready to go. It is assumed that while AddStream is called, no other goroutine is manipulating
 this particular stream pointer.
 */
-func (m *Manager) AddStream(stream *Stream, targetId string) error {
+func (m *Manager) AddStream(stream *Stream, targetId string, enabled bool) error {
 	m.Lock()
 	defer m.Unlock()
 	_, ok := m.streams[stream.StreamId]
@@ -75,6 +75,57 @@ func (m *Manager) AddStream(stream *Stream, targetId string) error {
 	t := m.targets[targetId]
 	t.Lock()
 	defer t.Unlock()
+	if enabled {
+		t.inactiveStreams.Add(stream)
+	} else {
+		t.disabledStreams[stream] = struct{}{}
+	}
+	return nil
+}
+
+// We are lucky that constant variables generally don't need mutexes
+func (m *Manager) DisableStream(streamId string) error {
+	m.Lock()
+	defer m.Unlock()
+	stream, ok := m.streams[streamId]
+	if ok == false {
+		return errors.New("stream " + streamId + " does not exist")
+	}
+	t := m.targets[stream.TargetId]
+	t.Lock()
+	defer t.Unlock()
+	stream.RLock()
+	defer stream.RUnlock()
+	_, isDisabled := t.disabledStreams[stream]
+	if isDisabled {
+		return errors.New("stream " + streamId + " is already disabled")
+	}
+	if stream.activeStream != nil {
+		m.deactivateStreamImpl(stream, t)
+	}
+	t.inactiveStreams.Remove(stream)
+	t.disabledStreams[stream] = struct{}{}
+	return nil
+}
+
+func (m *Manager) EnableStream(streamId string) error {
+	m.Lock()
+	defer m.Unlock()
+	stream, ok := m.streams[streamId]
+	if ok == false {
+		return errors.New("stream " + streamId + " does not exist")
+	}
+	t := m.targets[stream.TargetId]
+	t.Lock()
+	defer t.Unlock()
+	stream.RLock()
+	defer stream.RUnlock()
+	_, isActive := t.activeStreams[stream]
+	isInactive := t.inactiveStreams.Contains(stream)
+	if isActive || isInactive {
+		return errors.New("stream " + streamId + " is already enabled")
+	}
+	delete(t.disabledStreams, stream)
 	t.inactiveStreams.Add(stream)
 	return nil
 }
