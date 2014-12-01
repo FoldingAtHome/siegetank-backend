@@ -136,11 +136,13 @@ func NewApplication(config Configuration) *Application {
 	return &app
 }
 
-type AppHandler func(http.ResponseWriter, *http.Request) (error, int)
+type AppHandler func(http.ResponseWriter, *http.Request) error
 
+// if we need to return different error codes, simply subclass error class and implement a different type of error
+// and use a dynamic switch type?
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if err, code := fn(w, r); err != nil {
-		http.Error(w, err.Error(), code)
+	if err := fn(w, r); err != nil {
+		http.Error(w, err.Error(), 400)
 	}
 }
 
@@ -164,6 +166,18 @@ func (app *Application) IsManager(user string) bool {
 	} else {
 		return true
 	}
+}
+
+func (app *Application) CurrentManager(r *http.Request) (user string, err error) {
+	user, err = app.CurrentUser(r)
+	if err != nil {
+		return "", errors.New("Unable to find user.")
+	}
+	isManager := app.IsManager(user)
+	if isManager == false {
+		return "", errors.New("Not a manager.")
+	}
+	return user, nil
 }
 
 // Return a path indicating where stream files should be stored
@@ -196,9 +210,9 @@ func (app *Application) Shutdown() {
 }
 
 func (app *Application) StreamActivateHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		if r.Header.Get("Authorization") != app.Config.Password {
-			return errors.New("Unauthorized"), 401
+			return errors.New("Unauthorized")
 		}
 		type Message struct {
 			TargetId string `json:"target_id"`
@@ -209,7 +223,7 @@ func (app *Application) StreamActivateHandler() AppHandler {
 		decoder := json.NewDecoder(r.Body)
 		err = decoder.Decode(&msg)
 		if err != nil {
-			return errors.New("Bad request: " + err.Error()), 400
+			return errors.New("Bad request: " + err.Error())
 		}
 		fn := func(s *Stream) error {
 			err := os.RemoveAll(filepath.Join(app.StreamDir(s.StreamId), "buffer_files"))
@@ -217,7 +231,7 @@ func (app *Application) StreamActivateHandler() AppHandler {
 		}
 		token, _, err := app.Manager.ActivateStream(msg.TargetId, msg.User, msg.Engine, fn)
 		if err != nil {
-			return errors.New("Unable to activate stream: " + err.Error()), 400
+			return errors.New("Unable to activate stream: " + err.Error())
 		}
 		type Reply struct {
 			token string
@@ -251,16 +265,16 @@ func maxCheckpoint(path string) (int, error) {
 }
 
 func (app *Application) CoreFrameHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
 		md5String := r.Header.Get("Content-MD5")
 		body, _ := ioutil.ReadAll(r.Body)
 		h := md5.New()
 		io.WriteString(h, string(body))
 		if md5String != hex.EncodeToString(h.Sum(nil)) {
-			return errors.New("MD5 mismatch"), 400
+			return errors.New("MD5 mismatch")
 		}
-		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+		return app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
 			type Message struct {
 				Files  map[string]string `json:"files"`
 				Frames int               `json:"frames"`
@@ -317,30 +331,26 @@ func (app *Application) CoreFrameHandler() AppHandler {
 			stream.activeStream.bufferFrames += 1
 			return nil
 		})
-		if e != nil {
-			return e, 400
-		}
-		return
 	}
 }
 
 func (app *Application) StreamDownloadHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		streamId := mux.Vars(r)["stream_id"]
 		file := mux.Vars(r)["file"]
 		absStreamDir, _ := filepath.Abs(filepath.Join(app.StreamDir(streamId)))
 		requestedFile, _ := filepath.Abs(filepath.Join(app.StreamDir(streamId), file))
 		if len(requestedFile) < len(absStreamDir) {
-			return errors.New("Invalid file path"), 400
+			return errors.New("Invalid file path")
 		}
 		if requestedFile[0:len(absStreamDir)] != absStreamDir {
-			return errors.New("Invalid file path."), 400
+			return errors.New("Invalid file path.")
 		}
 		user, err := app.CurrentUser(r)
 		if err != nil {
-			return errors.New("Unable to find user."), 401
+			return errors.New("Unable to find user.")
 		}
-		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
+		return app.Manager.ReadStream(streamId, func(stream *Stream) error {
 			if err != nil {
 				return errors.New("Unable to find stream's owner.")
 			}
@@ -354,10 +364,6 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			w.Write(binary)
 			return nil
 		})
-		if e != nil {
-			return e, 400
-		}
-		return
 	}
 }
 
@@ -373,16 +379,16 @@ func pathExists(path string) (bool, error) {
 }
 
 func (app *Application) CoreCheckpointHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
 		md5String := r.Header.Get("Content-MD5")
 		body, _ := ioutil.ReadAll(r.Body)
 		h := md5.New()
 		io.WriteString(h, string(body))
 		if md5String != hex.EncodeToString(h.Sum(nil)) {
-			return errors.New("MD5 mismatch"), 400
+			return errors.New("MD5 mismatch")
 		}
-		e := app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+		return app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
 			streamDir := app.StreamDir(stream.StreamId)
 			bufferDir := filepath.Join(streamDir, "buffer_files")
 			checkpointDir := filepath.Join(bufferDir, "checkpoint_files")
@@ -426,15 +432,11 @@ func (app *Application) CoreCheckpointHandler() AppHandler {
 			// TODO: update frame count in MongoDB
 			return nil
 		})
-		if e != nil {
-			return e, 400
-		}
-		return
 	}
 }
 
 func (app *Application) CoreStartHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
 		type Reply struct {
 			StreamId string            `json:"stream_id"`
@@ -491,11 +493,11 @@ func (app *Application) CoreStartHandler() AppHandler {
 			return nil
 		})
 		if e != nil {
-			return e, 400
+			return e
 		}
 		data, e := json.Marshal(rep)
 		if e != nil {
-			return e, 400
+			return e
 		}
 		w.Write(data)
 		return
@@ -503,25 +505,36 @@ func (app *Application) CoreStartHandler() AppHandler {
 }
 
 func (app *Application) CoreStopHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
-		e := app.Manager.DeactivateStream(token)
-		if e != nil {
-			return e, 400
-		}
-		return
+		return app.Manager.DeactivateStream(token)
 	}
 }
 
+// func (app *Application) StreamStartHandler() AppHandler {
+// 	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+// 		user, auth_err := app.CurrentManager(r)
+// 		if auth_err != nil {
+// 			return auth_err, 401
+// 		}
+// 		streamId := mux.Vars(r)["stream_id"]
+// 		e := app.Manager.ModifyStream(streamId, func(stream *Stream) error {
+// 			if stream.Status == "OK" {
+// 				return nil
+// 			}
+// 		})
+// 		if e != nil {
+// 			return e, 400
+// 		}
+// 		return nil, 200
+// 	}
+// }
+
 func (app *Application) StreamsHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
-		user, err := app.CurrentUser(r)
-		if err != nil {
-			return errors.New("Unable to find user."), 401
-		}
-		isManager := app.IsManager(user)
-		if isManager == false {
-			return errors.New("Not a manager."), 401
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
 		}
 		type Message struct {
 			TargetId string            `json:"target_id"`
@@ -532,7 +545,7 @@ func (app *Application) StreamsHandler() AppHandler {
 		decoder := json.NewDecoder(r.Body)
 		err = decoder.Decode(&msg)
 		if err != nil {
-			return errors.New("Bad request: " + err.Error()), 400
+			return errors.New("Bad request: " + err.Error())
 		}
 		streamId := util.RandSeq(36)
 		// Add files to disk
@@ -544,7 +557,7 @@ func (app *Application) StreamsHandler() AppHandler {
 				os.MkdirAll(files_dir, 0776)
 				err = ioutil.WriteFile(filepath.Join(files_dir, filename), []byte(fileb64), 0776)
 				if err != nil {
-					return err, 400
+					return err
 				}
 			}
 		}
@@ -553,21 +566,24 @@ func (app *Application) StreamsHandler() AppHandler {
 		if err != nil {
 			// clean up
 			os.RemoveAll(app.StreamDir(streamId))
-			return errors.New("Unable insert stream into DB"), 400
+			return errors.New("Unable insert stream into DB")
 		}
 		// Insert stream into Manager after ensuring state is correct.
 		e := app.Manager.AddStream(stream, msg.TargetId)
 		if e != nil {
-			return e, 400
+			return e
 		}
-		data, _ := json.Marshal(map[string]string{"stream_id": streamId})
+		data, err := json.Marshal(map[string]string{"stream_id": streamId})
+		if e != nil {
+			return e
+		}
 		w.Write(data)
 		return
 	}
 }
 
 func (app *Application) StreamInfoHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error, code int) {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		//cursor := app.Mongo.DB("streams").C(app.Config.Name)
 		//msg := mongoStream{}
 		streamId := mux.Vars(r)["stream_id"]
@@ -577,9 +593,9 @@ func (app *Application) StreamInfoHandler() AppHandler {
 			return err
 		})
 		if e != nil {
-			return e, 400
+			return e
 		}
 		w.Write(result)
-		return nil, 200
+		return nil
 	}
 }

@@ -94,7 +94,7 @@ func TestPostStreamUnauthorized(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/streams", nil)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
-	assert.Equal(t, w.Code, 401)
+	assert.Equal(t, w.Code, 400)
 	token := f.addUser("yutong")
 	req, _ = http.NewRequest("POST", "/streams", nil)
 	req.Header.Add("Authorization", token)
@@ -102,7 +102,7 @@ func TestPostStreamUnauthorized(t *testing.T) {
 
 	f.app.Router.ServeHTTP(w, req)
 
-	assert.Equal(t, w.Code, 401)
+	assert.Equal(t, w.Code, 400)
 }
 
 func TestPostBadStream(t *testing.T) {
@@ -275,7 +275,7 @@ func TestDownload(t *testing.T) {
 		"amber": "b234"}}`
 	stream_id, _ := f.postStream(token, jsonData)
 	// data, code := f.download("bad_token", stream_id, "files/openmm")
-	// assert.Equal(t, code, 401)
+	// assert.Equal(t, code, 400)
 	assert.Equal(t, f.download(token, stream_id, "files/openmm"), []byte("b123"))
 	assert.Equal(t, f.download(token, stream_id, "files/amber"), []byte("b234"))
 
@@ -331,7 +331,7 @@ func TestFaultyStreamActivation(t *testing.T) {
 	}
 	wg.Wait()
 	_, code := f.activateStream(target_id, "a", "b", "bad_pass")
-	assert.Equal(t, code, 401)
+	assert.Equal(t, code, 400)
 	_, code = f.activateStream("54321", "a", "b", f.app.Config.Password)
 	assert.Equal(t, code, 400)
 }
@@ -395,71 +395,77 @@ func TestHammerTime(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
 
-	target_id := "12345"
-	jsonData := `{"target_id":"` + target_id + `",
-				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
-				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	auth_token := f.addManager("yutong", 1)
-	f.addTarget(target_id, "yutong", `{"options": {"steps_per_frame": 1}}`)
 
 	streams := make([]string, 0)
-	nStreams := 11
+	nTargets := 5
+	nStreams := 20
 	nActivations := 29
 	nCycles := 12
 
-	for i := 0; i < nStreams; i++ {
-		stream_id, code := f.postStream(auth_token, jsonData)
-		assert.Equal(t, code, 200)
-		streams = append(streams, stream_id)
+	for j := 0; j < nTargets; j++ {
+		target_id := "target_" + strconv.Itoa(j)
+		jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+		f.addTarget(target_id, "yutong", `{"options": {"steps_per_frame": 1}}`)
+		for i := 0; i < nStreams; i++ {
+			stream_id, code := f.postStream(auth_token, jsonData)
+			assert.Equal(t, code, 200)
+			streams = append(streams, stream_id)
+		}
 	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	frameCounts := make(map[string]int)
 	consecutiveCheckpoints := make(map[string]int)
-	for i := 0; i < nStreams; i++ {
-		wg.Add(1)
-		go func() {
-			for j := 0; j < nActivations; j++ {
-				token, code := f.activateStream(target_id, "some_engine", "some_user", f.app.Config.Password)
-				assert.Equal(t, code, 200)
-				streamId, code := f.coreStart(token)
-				for i := 0; i < nCycles; i++ {
-					var concatBin string
-					fCount := rand.Intn(4)
-					for j := 0; j < fCount; j++ {
-						data := util.RandSeq(10)
-						concatBin += data
-						assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
-						time.Sleep(time.Duration(rand.Intn(20)) * time.Millisecond)
-					}
-					mu.Lock()
-					frameCounts[streamId] += fCount
-					nFrames := frameCounts[streamId]
-					if fCount == 0 {
-						consecutiveCheckpoints[streamId] += 1
-					} else {
-						consecutiveCheckpoints[streamId] = 0
-					}
-					consChkpt := consecutiveCheckpoints[streamId]
-					mu.Unlock()
-					assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
-
-					if fCount > 0 {
-						frameBin := f.downloadFrame(auth_token, streamId, "some_file", nFrames)
-						if concatBin != string(frameBin) {
-							fmt.Println(streamId, nFrames, "EXPECTED", concatBin, "GOT", string(frameBin))
+	for j := 0; j < nTargets; j++ {
+		target_id := "target_" + strconv.Itoa(j)
+		for i := 0; i < nStreams; i++ {
+			wg.Add(1)
+			go func() {
+				for j := 0; j < nActivations; j++ {
+					token, code := f.activateStream(target_id, "some_engine", "some_user", f.app.Config.Password)
+					assert.Equal(t, code, 200)
+					streamId, code := f.coreStart(token)
+					for i := 0; i < nCycles; i++ {
+						var concatBin string
+						fCount := rand.Intn(4)
+						for j := 0; j < fCount; j++ {
+							data := util.RandSeq(10)
+							concatBin += data
+							assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
+							time.Sleep(time.Duration(rand.Intn(20)) * time.Millisecond)
 						}
-						assert.Equal(t, concatBin, string(frameBin))
+						mu.Lock()
+						frameCounts[streamId] += fCount
+						nFrames := frameCounts[streamId]
+						if fCount == 0 {
+							consecutiveCheckpoints[streamId] += 1
+						} else {
+							consecutiveCheckpoints[streamId] = 0
+						}
+						consChkpt := consecutiveCheckpoints[streamId]
+						mu.Unlock()
+						assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+
+						if fCount > 0 {
+							frameBin := f.downloadFrame(auth_token, streamId, "some_file", nFrames)
+							if concatBin != string(frameBin) {
+								fmt.Println(streamId, nFrames, "EXPECTED", concatBin, "GOT", string(frameBin))
+							}
+							assert.Equal(t, concatBin, string(frameBin))
+						}
+						url := strconv.Itoa(nFrames) + "/" + strconv.Itoa(consChkpt) + "/checkpoint_files/chkpt"
+						chkptBin := f.download(auth_token, streamId, url)
+						assert.Equal(t, "data", string(chkptBin))
 					}
-					url := strconv.Itoa(nFrames) + "/" + strconv.Itoa(consChkpt) + "/checkpoint_files/chkpt"
-					chkptBin := f.download(auth_token, streamId, url)
-					assert.Equal(t, "data", string(chkptBin))
+					assert.Equal(t, f.stopStream(token), 200)
 				}
-				assert.Equal(t, f.stopStream(token), 200)
-			}
-			wg.Done()
-		}()
+				wg.Done()
+			}()
+		}
 	}
 	wg.Wait()
 }
