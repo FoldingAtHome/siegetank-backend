@@ -111,6 +111,31 @@ func (m *Manager) RemoveStream(streamId string) error {
 	return nil
 }
 
+// Remove the stream from the active queue. Assumes that locks are in place for target and manager.
+func (m *Manager) deactivateStreamImpl(s *Stream, t *Target, enqueue bool) {
+	delete(t.tokens, s.activeStream.authToken)
+	delete(t.timers, s.StreamId)
+	delete(t.activeStreams, s)
+	m.injector.DeactivateStreamService(s)
+	s.activeStream = nil
+	if enqueue {
+		t.inactiveStreams.Add(s)
+	}
+}
+
+// Disables the stream entirely. Assumes that locks are in place for the manager and the stream.
+func (m *Manager) disableStreamImpl(stream *Stream, t *Target) {
+	_, isDisabled := t.disabledStreams[stream]
+	if isDisabled {
+		return
+	}
+	if stream.activeStream != nil {
+		m.deactivateStreamImpl(stream, t, true)
+	}
+	t.inactiveStreams.Remove(stream)
+	t.disabledStreams[stream] = struct{}{}
+}
+
 // Idempotent, does nothing if stream is already disabled. The stream service is still called!
 func (m *Manager) DisableStream(streamId, user string) error {
 	m.Lock()
@@ -126,22 +151,13 @@ func (m *Manager) DisableStream(streamId, user string) error {
 		return errors.New("you do not own this stream.")
 	}
 	t := m.targets[stream.TargetId]
-	_, isDisabled := t.disabledStreams[stream]
-	if isDisabled {
-		m.Unlock()
-		return m.injector.DisableStreamService(stream)
-	}
-	if stream.activeStream != nil {
-		// requeue
-		m.deactivateStreamImpl(stream, t, true)
-	}
-	t.inactiveStreams.Remove(stream)
-	t.disabledStreams[stream] = struct{}{}
+	m.disableStreamImpl(stream, t)
 	m.Unlock()
 	return m.injector.DisableStreamService(stream)
 }
 
 // Idempotent, does nothing if stream is already disabled
+// Also sets error_count of stream to zero.
 func (m *Manager) EnableStream(streamId, user string) error {
 	m.Lock()
 	stream, ok := m.streams[streamId]
@@ -270,7 +286,7 @@ func (m *Manager) DeactivateStream(token string, error_count int) error {
 	if stream.ErrorCount < MAX_STREAM_FAILS {
 		m.deactivateStreamImpl(stream, t, true)
 	} else {
-		m.deactivateStreamImpl(stream, t, false)
+		m.disableStreamImpl(stream, t)
 	}
 	return nil
 }
@@ -292,15 +308,3 @@ func (m *Manager) DeactivateStream(token string, error_count int) error {
 // 	}
 // 	return
 // }
-
-// Assumes that locks are in place for target and manager
-func (m *Manager) deactivateStreamImpl(s *Stream, t *Target, enqueue bool) {
-	delete(t.tokens, s.activeStream.authToken)
-	delete(t.timers, s.StreamId)
-	delete(t.activeStreams, s)
-	m.injector.DeactivateStreamService(s)
-	s.activeStream = nil
-	if enqueue {
-		t.inactiveStreams.Add(s)
-	}
-}

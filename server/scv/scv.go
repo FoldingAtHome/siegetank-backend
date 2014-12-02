@@ -56,12 +56,10 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	stats["stream"] = s.StreamId
 	stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
 	fn1 := func() error {
-		fmt.Println("inserting")
 		return stats_cursor.Insert(stats)
 	}
 
 	// update frame_count and error_count
-
 	streamId := s.StreamId
 	stream_prop := bson.M{"frames": s.Frames, "error_count": s.ErrorCount}
 	stream_cursor := app.Mongo.DB("streams").C(app.Config.Name)
@@ -69,7 +67,6 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 		// Mongo's stream info and error_count values not meant to be fully reliable. We may have a terrible corner
 		// case where two counts exist and the greater one is replaced. Ideally you'd use a set so that streams
 		// exist as singletons. Replace with dual unique maps later.
-		fmt.Println("Updating...")
 		err := stream_cursor.UpdateId(streamId, stream_prop)
 		if err == mgo.ErrNotFound {
 			// this corner case happens when the stream has already been deleted but stats are queued.
@@ -88,12 +85,12 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 
 func (app *Application) EnableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	return cursor.UpdateId(s.StreamId, bson.M{"status": "OK"})
+	return cursor.UpdateId(s.StreamId, bson.M{"status": "enabled"})
 }
 
 func (app *Application) DisableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	return cursor.UpdateId(s.StreamId, bson.M{"status": "STOPPED"})
+	return cursor.UpdateId(s.StreamId, bson.M{"status": "disabled"})
 }
 
 func (app *Application) drainStats() {
@@ -102,7 +99,6 @@ func (app *Application) drainStats() {
 		ele := app.stats.Front()
 		fn := ele.Value.(func() error)
 		err := fn()
-		fmt.Println(err)
 		if err == nil {
 			app.stats.Remove(ele)
 		} else {
@@ -608,7 +604,14 @@ func (app *Application) StreamsHandler() AppHandler {
 			}
 		}
 		cursor := app.Mongo.DB("streams").C(app.Config.Name)
-		err = cursor.Insert(stream)
+
+		docOut := make(map[string]interface{})
+		docIn, _ := bson.Marshal(stream)
+		bson.Unmarshal(docIn, docOut)
+		// this field is only used for initial setup and persistence.
+		docOut["status"] = "enabled"
+
+		err = cursor.Insert(docOut)
 		if err != nil {
 			// clean up
 			os.RemoveAll(app.StreamDir(streamId))

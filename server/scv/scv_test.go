@@ -263,6 +263,15 @@ func TestPostStream(t *testing.T) {
 		"tags": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	stream_id, code = f.postStream(token, jsonData)
 	assert.Equal(t, code, 200)
+
+	cursor := f.app.Mongo.DB("streams").C(f.app.Config.Name)
+	result := make(map[string]interface{})
+	cursor.Find(bson.M{"_id": stream_id}).One(&result)
+	assert.Equal(t, result["frames"].(int), 0)
+	assert.Equal(t, result["error_count"].(int), 0)
+	assert.Equal(t, result["status"].(string), "enabled")
+	assert.Equal(t, result["target_id"].(string), "12345")
+	assert.True(t, int(time.Now().Unix())-result["creation_date"].(int) < 1)
 }
 
 func TestDownload(t *testing.T) {
