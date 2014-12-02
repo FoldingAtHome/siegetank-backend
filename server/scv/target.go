@@ -1,12 +1,10 @@
 package scv
 
 import (
-	"sync"
 	"time"
 )
 
 type Target struct {
-	sync.RWMutex
 	tokens          map[string]*Stream   // map of token to Stream
 	activeStreams   map[*Stream]struct{} // set of active streams
 	disabledStreams map[*Stream]struct{} // set of streams not eligible to be assigned

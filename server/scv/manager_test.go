@@ -24,6 +24,14 @@ func (m *mockInterface) DeactivateStreamService(s *Stream) error {
 	return nil
 }
 
+func (m *mockInterface) DisableStreamService(s *Stream) error {
+	return nil
+}
+
+func (m *mockInterface) EnableStreamService(s *Stream) error {
+	return nil
+}
+
 var intf = &mockInterface{}
 
 func TestAddSameStream(t *testing.T) {
@@ -231,13 +239,11 @@ func TestActivateStream(t *testing.T) {
 			mu.Unlock()
 			m.RLock()
 			target := m.targets[targetId]
-			target.Lock()
 			stream := target.tokens[token]
 			assert.Equal(t, stream.activeStream.user, username)
 			assert.Equal(t, stream.activeStream.engine, engine)
 			assert.Equal(t, stream.activeStream.authToken, token)
 			assert.True(t, stream.activeStream.startTime-int(time.Now().Unix()) < 2)
-			target.Unlock()
 			m.RUnlock()
 		}()
 	}
@@ -404,13 +410,13 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 	return nil
 }
 
-// func TestMultiplex(t *testing.T) {
-// 	mt := MultiplexTester{t}
+func TestMultiplex(t *testing.T) {
+	mt := MultiplexTester{t}
 
-// 	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
-// 	// mt.Multiplex(50, 20000, 2000, 300)
-// 	mt.Multiplex(10, 100, 100, 20)
-// }
+	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
+	// mt.Multiplex(50, 20000, 2000, 300)
+	mt.Multiplex(10, 100, 100, 20)
+}
 
 // func TestStreamExpiration(t *testing.T) {
 // 	tm := NewTargetManager()

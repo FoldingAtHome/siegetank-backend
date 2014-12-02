@@ -70,6 +70,14 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	return nil
 }
 
+func (app *Application) DisableStreamService(s *Stream) error {
+	return nil
+}
+
+func (app *Application) EnableStreamService(s *Stream) error {
+	return nil
+}
+
 func (app *Application) drainStats() {
 	app.statsMutex.Lock()
 	for app.stats.Len() > 0 {
