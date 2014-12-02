@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	// "strings"
 	"sync"
 	"testing"
 	"time"
@@ -213,11 +214,13 @@ func (f *Fixture) postStream(token string, data string) (stream_id string, code 
 	return
 }
 
-func (f *Fixture) stopStream(token string) (code int) {
-	req, _ := http.NewRequest("PUT", "/core/stop", nil)
+func (f *Fixture) coreStop(token string, error_string string) (code int) {
+	body := `{"error": "` + error_string + `"}`
+	req, _ := http.NewRequest("PUT", "/core/stop", bytes.NewBuffer([]byte(body)))
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
+	// fmt.Println("DEBUG STOP STREAM\n\n", bytes.NewBuffer([]byte("{}")))
 	return w.Code
 }
 
@@ -470,7 +473,7 @@ func TestHammerTime(t *testing.T) {
 						chkptBin := f.download(auth_token, streamId, url)
 						assert.Equal(t, "data", string(chkptBin))
 					}
-					assert.Equal(t, f.stopStream(token), 200)
+					assert.Equal(t, f.coreStop(token, ""), 200)
 				}
 				wg.Done()
 			}()
@@ -498,21 +501,33 @@ func TestStreamCheckpoint(t *testing.T) {
 	assert.Equal(t, string(chkptBin), "data2")
 }
 
-func TestStreamCycle(t *testing.T) {
-	// Test POSTing frames, checkpoints, starting and stopping.
+func TestStreamState(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
-
 	target_id := "12345"
 	jsonData := `{"target_id":"` + target_id + `",
 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	auth_token := f.addManager("yutong", 1)
+	_, code := f.postStream(auth_token, jsonData)
+	// := int(time.Now().Unix())
+	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+	assert.Equal(t, code, 200)
+	// assert.Equal(t, f.coreStop(token, `{"files": {"some_file": "12345"}}`), 200)
 
+}
+
+func TestStreamCycle(t *testing.T) {
+	// Test POSTing frames, checkpoints, starting and stopping.
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
 	stream_id, code := f.postStream(auth_token, jsonData)
-
 	start_time := int(time.Now().Unix())
-
 	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
 
@@ -542,7 +557,7 @@ func TestStreamCycle(t *testing.T) {
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.gz.b64": "H4sIAOX+dVQC/zM0MjYxBQAcOvXLBQAAAA=="}}`), 200)
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("123456789012345"))
 
-	assert.Equal(t, f.stopStream(token), 200)
+	assert.Equal(t, f.coreStop(token, ""), 200)
 
 	end_time := int(time.Now().Unix())
 

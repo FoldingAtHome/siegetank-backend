@@ -48,15 +48,21 @@ type Application struct {
 func (app *Application) DeactivateStreamService(s *Stream) error {
 	// record stats
 	stats := make(map[string]interface{})
+	donorFrames := s.activeStream.donorFrames
 	stats["engine"] = s.activeStream.engine
 	stats["user"] = s.activeStream.user
 	stats["start_time"] = s.activeStream.startTime
 	stats["end_time"] = int(time.Now().Unix())
-	stats["frames"] = s.activeStream.donorFrames
+	stats["frames"] = donorFrames
 	stats["stream"] = s.StreamId
 	stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
 	fn1 := func() error {
-		return stats_cursor.Insert(stats)
+		if donorFrames > 0 {
+			// do not record fragments that have no frames
+			return stats_cursor.Insert(stats)
+		} else {
+			return nil
+		}
 	}
 
 	// update frame_count and error_count
@@ -536,6 +542,7 @@ func (app *Application) CoreStopHandler() AppHandler {
 		}
 		msg := Message{}
 		if r.Body != nil {
+			fmt.Println("NONE NIL BODY:", r.Body)
 			decoder := json.NewDecoder(r.Body)
 			err = decoder.Decode(&msg)
 			if err != nil {
