@@ -75,7 +75,7 @@ func NewFixture() *Fixture {
 		f.app.Mongo.DB(name).DropDatabase()
 	}
 	os.RemoveAll(f.app.Config.Name + "_data")
-	go f.app.RecordStatsService()
+	go f.app.RecordDeferredDocs()
 	return &f
 }
 
@@ -537,17 +537,27 @@ func TestStreamCycle(t *testing.T) {
 
 	end_time := int(time.Now().Unix())
 
-	// check stats
 	time.Sleep(time.Second * 1)
+
+	// check mongo stats
 	cursor := f.app.Mongo.DB("stats").C(target_id)
 	result := make(map[string]interface{})
 	cursor.Find(bson.M{"stream": stream_id}).One(&result)
-
 	assert.Equal(t, result["frames"].(float64), 0.234+0.123)
 	assert.Equal(t, result["engine"].(string), "some_engine")
 	assert.Equal(t, result["user"].(string), "some_donor")
 	assert.True(t, math.Abs(float64(result["start_time"].(int)-start_time)) < 1)
 	assert.True(t, math.Abs(float64(result["end_time"].(int)-end_time)) < 1)
+
+	// check mongo stream
+	cursor = f.app.Mongo.DB("streams").C(f.app.Config.Name)
+	result = make(map[string]interface{})
+	cursor.Find(bson.M{"_id": stream_id}).One(&result)
+	assert.Equal(t, result["frames"].(int), 2)
+	assert.Equal(t, result["error_count"].(int), 0)
+	// assert.Equal(t, result["frames"].(int), 5)
+	// assert.Equal(t, result["engine"].(string), "some_engine")
+	// assert.Equal(t, result["user"].(string), "some_donor")
 
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 400)
 	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 400)

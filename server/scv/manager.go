@@ -111,7 +111,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 	return nil
 }
 
-// Idempotent, does nothing if stream is already disabled
+// Idempotent, does nothing if stream is already disabled. The stream service is still called!
 func (m *Manager) DisableStream(streamId, user string) error {
 	m.Lock()
 	stream, ok := m.streams[streamId]
@@ -129,7 +129,7 @@ func (m *Manager) DisableStream(streamId, user string) error {
 	_, isDisabled := t.disabledStreams[stream]
 	if isDisabled {
 		m.Unlock()
-		return nil
+		return m.injector.DisableStreamService(stream)
 	}
 	if stream.activeStream != nil {
 		// requeue
@@ -160,7 +160,7 @@ func (m *Manager) EnableStream(streamId, user string) error {
 	isInactive := t.inactiveStreams.Contains(stream)
 	if isActive || isInactive {
 		m.Unlock()
-		return nil
+		return m.injector.EnableStreamService(stream)
 	}
 	delete(t.disabledStreams, stream)
 	t.inactiveStreams.Add(stream)

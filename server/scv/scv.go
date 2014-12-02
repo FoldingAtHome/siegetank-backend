@@ -44,47 +44,65 @@ type Application struct {
 	finish     chan struct{}
 }
 
-type Stats struct {
-	Engine    string  `bson:"engine"`
-	User      string  `bson:"user"`
-	StartTime int     `bson:"start_time"`
-	EndTime   int     `bson:"end_time"`
-	Frames    float64 `bson:"frames"`
-	Stream    string  `bson:"stream"`
-	targetId  string  `bson:"-"`
-}
-
+// Record stats, update stream's frame_count and error_count
 func (app *Application) DeactivateStreamService(s *Stream) error {
-	stat := Stats{
-		Engine:    s.activeStream.engine,
-		User:      s.activeStream.user,
-		StartTime: s.activeStream.startTime,
-		EndTime:   int(time.Now().Unix()),
-		Frames:    s.activeStream.donorFrames,
-		Stream:    s.StreamId,
-		targetId:  s.TargetId,
+	// record stats
+	stats := make(map[string]interface{})
+	stats["engine"] = s.activeStream.engine
+	stats["user"] = s.activeStream.user
+	stats["start_time"] = s.activeStream.startTime
+	stats["end_time"] = int(time.Now().Unix())
+	stats["frames"] = s.activeStream.donorFrames
+	stats["stream"] = s.StreamId
+	stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
+	fn1 := func() error {
+		fmt.Println("inserting")
+		return stats_cursor.Insert(stats)
 	}
+
+	// update frame_count and error_count
+
+	streamId := s.StreamId
+	stream_prop := bson.M{"frames": s.Frames, "error_count": s.ErrorCount}
+	stream_cursor := app.Mongo.DB("streams").C(app.Config.Name)
+	fn2 := func() error {
+		// Mongo's stream info and error_count values not meant to be fully reliable. We may have a terrible corner
+		// case where two counts exist and the greater one is replaced. Ideally you'd use a set so that streams
+		// exist as singletons. Replace with dual unique maps later.
+		fmt.Println("Updating...")
+		err := stream_cursor.UpdateId(streamId, stream_prop)
+		if err == mgo.ErrNotFound {
+			// this corner case happens when the stream has already been deleted but stats are queued.
+			return nil
+		} else {
+			return err
+		}
+	}
+
 	app.statsMutex.Lock()
-	app.stats.PushBack(interface{}(stat))
+	app.stats.PushBack(fn1)
+	app.stats.PushBack(fn2)
 	app.statsMutex.Unlock()
 	return nil
 }
 
-func (app *Application) DisableStreamService(s *Stream) error {
-	return nil
+func (app *Application) EnableStreamService(s *Stream) error {
+	cursor := app.Mongo.DB("streams").C(app.Config.Name)
+	return cursor.UpdateId(s.StreamId, bson.M{"status": "OK"})
 }
 
-func (app *Application) EnableStreamService(s *Stream) error {
-	return nil
+func (app *Application) DisableStreamService(s *Stream) error {
+	cursor := app.Mongo.DB("streams").C(app.Config.Name)
+	return cursor.UpdateId(s.StreamId, bson.M{"status": "STOPPED"})
 }
 
 func (app *Application) drainStats() {
 	app.statsMutex.Lock()
 	for app.stats.Len() > 0 {
 		ele := app.stats.Front()
-		s := ele.Value.(Stats)
-		cursor := app.Mongo.DB("stats").C(s.targetId)
-		err := cursor.Insert(s)
+		fn := ele.Value.(func() error)
+		err := fn()
+		fmt.Println(err)
 		if err == nil {
 			app.stats.Remove(ele)
 		} else {
@@ -94,7 +112,7 @@ func (app *Application) drainStats() {
 	app.statsMutex.Unlock()
 }
 
-func (app *Application) RecordStatsService() {
+func (app *Application) RecordDeferredDocs() {
 	defer app.statsWG.Done()
 	for {
 		select {
@@ -204,7 +222,7 @@ func (app *Application) Run() {
 			log.Println("ListenAndServe: ", err)
 		}
 	}()
-	go app.RecordStatsService()
+	go app.RecordDeferredDocs()
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill)
 	<-c
@@ -543,12 +561,7 @@ func (app *Application) StreamEnableHandler() AppHandler {
 			return auth_err
 		}
 		streamId := mux.Vars(r)["stream_id"]
-		e := app.Manager.EnableStream(streamId, user)
-		if e != nil {
-			return e
-		}
-		cursor := app.Mongo.DB("streams").C(app.Config.Name)
-		return cursor.UpdateId(streamId, bson.M{"status": "OK"})
+		return app.Manager.EnableStream(streamId, user)
 	}
 }
 
@@ -559,12 +572,7 @@ func (app *Application) StreamDisableHandler() AppHandler {
 			return auth_err
 		}
 		streamId := mux.Vars(r)["stream_id"]
-		e := app.Manager.DisableStream(streamId, user)
-		if e != nil {
-			return e
-		}
-		cursor := app.Mongo.DB("streams").C(app.Config.Name)
-		return cursor.UpdateId(streamId, bson.M{"status": "STOPPED"})
+		return app.Manager.DisableStream(streamId, user)
 	}
 }
 

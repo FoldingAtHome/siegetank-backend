@@ -378,7 +378,9 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 					k := time.Now().UnixNano()
 					token, _, err := m.ActivateStream(targetId, "joe", "bob", mockFunc)
 					if err == nil {
-						activateStreamStats.Add(float64(time.Now().UnixNano() - k))
+						activateDuration := float64(time.Now().UnixNano() - k)
+						// fmt.Println("Activate Duration", activateDuration/float64(1e6))
+						activateStreamStats.Add(activateDuration)
 						wg.Add(1)
 						go func() {
 							defer wg.Done()
@@ -393,7 +395,9 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 								if err != nil {
 									break
 								} else {
-									modifyStreamStats.Add(float64(time.Now().UnixNano() - s))
+									modifyDuration := float64(time.Now().UnixNano() - s)
+									// fmt.Println("Modify Duration", modifyDuration/float64(1e6))
+									modifyStreamStats.Add(modifyDuration)
 								}
 								time.Sleep(time.Second * time.Duration(secondsBetweenFrames))
 							}
@@ -410,13 +414,13 @@ func (mt *MultiplexTester) Multiplex(nTargets, nStreams, nActivations, secondsBe
 	return nil
 }
 
-func TestMultiplex(t *testing.T) {
-	mt := MultiplexTester{t}
+// func TestMultiplex(t *testing.T) {
+// 	mt := MultiplexTester{t}
 
-	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
-	// mt.Multiplex(50, 20000, 2000, 300)
-	mt.Multiplex(10, 100, 100, 20)
-}
+// 	// 50 targets, 20000 streams per target, 2000 active streams per target (activated over a span of 1 hour)
+// 	// mt.Multiplex(50, 20000, 2000, 300)
+// 	mt.Multiplex(10, 100, 100, 20)
+// }
 
 // func TestStreamExpiration(t *testing.T) {
 // 	tm := NewTargetManager()
