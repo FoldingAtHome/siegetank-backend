@@ -509,7 +509,22 @@ func (app *Application) CoreStartHandler() AppHandler {
 func (app *Application) CoreStopHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
-		return app.Manager.DeactivateStream(token)
+		type Message struct {
+			Error string `json:"error"`
+		}
+		msg := Message{}
+		if r.Body != nil {
+			decoder := json.NewDecoder(r.Body)
+			err = decoder.Decode(&msg)
+			if err != nil {
+				return
+			}
+		}
+		error_count := 0
+		if msg.Error != "" {
+			error_count += 1
+		}
+		return app.Manager.DeactivateStream(token, error_count)
 	}
 }
 

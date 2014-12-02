@@ -37,6 +37,40 @@ func TestAddSameStream(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
+func TestStreamError(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	streamId := util.RandSeq(5)
+	stream := NewStream(streamId, targetId, "none", 5, 0, int(time.Now().Unix()))
+	m.AddStream(stream, targetId, true)
+
+	for i := 0; i < MAX_STREAM_FAILS; i++ {
+		token, _, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
+		assert.Nil(t, err)
+		err = m.DeactivateStream(token, 1)
+		assert.Nil(t, err)
+	}
+	_, _, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
+	assert.NotNil(t, err)
+}
+
+func TestStreamNoError(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	streamId := util.RandSeq(5)
+	stream := NewStream(streamId, targetId, "none", 5, 0, int(time.Now().Unix()))
+	m.AddStream(stream, targetId, true)
+
+	for i := 0; i < MAX_STREAM_FAILS; i++ {
+		token, _, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
+		assert.Nil(t, err)
+		err = m.DeactivateStream(token, 0)
+		assert.Nil(t, err)
+	}
+	_, _, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
+	assert.Nil(t, err)
+}
+
 func TestAddRemoveStream(t *testing.T) {
 	m := NewManager(intf)
 	var wg sync.WaitGroup
@@ -216,7 +250,7 @@ func TestActivateStream(t *testing.T) {
 		wg.Add(1)
 		go func(token string) {
 			defer wg.Done()
-			err := m.DeactivateStream(token)
+			err := m.DeactivateStream(token, 0)
 			assert.Nil(t, err)
 		}(stream.activeStream.authToken)
 	}

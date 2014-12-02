@@ -12,6 +12,8 @@ import (
 
 var _ = fmt.Printf
 
+const MAX_STREAM_FAILS int = 10
+
 // A mechanism for allowing dependency injection. These methods will usually close other external app variables like DBs, file/io, etc.
 type Injector interface {
 	// insert into mongo, remove buffered files, etc.
@@ -104,7 +106,8 @@ func (m *Manager) DisableStream(streamId, user string) error {
 		return nil
 	}
 	if stream.activeStream != nil {
-		m.deactivateStreamImpl(stream, t)
+		// requeue
+		m.deactivateStreamImpl(stream, t, true)
 	}
 	t.inactiveStreams.Remove(stream)
 	t.disabledStreams[stream] = struct{}{}
@@ -156,7 +159,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 	defer stream.Unlock()
 	delete(m.streams, streamId)
 	if stream.activeStream != nil {
-		m.deactivateStreamImpl(stream, t)
+		m.deactivateStreamImpl(stream, t, true)
 	}
 	t.inactiveStreams.Remove(stream)
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
@@ -249,7 +252,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 	stream.activeStream = NewActiveStream(user, token, engine)
 	t.tokens[token] = stream
 	t.timers[stream.StreamId] = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
-		m.DeactivateStream(token)
+		m.DeactivateStream(token, 0)
 	})
 	t.activeStreams[stream] = struct{}{}
 	stream.Lock()
@@ -279,16 +282,18 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 // }
 
 // Assumes that locks are in place for target and manager
-func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
+func (m *Manager) deactivateStreamImpl(s *Stream, t *Target, enqueue bool) {
 	delete(t.tokens, s.activeStream.authToken)
 	delete(t.timers, s.StreamId)
 	delete(t.activeStreams, s)
 	m.injector.DeactivateStreamService(s)
 	s.activeStream = nil
-	t.inactiveStreams.Add(s)
+	if enqueue {
+		t.inactiveStreams.Add(s)
+	}
 }
 
-func (m *Manager) DeactivateStream(token string) error {
+func (m *Manager) DeactivateStream(token string, error_count int) error {
 	m.RLock()
 	defer m.RLock()
 	targetId := parseToken(token)
@@ -307,6 +312,11 @@ func (m *Manager) DeactivateStream(token string) error {
 	}
 	stream.Lock()
 	defer stream.Unlock()
-	m.deactivateStreamImpl(stream, t)
+	stream.ErrorCount += error_count
+	if stream.ErrorCount < MAX_STREAM_FAILS {
+		m.deactivateStreamImpl(stream, t, true)
+	} else {
+		m.deactivateStreamImpl(stream, t, false)
+	}
 	return nil
 }
