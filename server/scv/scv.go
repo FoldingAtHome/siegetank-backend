@@ -67,7 +67,12 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 
 	// update frame_count and error_count
 	streamId := s.StreamId
-	stream_prop := bson.M{"frames": s.Frames, "error_count": s.ErrorCount}
+
+	status := "enabled"
+	if s.ErrorCount >= MAX_STREAM_FAILS {
+		status = "disabled"
+	}
+	stream_prop := bson.M{"frames": s.Frames, "error_count": s.ErrorCount, "status": status}
 	stream_cursor := app.Mongo.DB("streams").C(app.Config.Name)
 	fn2 := func() error {
 		// Mongo's stream info and error_count values not meant to be fully reliable. We may have a terrible corner
@@ -91,11 +96,12 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 
 func (app *Application) EnableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	return cursor.UpdateId(s.StreamId, bson.M{"status": "enabled"})
+	return cursor.UpdateId(s.StreamId, bson.M{"status": "enabled", "error_count": 0})
 }
 
 func (app *Application) DisableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
+	fmt.Println("DISABLING STREAM", s.StreamId)
 	return cursor.UpdateId(s.StreamId, bson.M{"status": "disabled"})
 }
 
@@ -108,6 +114,7 @@ func (app *Application) drainStats() {
 		if err == nil {
 			app.stats.Remove(ele)
 		} else {
+			fmt.Println(err)
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -542,7 +549,6 @@ func (app *Application) CoreStopHandler() AppHandler {
 		}
 		msg := Message{}
 		if r.Body != nil {
-			fmt.Println("NONE NIL BODY:", r.Body)
 			decoder := json.NewDecoder(r.Body)
 			err = decoder.Decode(&msg)
 			if err != nil {

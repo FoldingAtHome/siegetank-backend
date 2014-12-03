@@ -14,12 +14,10 @@ var _ = fmt.Printf
 
 const MAX_STREAM_FAILS int = 50
 
-// A mechanism for allowing dependency injection. These methods will usually close other external app variables like DBs, file/io, etc.
 type Injector interface {
-	// insert into mongo, remove buffered files, etc.
-	DeactivateStreamService(*Stream) error
+	DeactivateStreamService(*Stream) error // need to finish fast
+	DisableStreamService(*Stream) error    // need to finish fast
 	EnableStreamService(*Stream) error
-	DisableStreamService(*Stream) error
 }
 
 // The mutex in Manager makes guarantees about the state of the system:
@@ -102,24 +100,62 @@ func (m *Manager) RemoveStream(streamId string) error {
 	defer stream.Unlock()
 	delete(m.streams, streamId)
 	if stream.activeStream != nil {
-		m.deactivateStreamImpl(stream, t, true)
+		m.deactivateStreamImpl(stream, t)
 	}
+	// this is no longer a state transfer but a complete deletion
 	t.inactiveStreams.Remove(stream)
-	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 {
+	delete(t.disabledStreams, stream)
+	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 && len(t.disabledStreams) == 0 {
 		delete(m.targets, stream.TargetId)
 	}
 	return nil
 }
 
+func (m *Manager) stateTransfer(s *Stream, src interface{}, dst interface{}) {
+
+	// invariant:
+
+	a := m.targets[s.TargetId].inactiveStreams.Contains(s)
+	_, b := m.targets[s.TargetId].activeStreams[s]
+	_, c := m.targets[s.TargetId].disabledStreams[s]
+
+	// ensure that the stream must be in one of these states
+	if ((a != b != c) && !(a && b && c)) == false {
+		panic(fmt.Sprintf("stream state machine failed! a:%v, b:%v, c:%v", a, b, c))
+	}
+
+	switch v := src.(type) {
+	case map[*Stream]struct{}:
+		delete(v, s)
+	case *Set:
+		v.Remove(s)
+	}
+	switch w := dst.(type) {
+	case map[*Stream]struct{}:
+		w[s] = struct{}{}
+	case *Set:
+		w.Add(s)
+	}
+}
+
 // Remove the stream from the active queue. Assumes that locks are in place for target and manager.
-func (m *Manager) deactivateStreamImpl(s *Stream, t *Target, enqueue bool) {
-	delete(t.tokens, s.activeStream.authToken)
-	delete(t.timers, s.StreamId)
-	delete(t.activeStreams, s)
-	m.injector.DeactivateStreamService(s)
-	s.activeStream = nil
-	if enqueue {
-		t.inactiveStreams.Add(s)
+func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
+	if s.activeStream != nil {
+		delete(t.tokens, s.activeStream.authToken)
+		delete(t.timers, s.StreamId)
+
+		m.injector.DeactivateStreamService(s)
+		s.activeStream = nil
+
+		//delete(t.activeStreams, s)
+
+		if s.ErrorCount < MAX_STREAM_FAILS {
+			// statemachine transfer from t.activeStreams to inactiveStreams
+			m.stateTransfer(s, t.activeStreams, t.inactiveStreams)
+		} else {
+			// statemachine transfer from t.inactiveStreams to disabled
+			m.disableStreamImpl(s, t)
+		}
 	}
 }
 
@@ -129,11 +165,25 @@ func (m *Manager) disableStreamImpl(stream *Stream, t *Target) {
 	if isDisabled {
 		return
 	}
+
+	// fmt.Println("inactive streams????:", t.inactiveStreams)
+	// fmt.Println("active streams????:", t.activeStreams)
+	// fmt.Println("disabled streams????:", t.disabledStreams)
+
 	if stream.activeStream != nil {
-		m.deactivateStreamImpl(stream, t, true)
+		m.deactivateStreamImpl(stream, t)
 	}
-	t.inactiveStreams.Remove(stream)
-	t.disabledStreams[stream] = struct{}{}
+
+	// fmt.Println("inactive streams +++:", t.inactiveStreams)
+	// fmt.Println("active streams +++:", t.activeStreams)
+	// fmt.Println("disabled streams +++:", t.disabledStreams)
+
+	m.stateTransfer(stream, t.inactiveStreams, t.disabledStreams)
+
+	// fmt.Println("inactive streams !!!!:", t.inactiveStreams)
+	// fmt.Println("active streams !!!!:", t.activeStreams)
+	// fmt.Println("disabled streams !!!!:", t.disabledStreams)
+
 }
 
 // Idempotent, does nothing if stream is already disabled. The stream service is still called!
@@ -178,8 +228,11 @@ func (m *Manager) EnableStream(streamId, user string) error {
 		m.Unlock()
 		return m.injector.EnableStreamService(stream)
 	}
-	delete(t.disabledStreams, stream)
-	t.inactiveStreams.Add(stream)
+
+	m.stateTransfer(stream, t.disabledStreams, t.inactiveStreams)
+
+	// delete(t.disabledStreams, stream)
+	// t.inactiveStreams.Add(stream)
 	m.Unlock()
 	return m.injector.EnableStreamService(stream)
 }
@@ -235,6 +288,7 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 
 func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream) error) (token string, streamId string, err error) {
 	m.Lock()
+
 	t, ok := m.targets[targetId]
 	if ok == false {
 		m.Unlock()
@@ -251,13 +305,13 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 	token = createToken(targetId)
 	stream := iterator.Key().(*Stream)
 	streamId = stream.StreamId
-	t.inactiveStreams.Remove(stream)
+	m.stateTransfer(stream, t.inactiveStreams, t.activeStreams)
 	stream.activeStream = NewActiveStream(user, token, engine)
 	t.tokens[token] = stream
 	t.timers[stream.StreamId] = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
 		m.DeactivateStream(token, 0)
 	})
-	t.activeStreams[stream] = struct{}{}
+
 	stream.Lock()
 	defer stream.Unlock()
 	m.Unlock()
@@ -283,9 +337,8 @@ func (m *Manager) DeactivateStream(token string, error_count int) error {
 	stream.Lock()
 	defer stream.Unlock()
 	stream.ErrorCount += error_count
-	if stream.ErrorCount < MAX_STREAM_FAILS {
-		m.deactivateStreamImpl(stream, t, true)
-	} else {
+	m.deactivateStreamImpl(stream, t)
+	if stream.ErrorCount >= MAX_STREAM_FAILS {
 		m.disableStreamImpl(stream, t)
 	}
 	return nil

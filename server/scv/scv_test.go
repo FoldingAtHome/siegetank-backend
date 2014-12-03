@@ -239,6 +239,13 @@ func (f *Fixture) coreStart(token string) (streamId string, code int) {
 	return
 }
 
+func (f *Fixture) loadMongoStream(stream_id string) map[string]interface{} {
+	cursor := f.app.Mongo.DB("streams").C(f.app.Config.Name)
+	result := make(map[string]interface{})
+	cursor.Find(bson.M{"_id": stream_id}).One(&result)
+	return result
+}
+
 func TestPostStream(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
@@ -501,7 +508,11 @@ func TestStreamCheckpoint(t *testing.T) {
 	assert.Equal(t, string(chkptBin), "data2")
 }
 
-func TestStreamState(t *testing.T) {
+func TestStreamRemove(t *testing.T) {
+
+}
+
+func TestStreamStateActive(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
 	target_id := "12345"
@@ -509,12 +520,24 @@ func TestStreamState(t *testing.T) {
 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	auth_token := f.addManager("yutong", 1)
-	_, code := f.postStream(auth_token, jsonData)
+	stream_id, code := f.postStream(auth_token, jsonData)
 	// := int(time.Now().Unix())
 	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
-	// assert.Equal(t, f.coreStop(token, `{"files": {"some_file": "12345"}}`), 200)
-
+	// stopping a core without an error message
+	assert.Equal(t, f.coreStop(token, ""), 200)
+	for i := 0; i < MAX_STREAM_FAILS; i++ {
+		token, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+		assert.Equal(t, code, 200)
+		assert.Equal(t, f.coreStop(token, "some_error"), 200)
+	}
+	_, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+	assert.Equal(t, code, 400)
+	time.Sleep(time.Second * 2)
+	result := f.loadMongoStream(stream_id)
+	assert.Equal(t, result["frames"].(int), 0)
+	assert.Equal(t, result["error_count"].(int), MAX_STREAM_FAILS)
+	assert.Equal(t, result["status"].(string), "disabled")
 }
 
 func TestStreamCycle(t *testing.T) {
