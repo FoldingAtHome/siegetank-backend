@@ -118,6 +118,18 @@ func TestAddRemoveStream(t *testing.T) {
 	}
 }
 
+func TestRemoveDisabledStream(t *testing.T) {
+	m := NewManager(intf)
+	targetId := util.RandSeq(5)
+	streamId := util.RandSeq(5)
+	stream := NewStream(streamId, targetId, "none", 5, 0, int(time.Now().Unix()))
+	m.AddStream(stream, targetId, true)
+	assert.Nil(t, m.DisableStream(streamId, "none"))
+	assert.Nil(t, m.RemoveStream(streamId))
+	_, ok := m.targets[targetId]
+	assert.False(t, ok)
+}
+
 func TestRemoveActiveStream(t *testing.T) {
 	m := NewManager(intf)
 	targetId := util.RandSeq(5)
