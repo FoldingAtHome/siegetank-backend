@@ -143,17 +143,11 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	if s.activeStream != nil {
 		delete(t.tokens, s.activeStream.authToken)
 		delete(t.timers, s.StreamId)
-
 		m.injector.DeactivateStreamService(s)
 		s.activeStream = nil
-
-		//delete(t.activeStreams, s)
-
 		if s.ErrorCount < MAX_STREAM_FAILS {
-			// statemachine transfer from t.activeStreams to inactiveStreams
 			m.stateTransfer(s, t.activeStreams, t.inactiveStreams)
 		} else {
-			// statemachine transfer from t.inactiveStreams to disabled
 			m.disableStreamImpl(s, t)
 		}
 	}
@@ -165,25 +159,10 @@ func (m *Manager) disableStreamImpl(stream *Stream, t *Target) {
 	if isDisabled {
 		return
 	}
-
-	// fmt.Println("inactive streams????:", t.inactiveStreams)
-	// fmt.Println("active streams????:", t.activeStreams)
-	// fmt.Println("disabled streams????:", t.disabledStreams)
-
 	if stream.activeStream != nil {
 		m.deactivateStreamImpl(stream, t)
 	}
-
-	// fmt.Println("inactive streams +++:", t.inactiveStreams)
-	// fmt.Println("active streams +++:", t.activeStreams)
-	// fmt.Println("disabled streams +++:", t.disabledStreams)
-
 	m.stateTransfer(stream, t.inactiveStreams, t.disabledStreams)
-
-	// fmt.Println("inactive streams !!!!:", t.inactiveStreams)
-	// fmt.Println("active streams !!!!:", t.activeStreams)
-	// fmt.Println("disabled streams !!!!:", t.disabledStreams)
-
 }
 
 // Idempotent, does nothing if stream is already disabled. The stream service is still called!
