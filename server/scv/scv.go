@@ -46,28 +46,28 @@ type Application struct {
 
 /*
 Record statistics for the Stream s. There is no need to manually called DisableStreamService to
-set the status to "disabled" if error_count exceeds the limit. This method blocks the stream
-until the database connection is re-established.
+set the status to "disabled" if error_count exceeds the limit.
 
 Note that stats updates may fail, which is OK.
 */
-func (app *Application) RecordStatsService(s *Stream) error {
+func (app *Application) DeactivateStreamService(s *Stream) error {
 	// Record stats for stream and defer insertion until later.
 	stats := make(map[string]interface{})
 	streamId := s.StreamId
 	donorFrames := s.activeStream.donorFrames
-	if donorFrames > 0 {
-		stats["engine"] = s.activeStream.engine
-		stats["user"] = s.activeStream.user
-		stats["start_time"] = s.activeStream.startTime
-		stats["end_time"] = int(time.Now().Unix())
-		stats["frames"] = donorFrames
-		stats["stream"] = streamId
-		stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
-		app.statsMutex.Lock()
-		app.stats.PushBack(fn1)
-		app.statsMutex.Unlock()
+	// if donorFrames > 0 {
+	stats["engine"] = s.activeStream.engine
+	stats["user"] = s.activeStream.user
+	stats["start_time"] = s.activeStream.startTime
+	stats["end_time"] = int(time.Now().Unix())
+	stats["frames"] = donorFrames
+	stats["stream"] = streamId
+	stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
+	fn1 := func() error {
+		return stats_cursor.Insert(stats)
 	}
+
+	// }
 
 	status := "enabled"
 	if s.ErrorCount >= MAX_STREAM_FAILS {
@@ -75,17 +75,19 @@ func (app *Application) RecordStatsService(s *Stream) error {
 	}
 	stream_prop := bson.M{"frames": s.Frames, "error_count": s.ErrorCount, "status": status}
 	stream_cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	// fn2 := func() error {
-	err := stream_cursor.UpdateId(streamId, stream_prop)
-	if err == mgo.ErrNotFound {
-		// This should never happen if our mutexes are sane, since it assumed we're holding
-		// on to the mutex of s. Which implies that it should exist.
-		panic("FATAL ERROR: Tried to record stats for a non-existent stream: " + streamId)
-	} else {
-		// We don't really care even if this fails.
+	fn2 := func() error {
+		stream_cursor.UpdateId(streamId, stream_prop)
+		// We do not care about the return code.
+		return nil
 	}
-	return nil
-	// }
+
+	app.statsMutex.Lock()
+	if donorFrames > 0 {
+		app.stats.PushBack(fn1)
+	}
+	app.stats.PushBack(fn2)
+	app.statsMutex.Unlock()
+
 	// app.statsMutex.Lock()
 	// app.stats.Pushback(fn2)
 	// app.statsMutex.Unlock()
@@ -93,17 +95,18 @@ func (app *Application) RecordStatsService(s *Stream) error {
 	// app.DisableStreamService(streamId)
 
 	// return nil
+	return nil
 }
 
-func (app *Application) EnableStreamService(streamId string) error {
+func (app *Application) EnableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	return cursor.UpdateId(streamId, bson.M{"status": "enabled", "error_count": 0})
+	return cursor.UpdateId(s.StreamId, bson.M{"status": "enabled", "error_count": 0})
 }
 
-func (app *Application) DisableStreamService(streamId string) error {
+func (app *Application) DisableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
 	// fmt.Println("DISABLING STREAM", streamId)
-	return cursor.UpdateId(streamId, bson.M{"status": "disabled"})
+	return cursor.UpdateId(s.StreamId, bson.M{"status": "disabled"})
 }
 
 func (app *Application) drainStats() {

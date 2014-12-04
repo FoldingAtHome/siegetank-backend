@@ -109,7 +109,7 @@ func (m *Manager) RemoveStream(streamId string) error {
 		delete(m.targets, stream.TargetId)
 	}
 	m.Unlock()
-	m.injector.DeactivateStreamService(stream)
+	// IFF m.injector.DeactivateStreamService(stream)
 	return nil
 }
 
@@ -146,7 +146,7 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	if s.activeStream != nil {
 		delete(t.tokens, s.activeStream.authToken)
 		delete(t.timers, s.StreamId)
-		// m.injector.DeactivateStreamService(s)
+		m.injector.DeactivateStreamService(s)
 		s.activeStream = nil
 		m.stateTransfer(s, t.activeStreams, t.inactiveStreams)
 	} else {
@@ -186,9 +186,9 @@ func (m *Manager) DisableStream(streamId, user string) error {
 	// state transfer from inactive to disabled
 	m.disableStreamImpl(stream, t)
 	m.Unlock()
-	if isActive {
-		m.injector.DeactivateStreamService()
-	}
+	// if isActive {
+	// 	m.injector.DeactivateStreamService(stream)
+	// }
 	return m.injector.DisableStreamService(stream)
 }
 
@@ -325,9 +325,10 @@ func (m *Manager) DeactivateStream(token string, error_count int) error {
 	m.deactivateStreamImpl(stream, t)
 	if stream.ErrorCount >= MAX_STREAM_FAILS {
 		m.disableStreamImpl(stream, t)
+		// we don't need to call DisableStreamService because DeactivateStreamService takes care of it.
 	}
 	m.Unlock()
-	m.injector.DeactivateStreamService()
+	// m.injector.DeactivateStreamService(stream)
 	return nil
 }
 
