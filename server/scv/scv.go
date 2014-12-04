@@ -37,36 +37,37 @@ type Application struct {
 	Router  *mux.Router
 
 	server     *Server
-	stats      *list.List
+	stats      *list.List // things we put in this list are persisted even if the server dies
 	statsWG    sync.WaitGroup
 	statsMutex sync.Mutex
 	shutdown   chan os.Signal
 	finish     chan struct{}
 }
 
-// Record stats, update stream's frame_count and error_count
-func (app *Application) DeactivateStreamService(s *Stream) error {
-	// record stats
-	stats := make(map[string]interface{})
-	donorFrames := s.activeStream.donorFrames
-	stats["engine"] = s.activeStream.engine
-	stats["user"] = s.activeStream.user
-	stats["start_time"] = s.activeStream.startTime
-	stats["end_time"] = int(time.Now().Unix())
-	stats["frames"] = donorFrames
-	stats["stream"] = s.StreamId
-	stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
-	fn1 := func() error {
-		if donorFrames > 0 {
-			// do not record fragments that have no frames
-			return stats_cursor.Insert(stats)
-		} else {
-			return nil
-		}
-	}
+/*
+Record statistics for the Stream s. There is no need to manually called DisableStreamService to
+set the status to "disabled" if error_count exceeds the limit. This method blocks the stream
+until the database connection is re-established.
 
-	// update frame_count and error_count
+Note that stats updates may fail, which is OK.
+*/
+func (app *Application) RecordStatsService(s *Stream) error {
+	// Record stats for stream and defer insertion until later.
+	stats := make(map[string]interface{})
 	streamId := s.StreamId
+	donorFrames := s.activeStream.donorFrames
+	if donorFrames > 0 {
+		stats["engine"] = s.activeStream.engine
+		stats["user"] = s.activeStream.user
+		stats["start_time"] = s.activeStream.startTime
+		stats["end_time"] = int(time.Now().Unix())
+		stats["frames"] = donorFrames
+		stats["stream"] = streamId
+		stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
+		app.statsMutex.Lock()
+		app.stats.PushBack(fn1)
+		app.statsMutex.Unlock()
+	}
 
 	status := "enabled"
 	if s.ErrorCount >= MAX_STREAM_FAILS {
@@ -74,35 +75,35 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	}
 	stream_prop := bson.M{"frames": s.Frames, "error_count": s.ErrorCount, "status": status}
 	stream_cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	fn2 := func() error {
-		// Mongo's stream info and error_count values not meant to be fully reliable. We may have a terrible corner
-		// case where two counts exist and the greater one is replaced. Ideally you'd use a set so that streams
-		// exist as singletons. Replace with dual unique maps later.
-		err := stream_cursor.UpdateId(streamId, stream_prop)
-		if err == mgo.ErrNotFound {
-			// this corner case happens when the stream has already been deleted but stats are queued.
-			return nil
-		} else {
-			return err
-		}
+	// fn2 := func() error {
+	err := stream_cursor.UpdateId(streamId, stream_prop)
+	if err == mgo.ErrNotFound {
+		// This should never happen if our mutexes are sane, since it assumed we're holding
+		// on to the mutex of s. Which implies that it should exist.
+		panic("FATAL ERROR: Tried to record stats for a non-existent stream: " + streamId)
+	} else {
+		// We don't really care even if this fails.
 	}
-
-	app.statsMutex.Lock()
-	app.stats.PushBack(fn1)
-	app.stats.PushBack(fn2)
-	app.statsMutex.Unlock()
 	return nil
+	// }
+	// app.statsMutex.Lock()
+	// app.stats.Pushback(fn2)
+	// app.statsMutex.Unlock()
+
+	// app.DisableStreamService(streamId)
+
+	// return nil
 }
 
-func (app *Application) EnableStreamService(s *Stream) error {
+func (app *Application) EnableStreamService(streamId string) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	return cursor.UpdateId(s.StreamId, bson.M{"status": "enabled", "error_count": 0})
+	return cursor.UpdateId(streamId, bson.M{"status": "enabled", "error_count": 0})
 }
 
-func (app *Application) DisableStreamService(s *Stream) error {
+func (app *Application) DisableStreamService(streamId string) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	fmt.Println("DISABLING STREAM", s.StreamId)
-	return cursor.UpdateId(s.StreamId, bson.M{"status": "disabled"})
+	// fmt.Println("DISABLING STREAM", streamId)
+	return cursor.UpdateId(streamId, bson.M{"status": "disabled"})
 }
 
 func (app *Application) drainStats() {
@@ -115,7 +116,7 @@ func (app *Application) drainStats() {
 			app.stats.Remove(ele)
 		} else {
 			fmt.Println(err)
-			time.Sleep(1 * time.Second)
+			break
 		}
 	}
 	app.statsMutex.Unlock()
@@ -127,6 +128,9 @@ func (app *Application) RecordDeferredDocs() {
 		select {
 		case <-app.finish:
 			app.drainStats()
+
+			// persist stats here if not empty
+
 			return
 		default:
 			app.drainStats()

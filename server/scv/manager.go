@@ -90,9 +90,9 @@ to the caller to take care of subsequent cleanup (if any).
 */
 func (m *Manager) RemoveStream(streamId string) error {
 	m.Lock()
-	defer m.Unlock()
 	stream, ok := m.streams[streamId]
 	if ok == false {
+		m.Unlock()
 		return errors.New("stream " + streamId + " does not exist")
 	}
 	t := m.targets[stream.TargetId]
@@ -108,6 +108,8 @@ func (m *Manager) RemoveStream(streamId string) error {
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 && len(t.disabledStreams) == 0 {
 		delete(m.targets, stream.TargetId)
 	}
+	m.Unlock()
+	m.injector.DeactivateStreamService(stream)
 	return nil
 }
 
@@ -138,29 +140,25 @@ func (m *Manager) stateTransfer(s *Stream, src interface{}, dst interface{}) {
 	}
 }
 
-// Remove the stream from the active queue. Assumes that locks are in place for target and manager.
+// Remove the stream from the active queue. Assumes that locks are in place for target and stream.
+// If this function returns true, you are expected to call the corresponding injector.DeactivateStreamService()
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	if s.activeStream != nil {
 		delete(t.tokens, s.activeStream.authToken)
 		delete(t.timers, s.StreamId)
-		m.injector.DeactivateStreamService(s)
+		// m.injector.DeactivateStreamService(s)
 		s.activeStream = nil
-		if s.ErrorCount < MAX_STREAM_FAILS {
-			m.stateTransfer(s, t.activeStreams, t.inactiveStreams)
-		} else {
-			m.disableStreamImpl(s, t)
-		}
+		m.stateTransfer(s, t.activeStreams, t.inactiveStreams)
+	} else {
+		panic("tried to deactivate an non-active stream")
 	}
 }
 
-// Disables the stream entirely. Assumes that locks are in place for the manager and the stream.
+// Disables the stream entirely. Assumes that locks are in place for target and stream.
 func (m *Manager) disableStreamImpl(stream *Stream, t *Target) {
 	_, isDisabled := t.disabledStreams[stream]
 	if isDisabled {
 		return
-	}
-	if stream.activeStream != nil {
-		m.deactivateStreamImpl(stream, t)
 	}
 	m.stateTransfer(stream, t.inactiveStreams, t.disabledStreams)
 }
@@ -180,8 +178,17 @@ func (m *Manager) DisableStream(streamId, user string) error {
 		return errors.New("you do not own this stream.")
 	}
 	t := m.targets[stream.TargetId]
+	// state transfers to inactive if the stream is active
+	isActive := (stream.activeStream != nil)
+	if isActive {
+		m.deactivateStreamImpl(stream, t)
+	}
+	// state transfer from inactive to disabled
 	m.disableStreamImpl(stream, t)
 	m.Unlock()
+	if isActive {
+		m.injector.DeactivateStreamService()
+	}
 	return m.injector.DisableStreamService(stream)
 }
 
@@ -207,11 +214,7 @@ func (m *Manager) EnableStream(streamId, user string) error {
 		m.Unlock()
 		return m.injector.EnableStreamService(stream)
 	}
-
 	m.stateTransfer(stream, t.disabledStreams, t.inactiveStreams)
-
-	// delete(t.disabledStreams, stream)
-	// t.inactiveStreams.Add(stream)
 	m.Unlock()
 	return m.injector.EnableStreamService(stream)
 }
@@ -300,17 +303,20 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 
 func (m *Manager) DeactivateStream(token string, error_count int) error {
 	m.Lock()
-	defer m.Unlock()
+	// defer m.Unlock()
 	targetId := parseToken(token)
 	if targetId == "" {
+		m.Unlock()
 		return errors.New("invalid token: " + token)
 	}
 	t, ok := m.targets[targetId]
 	if ok == false {
+		m.Unlock()
 		return errors.New("invalid parsed target: " + targetId)
 	}
 	stream, ok := t.tokens[token]
 	if ok == false {
+		m.Unlock()
 		return errors.New("invalid token: " + token)
 	}
 	stream.Lock()
@@ -320,6 +326,8 @@ func (m *Manager) DeactivateStream(token string, error_count int) error {
 	if stream.ErrorCount >= MAX_STREAM_FAILS {
 		m.disableStreamImpl(stream, t)
 	}
+	m.Unlock()
+	m.injector.DeactivateStreamService()
 	return nil
 }
 

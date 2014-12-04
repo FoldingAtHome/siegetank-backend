@@ -508,24 +508,6 @@ func TestStreamCheckpoint(t *testing.T) {
 	assert.Equal(t, string(chkptBin), "data2")
 }
 
-// func TestRemoveActiveStream(t *testing.T) {
-// }
-
-// func TestRemoveDisabledStream(t *testing.T) {
-// }
-
-// func TestRemoveInactiveStream(t *testing.T) {
-// 	f := NewFixture()
-// 	defer f.shutdown()
-// 	target_id := "12345"
-// 	jsonData := `{"target_id":"` + target_id + `",
-// 				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
-// 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-// 	auth_token := f.addManager("yutong", 1)
-// 	stream_id, code := f.postStream(auth_token, jsonData)
-// 	f.rem
-// }
-
 func TestStreamStateActive(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
