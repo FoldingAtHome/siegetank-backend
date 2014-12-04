@@ -5,7 +5,7 @@ import (
 )
 
 type Target struct {
-	tokens          map[string]*Stream   // map of token to Stream
+	// tokens          map[string]*Stream   // map of token to Stream
 	activeStreams   map[*Stream]struct{} // set of active streams
 	disabledStreams map[*Stream]struct{} // set of streams not eligible to be assigned
 	inactiveStreams *Set                 // queue of inactive streams
@@ -33,7 +33,7 @@ func StreamComp(l, r interface{}) bool {
 
 func NewTarget() *Target {
 	target := Target{
-		tokens:          make(map[string]*Stream),
+		// tokens:          make(map[string]*Stream),
 		activeStreams:   make(map[*Stream]struct{}),
 		inactiveStreams: NewCustomSet(StreamComp),
 		disabledStreams: make(map[*Stream]struct{}),

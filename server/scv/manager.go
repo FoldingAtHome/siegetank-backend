@@ -29,6 +29,7 @@ type Manager struct {
 	sync.RWMutex
 	targets        map[string]*Target // map of targetId to Target
 	streams        map[string]*Stream // map of streamId to Stream
+	tokens         map[string]*Stream // map of tokens to Stream
 	injector       Injector
 	expirationTime int // how long to wait on each stream if no heartbeat (in minutes)
 }
@@ -37,6 +38,7 @@ func NewManager(inj Injector) *Manager {
 	m := Manager{
 		targets:        make(map[string]*Target),
 		streams:        make(map[string]*Stream),
+		tokens:         make(map[string]*Stream),
 		injector:       inj,
 		expirationTime: 1200,
 	}
@@ -144,7 +146,7 @@ func (m *Manager) stateTransfer(s *Stream, src interface{}, dst interface{}) {
 // If this function returns true, you are expected to call the corresponding injector.DeactivateStreamService()
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	if s.activeStream != nil {
-		delete(t.tokens, s.activeStream.authToken)
+		delete(m.tokens, s.activeStream.authToken)
 		delete(t.timers, s.StreamId)
 		m.injector.DeactivateStreamService(s)
 		s.activeStream = nil
@@ -244,17 +246,7 @@ func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
 
 func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
 	m.RLock()
-	targetId := parseToken(token)
-	if targetId == "" {
-		m.RUnlock()
-		return errors.New("invalid token: " + token)
-	}
-	t, ok := m.targets[targetId]
-	if ok == false {
-		m.RUnlock()
-		return errors.New("invalid parsed target: " + targetId)
-	}
-	stream, ok := t.tokens[token]
+	stream, ok := m.tokens[token]
 	if ok == false {
 		m.RUnlock()
 		return errors.New("invalid token: " + token)
@@ -286,7 +278,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 	streamId = stream.StreamId
 	m.stateTransfer(stream, t.inactiveStreams, t.activeStreams)
 	stream.activeStream = NewActiveStream(user, token, engine)
-	t.tokens[token] = stream
+	m.tokens[token] = stream
 	t.timers[stream.StreamId] = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
 		m.DeactivateStream(token, 0)
 	})
@@ -300,17 +292,8 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 
 func (m *Manager) DeactivateStream(token string, error_count int) error {
 	m.Lock()
-	targetId := parseToken(token)
-	if targetId == "" {
-		m.Unlock()
-		return errors.New("invalid token: " + token)
-	}
-	t, ok := m.targets[targetId]
-	if ok == false {
-		m.Unlock()
-		return errors.New("invalid parsed target: " + targetId)
-	}
-	stream, ok := t.tokens[token]
+	stream, ok := m.tokens[token]
+	t := m.targets[stream.TargetId]
 	if ok == false {
 		m.Unlock()
 		return errors.New("invalid token: " + token)
