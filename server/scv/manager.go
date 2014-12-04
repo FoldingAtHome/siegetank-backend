@@ -186,9 +186,6 @@ func (m *Manager) DisableStream(streamId, user string) error {
 	// state transfer from inactive to disabled
 	m.disableStreamImpl(stream, t)
 	m.Unlock()
-	// if isActive {
-	// 	m.injector.DeactivateStreamService(stream)
-	// }
 	return m.injector.DisableStreamService(stream)
 }
 
@@ -303,7 +300,6 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 
 func (m *Manager) DeactivateStream(token string, error_count int) error {
 	m.Lock()
-	// defer m.Unlock()
 	targetId := parseToken(token)
 	if targetId == "" {
 		m.Unlock()
@@ -328,7 +324,6 @@ func (m *Manager) DeactivateStream(token string, error_count int) error {
 		// we don't need to call DisableStreamService because DeactivateStreamService takes care of it.
 	}
 	m.Unlock()
-	// m.injector.DeactivateStreamService(stream)
 	return nil
 }
 

@@ -37,7 +37,7 @@ type Application struct {
 	Router  *mux.Router
 
 	server     *Server
-	stats      *list.List // things we put in this list are persisted even if the server dies
+	stats      *list.List // things we put in this list should persist when server dies
 	statsWG    sync.WaitGroup
 	statsMutex sync.Mutex
 	shutdown   chan os.Signal
@@ -48,14 +48,13 @@ type Application struct {
 Record statistics for the Stream s. There is no need to manually called DisableStreamService to
 set the status to "disabled" if error_count exceeds the limit.
 
-Note that stats updates may fail, which is OK.
+Usually when this method is called, it's in a double mutex.
 */
 func (app *Application) DeactivateStreamService(s *Stream) error {
 	// Record stats for stream and defer insertion until later.
 	stats := make(map[string]interface{})
 	streamId := s.StreamId
 	donorFrames := s.activeStream.donorFrames
-	// if donorFrames > 0 {
 	stats["engine"] = s.activeStream.engine
 	stats["user"] = s.activeStream.user
 	stats["start_time"] = s.activeStream.startTime
@@ -66,9 +65,6 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	fn1 := func() error {
 		return stats_cursor.Insert(stats)
 	}
-
-	// }
-
 	status := "enabled"
 	if s.ErrorCount >= MAX_STREAM_FAILS {
 		status = "disabled"
@@ -87,14 +83,6 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	}
 	app.stats.PushBack(fn2)
 	app.statsMutex.Unlock()
-
-	// app.statsMutex.Lock()
-	// app.stats.Pushback(fn2)
-	// app.statsMutex.Unlock()
-
-	// app.DisableStreamService(streamId)
-
-	// return nil
 	return nil
 }
 
