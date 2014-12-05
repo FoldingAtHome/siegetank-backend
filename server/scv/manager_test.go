@@ -106,7 +106,7 @@ func TestAddRemoveStream(t *testing.T) {
 		wg.Add(1)
 		go func(stream_id string) {
 			defer wg.Done()
-			m.RemoveStream(stream_id)
+			m.RemoveStream(stream_id, "none")
 		}(k.StreamId)
 	}
 	wg.Wait()
@@ -125,7 +125,7 @@ func TestRemoveDisabledStream(t *testing.T) {
 	stream := NewStream(streamId, targetId, "none", 5, 0, int(time.Now().Unix()))
 	m.AddStream(stream, targetId, true)
 	assert.Nil(t, m.DisableStream(streamId, "none"))
-	assert.Nil(t, m.RemoveStream(streamId))
+	assert.Nil(t, m.RemoveStream(streamId, "none"))
 	_, ok := m.targets[targetId]
 	assert.False(t, ok)
 }
@@ -140,7 +140,7 @@ func TestRemoveActiveStream(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, len(m.tokens), 1)
 	assert.Equal(t, len(m.streams), 1)
-	m.RemoveStream(streamId)
+	m.RemoveStream(streamId, "none")
 	_, ok := m.targets[targetId]
 	assert.False(t, ok)
 	assert.Equal(t, len(m.streams), 0)
@@ -183,13 +183,13 @@ func TestReadModifyStream(t *testing.T) {
 	assert.NotNil(t, err)
 	err = m.ModifyStream("bad_stream", mockFunc)
 	assert.NotNil(t, err)
-	err = m.RemoveStream("bad_stream")
+	err = m.RemoveStream("bad_stream", "none")
 	assert.NotNil(t, err)
 	err = m.ReadStream(streamId, mockFunc)
 	assert.Nil(t, err)
 	err = m.ModifyStream(streamId, mockFunc)
 	assert.Nil(t, err)
-	m.RemoveStream(streamId)
+	m.RemoveStream(streamId, "none")
 }
 
 func TestEnableDisableStream(t *testing.T) {

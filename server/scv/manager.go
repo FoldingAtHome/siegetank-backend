@@ -89,14 +89,17 @@ func (m *Manager) AddStream(stream *Stream, targetId string, enabled bool) error
 /*
 Remove a stream from the manager. The stream is immediately removed from memory.
 However, its data (including files and what not) still persist on disk. It is up
-to the caller to take care of subsequent cleanup (if any).
+to the caller to take care of subsequent cleanup (if any). Returns true if target was removed.
 */
-func (m *Manager) RemoveStream(streamId string) error {
+func (m *Manager) RemoveStream(streamId, user string) error {
 	m.Lock()
+	defer m.Unlock()
 	stream, ok := m.streams[streamId]
 	if ok == false {
-		m.Unlock()
 		return errors.New("stream " + streamId + " does not exist")
+	}
+	if user != stream.Owner {
+		return errors.New(user + " does not own stream " + streamId)
 	}
 	t := m.targets[stream.TargetId]
 	stream.Lock()
@@ -111,8 +114,6 @@ func (m *Manager) RemoveStream(streamId string) error {
 	if len(t.activeStreams) == 0 && t.inactiveStreams.Len() == 0 && len(t.disabledStreams) == 0 {
 		delete(m.targets, stream.TargetId)
 	}
-	m.Unlock()
-	// IFF m.injector.DeactivateStreamService(stream)
 	return nil
 }
 

@@ -121,9 +121,7 @@ func (app *Application) RecordDeferredDocs() {
 			app.drainStats()
 
 			// persist stats here if not empty
-
 			// if app.stats.Len() > 0 {
-
 			// }
 
 			return
@@ -155,6 +153,13 @@ func NewApplication(config Configuration) *Application {
 		stats:   list.New(),
 		finish:  make(chan struct{}),
 	}
+
+	index := mgo.Index{
+		Key:        []string{"target_id"},
+		Background: true, // See notes.
+	}
+	app.StreamsCursor().EnsureIndex(index)
+
 	app.Manager = NewManager(&app)
 	app.Router = mux.NewRouter()
 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
@@ -163,6 +168,7 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/streams/download/{stream_id}/{file:.+}", app.StreamDownloadHandler()).Methods("GET")
 	app.Router.Handle("/streams/start/{stream_id}", app.StreamEnableHandler()).Methods("PUT")
 	app.Router.Handle("/streams/stop/{stream_id}", app.StreamDisableHandler()).Methods("PUT")
+	app.Router.Handle("/streams/delete/{stream_id}", app.StreamDeleteHandler()).Methods("PUT")
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
@@ -171,6 +177,10 @@ func NewApplication(config Configuration) *Application {
 	app.server = NewServer("127.0.0.1:12345", app.Router)
 	app.statsWG.Add(1)
 	return &app
+}
+
+func (app *Application) StreamsCursor() *mgo.Collection {
+	return app.Mongo.DB("streams").C(app.Config.Name)
 }
 
 type AppHandler func(http.ResponseWriter, *http.Request) error
@@ -592,6 +602,27 @@ func (app *Application) StreamDisableHandler() AppHandler {
 	}
 }
 
+func (app *Application) StreamDeleteHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		streamId := mux.Vars(r)["stream_id"]
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+		err := app.Manager.RemoveStream(streamId, user)
+		if err != nil {
+			return err
+		}
+		fn1 := func() error {
+			return app.StreamsCursor().RemoveId(streamId)
+		}
+		app.statsMutex.Lock()
+		app.stats.PushBack(fn1)
+		app.statsMutex.Unlock()
+		return nil
+	}
+}
+
 func (app *Application) StreamsHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		user, auth_err := app.CurrentManager(r)
@@ -623,8 +654,7 @@ func (app *Application) StreamsHandler() AppHandler {
 				}
 			}
 		}
-		cursor := app.Mongo.DB("streams").C(app.Config.Name)
-
+		cursor := app.StreamsCursor()
 		docOut := make(map[string]interface{})
 		docIn, _ := bson.Marshal(stream)
 		bson.Unmarshal(docIn, docOut)
@@ -653,7 +683,7 @@ func (app *Application) StreamsHandler() AppHandler {
 
 func (app *Application) StreamInfoHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
-		//cursor := app.Mongo.DB("streams").C(app.Config.Name)
+		//cursor := app.StreamsCursor()
 		//msg := mongoStream{}
 		streamId := mux.Vars(r)["stream_id"]
 		var result []byte
