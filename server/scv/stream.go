@@ -15,6 +15,7 @@ type Stream struct {
 	Frames       int `json:"frames" bson:"frames"`
 	ErrorCount   int `json:"error_count" bson:"error_count"`
 	CreationDate int `json:"creation_date" bson:"creation_date"`
+	//
 	activeStream *ActiveStream
 }
 
@@ -40,6 +41,7 @@ type ActiveStream struct {
 	startTime    int     // time the stream was activated
 	frameHash    string  // md5 hash of the last frame
 	engine       string  // core engine type the stream is assigned to
+	timer        *time.Timer
 }
 
 func NewActiveStream(user, token, engine string) *ActiveStream {

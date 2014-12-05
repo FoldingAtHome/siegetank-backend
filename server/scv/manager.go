@@ -13,6 +13,7 @@ import (
 var _ = fmt.Printf
 
 const MAX_STREAM_FAILS int = 50
+const STREAM_EXPIRATION_TIME int = 1200
 
 type Injector interface {
 	DeactivateStreamService(*Stream) error // need to finish fast
@@ -31,7 +32,7 @@ type Manager struct {
 	streams        map[string]*Stream // map of streamId to Stream
 	tokens         map[string]*Stream // map of tokens to Stream
 	injector       Injector
-	expirationTime int // how long to wait on each stream if no heartbeat (in minutes)
+	expirationTime int
 }
 
 func NewManager(inj Injector) *Manager {
@@ -40,7 +41,7 @@ func NewManager(inj Injector) *Manager {
 		streams:        make(map[string]*Stream),
 		tokens:         make(map[string]*Stream),
 		injector:       inj,
-		expirationTime: 1200,
+		expirationTime: STREAM_EXPIRATION_TIME,
 	}
 	return &m
 }
@@ -147,7 +148,7 @@ func (m *Manager) stateTransfer(s *Stream, src interface{}, dst interface{}) {
 func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 	if s.activeStream != nil {
 		delete(m.tokens, s.activeStream.authToken)
-		delete(t.timers, s.StreamId)
+		s.activeStream.timer.Stop()
 		m.injector.DeactivateStreamService(s)
 		s.activeStream = nil
 		m.stateTransfer(s, t.activeStreams, t.inactiveStreams)
@@ -257,6 +258,19 @@ func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error
 	return fn(stream)
 }
 
+func (m *Manager) ResetActiveStream(token string) error {
+	m.RLock()
+	defer m.RUnlock()
+	stream, ok := m.tokens[token]
+	if ok == false {
+		return errors.New("invalid token: " + token)
+	}
+	stream.Lock()
+	defer stream.Unlock()
+	stream.activeStream.timer.Reset(time.Duration(m.expirationTime) * time.Second)
+	return nil
+}
+
 func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream) error) (token string, streamId string, err error) {
 	m.Lock()
 
@@ -279,7 +293,7 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 	m.stateTransfer(stream, t.inactiveStreams, t.activeStreams)
 	stream.activeStream = NewActiveStream(user, token, engine)
 	m.tokens[token] = stream
-	t.timers[stream.StreamId] = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
+	stream.activeStream.timer = time.AfterFunc(time.Second*time.Duration(m.expirationTime), func() {
 		m.DeactivateStream(token, 0)
 	})
 
@@ -293,11 +307,11 @@ func (m *Manager) ActivateStream(targetId, user, engine string, fn func(*Stream)
 func (m *Manager) DeactivateStream(token string, error_count int) error {
 	m.Lock()
 	stream, ok := m.tokens[token]
-	t := m.targets[stream.TargetId]
 	if ok == false {
 		m.Unlock()
 		return errors.New("invalid token: " + token)
 	}
+	t := m.targets[stream.TargetId]
 	stream.Lock()
 	defer stream.Unlock()
 	stream.ErrorCount += error_count

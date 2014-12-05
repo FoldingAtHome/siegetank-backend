@@ -1,15 +1,11 @@
 package scv
 
-import (
-	"time"
-)
-
 type Target struct {
 	// tokens          map[string]*Stream   // map of token to Stream
 	activeStreams   map[*Stream]struct{} // set of active streams
 	disabledStreams map[*Stream]struct{} // set of streams not eligible to be assigned
 	inactiveStreams *Set                 // queue of inactive streams
-	timers          map[string]*time.Timer
+	// timers          map[string]*time.Timer
 	// ExpirationTime  int // expiration time in seconds
 }
 
@@ -37,7 +33,7 @@ func NewTarget() *Target {
 		activeStreams:   make(map[*Stream]struct{}),
 		inactiveStreams: NewCustomSet(StreamComp),
 		disabledStreams: make(map[*Stream]struct{}),
-		timers:          make(map[string]*time.Timer),
+		// timers:          make(map[string]*time.Timer),
 	}
 	return &target
 }

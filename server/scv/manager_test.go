@@ -154,7 +154,7 @@ func TestDeactivateTimer(t *testing.T) {
 	m.AddStream(stream, targetId, true)
 	sleepTime := 6
 	m.expirationTime = 5
-	token, streamId, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
+	_, streamId, err := m.ActivateStream(targetId, "yutong", "openmm", mockFunc)
 	assert.True(t, err == nil)
 	m.ReadStream(streamId, func(s *Stream) error {
 		assert.NotNil(t, s.activeStream)
@@ -166,8 +166,7 @@ func TestDeactivateTimer(t *testing.T) {
 		return nil
 	})
 
-	_, ok := m.targets[targetId].timers[token]
-	assert.False(t, ok)
+	assert.Nil(t, stream.activeStream)
 }
 
 func TestReadModifyStream(t *testing.T) {

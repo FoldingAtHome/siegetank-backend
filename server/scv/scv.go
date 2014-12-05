@@ -122,6 +122,10 @@ func (app *Application) RecordDeferredDocs() {
 
 			// persist stats here if not empty
 
+			// if app.stats.Len() > 0 {
+
+			// }
+
 			return
 		default:
 			app.drainStats()
@@ -163,6 +167,7 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
 	app.Router.Handle("/core/stop", app.CoreStopHandler()).Methods("PUT")
+	app.Router.Handle("/core/heartbeat", app.CoreHeartbeatHandler()).Methods("POST")
 	app.server = NewServer("127.0.0.1:12345", app.Router)
 	app.statsWG.Add(1)
 	return &app
@@ -555,6 +560,13 @@ func (app *Application) CoreStopHandler() AppHandler {
 			error_count += 1
 		}
 		return app.Manager.DeactivateStream(token, error_count)
+	}
+}
+
+func (app *Application) CoreHeartbeatHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
+		token := r.Header.Get("Authorization")
+		return app.Manager.ResetActiveStream(token)
 	}
 }
 

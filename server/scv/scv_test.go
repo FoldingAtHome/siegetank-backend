@@ -214,13 +214,20 @@ func (f *Fixture) postStream(token string, data string) (stream_id string, code 
 	return
 }
 
+func (f *Fixture) coreHeartbeat(token string) (code int) {
+	req, _ := http.NewRequest("POST", "/core/heartbeat", nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	return w.Code
+}
+
 func (f *Fixture) coreStop(token string, error_string string) (code int) {
 	body := `{"error": "` + error_string + `"}`
 	req, _ := http.NewRequest("PUT", "/core/stop", bytes.NewBuffer([]byte(body)))
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
-	// fmt.Println("DEBUG STOP STREAM\n\n", bytes.NewBuffer([]byte("{}")))
 	return w.Code
 }
 
@@ -455,7 +462,9 @@ func TestHammerTime(t *testing.T) {
 							data := util.RandSeq(10)
 							concatBin += data
 							assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
-							time.Sleep(time.Duration(rand.Intn(20)) * time.Millisecond)
+							time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
+							assert.Equal(t, f.coreHeartbeat(token), 200)
+							time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
 						}
 						mu.Lock()
 						frameCounts[streamId] += fCount
@@ -646,4 +655,42 @@ func TestCoreStart(t *testing.T) {
 	assert.Equal(t, f.postFrame(token, "12345678"), 400)
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
 	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 400)
+}
+
+func TestCoreExpiration(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	f.app.Manager.expirationTime = 5
+	target_id := "12345"
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	f.postStream(auth_token, jsonData)
+	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
+	assert.Equal(t, code, 200)
+	time.Sleep(time.Duration(6) * time.Second)
+	assert.Equal(t, f.coreStop(token, ""), 400)
+}
+
+func TestCoreHeartbeat(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	f.app.Manager.expirationTime = 5
+	target_id := "12345"
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	f.postStream(auth_token, jsonData)
+	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
+	time.Sleep(time.Duration(3) * time.Second)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, f.coreHeartbeat(token), 200)
+	time.Sleep(time.Duration(3) * time.Second)
+	assert.Equal(t, f.coreStop(token, ""), 200)
+	time.Sleep(time.Duration(3) * time.Second)
+	assert.Equal(t, f.coreStop(token, ""), 400)
 }
