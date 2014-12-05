@@ -214,6 +214,15 @@ func (f *Fixture) postStream(token string, data string) (stream_id string, code 
 	return
 }
 
+func (f *Fixture) deleteStream(token, streamId string) (code int) {
+	req, _ := http.NewRequest("PUT", "/streams/delete/"+streamId, nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	fmt.Println(w.Body)
+	return w.Code
+}
+
 func (f *Fixture) coreHeartbeat(token string) (code int) {
 	req, _ := http.NewRequest("POST", "/core/heartbeat", nil)
 	req.Header.Add("Authorization", token)
@@ -289,6 +298,85 @@ func TestPostStream(t *testing.T) {
 	assert.Equal(t, result["status"].(string), "enabled")
 	assert.Equal(t, result["target_id"].(string), "12345")
 	assert.True(t, int(time.Now().Unix())-result["creation_date"].(int) < 1)
+}
+
+func TestDeleteStreamMulti(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
+	jsonData := `{"target_id":"12345",
+		"files": {"openmm": "b123",
+		"amber": "b234"}}`
+	stream1, _ := f.postStream(token, jsonData)
+	stream2, _ := f.postStream(token, jsonData)
+	assert.Equal(t, f.deleteStream(token, stream1), 200)
+	time.Sleep(time.Second)
+	count, _ := f.app.StreamsCursor().Count()
+	assert.Equal(t, count, 1)
+	assert.Equal(t, f.deleteStream(token, stream2), 200)
+	time.Sleep(time.Second)
+	count, _ = f.app.StreamsCursor().Count()
+	assert.Equal(t, count, 0)
+
+}
+func TestDeleteStream(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
+	jsonData := `{"target_id":"12345",
+		"files": {"openmm": "b123",
+		"amber": "b234"}}`
+	stream_id, _ := f.postStream(token, jsonData)
+	assert.Equal(t, f.deleteStream(token, stream_id), 200)
+	assert.Equal(t, len(f.app.Manager.streams), 0)
+	assert.Equal(t, len(f.app.Manager.targets), 0)
+	time.Sleep(time.Second)
+	count, _ := f.app.StreamsCursor().Count()
+	assert.Equal(t, count, 0)
+}
+
+func TestDeleteActiveStream(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
+	jsonData := `{"target_id":"12345",
+		"files": {"openmm": "b123",
+		"amber": "b234"}}`
+	stream_id, _ := f.postStream(token, jsonData)
+	f.activateStream("12345", "a", "b", f.app.Config.Password)
+	assert.Equal(t, f.deleteStream(token, stream_id), 200)
+	assert.Equal(t, len(f.app.Manager.streams), 0)
+	assert.Equal(t, len(f.app.Manager.targets), 0)
+	time.Sleep(time.Second)
+	count, _ := f.app.StreamsCursor().Count()
+	assert.Equal(t, count, 0)
+}
+
+func TestDeleteDisabledStream(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	auth_token := f.addManager("yutong", 1)
+	f.addTarget("12345", "yutong", `{"options": {"steps_per_frame": 1}}`)
+	jsonData := `{"target_id":"12345",
+		"files": {"openmm": "b123",
+		"amber": "b234"}}`
+	stream_id, _ := f.postStream(auth_token, jsonData)
+	for i := 0; i < MAX_STREAM_FAILS; i++ {
+		token, code := f.activateStream("12345", "some_engine", "some_donor", f.app.Config.Password)
+		assert.Equal(t, code, 200)
+		assert.Equal(t, f.coreStop(token, "some_error"), 200)
+	}
+	_, code := f.activateStream("12345", "some_engine", "some_donor", f.app.Config.Password)
+	assert.Equal(t, code, 400)
+	assert.Equal(t, f.deleteStream(auth_token, stream_id), 200)
+	assert.Equal(t, len(f.app.Manager.streams), 0)
+	assert.Equal(t, len(f.app.Manager.targets), 0)
+	time.Sleep(time.Second)
+	count, _ := f.app.StreamsCursor().Count()
+	assert.Equal(t, count, 0)
 }
 
 func TestDownload(t *testing.T) {

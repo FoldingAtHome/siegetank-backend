@@ -47,7 +47,7 @@ func NewManager(inj Injector) *Manager {
 }
 
 func createToken(targetId string) string {
-	return targetId + ":" + util.RandSeq(36)
+	return util.RandSeq(36)
 }
 
 func parseToken(token string) string {
