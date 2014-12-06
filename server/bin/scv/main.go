@@ -6,16 +6,18 @@ import (
 	// "errors"
 	"fmt"
 	// "io"
-	"io/ioutil"
+	// "io/ioutil"
 	// "log"
-	"net/http"
+	// "net/http"
 	"os"
-	// "path/filepath"
-	"time"
+	"path/filepath"
+	// "time"
 
-	"bytes"
-	"math/rand"
+	// "bytes"
+	// "math/rand"
 	"runtime"
+
+	"encoding/json"
 
 	"../../scv"
 )
@@ -23,52 +25,23 @@ import (
 func main() {
 
 	runtime.GOMAXPROCS(5)
-
-	rand.Seed(time.Now().UTC().UnixNano())
-
-	type Configuration struct {
-		MongoURI     string
-		Name         string
-		Password     string
-		ExternalHost string
-		InternalHost string
+	conf := scv.Configuration{
+		SSL: make(map[string]string),
 	}
 
-	app := scv.NewApplication("vspg11")
-	req := func(token string, jsonData string) {
-		client := &http.Client{}
-		dataBuffer := bytes.NewBuffer([]byte(jsonData))
-		req, _ := http.NewRequest("POST", "http://127.0.0.1:12345/streams/982034859", dataBuffer)
-		req.Header.Add("Authorization", token)
-		resp, err := client.Do(req)
-		if err != nil {
-			fmt.Println("Server is not reachable.")
-		} else {
-			defer resp.Body.Close()
-			ioutil.ReadAll(resp.Body)
-		}
-		//fmt.Println(resp.Body, err)
+	dir, _ := filepath.Abs(filepath.Dir(os.Args[0]))
+	fmt.Println(dir)
+
+	file, err := os.Open(filepath.Join(dir, "scv.json"))
+	if err != nil {
+		panic("Could not open config file.")
 	}
-	//go req("19762704-41c9-4752-9aaa-802098ffa02e")
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&conf)
 
-	jsonData1 := `{"target_id":"12345", "files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-	jsonData2 := `{"target_id":"12345",
-                   "files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="},
-                   "tags": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==", "amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
-	// jsonData3 := `{"target_id":"12345", "files": "foo", "tags": {"oh": "wow"}}`
+	fmt.Println(conf)
 
-	go func() {
-		for i := 0; i < 10; i++ {
-			time.Sleep(3 * time.Second)
-			go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData1)
-			go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData2)
-		}
-	}()
+	app := scv.NewApplication(conf)
 
 	app.Run()
-
-	// go req("1d48d5df-780e-4083-95fa-c620a80cecb3", jsonData3)
-
-	os.RemoveAll(app.Name + "_data")
-
 }

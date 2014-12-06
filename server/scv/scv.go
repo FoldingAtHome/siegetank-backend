@@ -135,11 +135,12 @@ func (app *Application) RecordDeferredDocs() {
 
 // Add SSL stuff later
 type Configuration struct {
-	MongoURI     string
-	Name         string
-	Password     string
-	ExternalHost string
-	InternalHost string
+	MongoURI     string            `json:"MongoURI"`
+	Name         string            `json:"Name"`
+	Password     string            `json:"Password"`
+	ExternalHost string            `json:"ExternalHost"`
+	InternalHost string            `json:"InternalHost"`
+	SSL          map[string]string `json:"SSL"`
 }
 
 func NewApplication(config Configuration) *Application {
@@ -177,7 +178,11 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
 	app.Router.Handle("/core/stop", app.CoreStopHandler()).Methods("PUT")
 	app.Router.Handle("/core/heartbeat", app.CoreHeartbeatHandler()).Methods("POST")
-	app.server = NewServer("127.0.0.1:12345", app.Router)
+	app.server = NewServer(config.InternalHost, app.Router)
+	if len(config.SSL) > 0 {
+		app.server.TLS(config.SSL["Cert"], config.SSL["Key"])
+		app.server.CA(config.SSL["CA"])
+	}
 	app.statsWG.Add(1)
 	return &app
 }
@@ -238,6 +243,9 @@ func (app *Application) StreamDir(stream_id string) string {
 // Run starts the server. Listens and Serves asynchronously. And sets up necessary
 // signal handlers for graceful termination. This blocks until a signal is sent
 func (app *Application) Run() {
+
+	fmt.Println("running server..")
+
 	go func() {
 		err := app.server.ListenAndServe()
 		if err != nil {
