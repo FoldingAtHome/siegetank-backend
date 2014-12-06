@@ -185,6 +185,31 @@ func (f *Fixture) postFrame(token string, data string) (code int) {
 	return
 }
 
+type SyncResult struct {
+	Partitions      []int    `json:"partitions"`
+	SeedFiles       []string `json:"seed_files"`
+	FrameFiles      []string `json:"frame_files"`
+	CheckpointFiles []string `json:"checkpoint_files"`
+}
+
+func (f *Fixture) syncStream(token, streamId string) (SyncResult, int) {
+	req, _ := http.NewRequest("GET", "/streams/sync/"+streamId, nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	result := SyncResult{
+		Partitions:      make([]int, 0),
+		SeedFiles:       make([]string, 0),
+		FrameFiles:      make([]string, 0),
+		CheckpointFiles: make([]string, 0),
+	}
+	er := json.Unmarshal(w.Body.Bytes(), &result)
+	if er != nil {
+		panic("syncStream failure")
+	}
+	return result, w.Code
+}
+
 func (f *Fixture) postCheckpoint(token string, data string) (code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
 	req, _ := http.NewRequest("POST", "/core/checkpoint", dataBuffer)
@@ -219,7 +244,6 @@ func (f *Fixture) deleteStream(token, streamId string) (code int) {
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
-	fmt.Println(w.Body)
 	return w.Code
 }
 
@@ -631,6 +655,82 @@ func TestStreamStateActive(t *testing.T) {
 	assert.Equal(t, result["frames"].(int), 0)
 	assert.Equal(t, result["error_count"].(int), MAX_STREAM_FAILS)
 	assert.Equal(t, result["status"].(string), "disabled")
+}
+
+func TestStreamSync(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	seed_files := map[string]string{
+		"state.xml.gz.b64":  "ZmlsZWRhdGFibGFoYmFsaA==",
+		"system.xml.gz.b64": "23lkjlakjoaweiuroaiweu==",
+	}
+	jsonData := map[string]interface{}{
+		"target_id": target_id,
+		"files":     seed_files,
+	}
+	auth_token := f.addManager("yutong", 1)
+	data, _ := json.Marshal(jsonData)
+	stream_id, code := f.postStream(auth_token, string(data))
+
+	result, code := f.syncStream(auth_token, stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, result.Partitions, []int{})
+	assert.Equal(t, result.SeedFiles, []string{"state.xml.gz.b64", "system.xml.gz.b64"})
+	assert.Equal(t, result.CheckpointFiles, []string{})
+	assert.Equal(t, result.FrameFiles, []string{})
+
+	// Post some frames
+	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+	frame_files := map[string]string{
+		"f1": "1234",
+		"f2": "2345",
+	}
+	frameData, _ := json.Marshal(map[string]interface{}{"files": frame_files})
+	assert.Equal(t, f.postFrame(token, string(frameData)), 200)
+	assert.Equal(t, f.coreStop(token, ""), 200)
+
+	result, code = f.syncStream(auth_token, stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, result.Partitions, []int{})
+	assert.Equal(t, result.SeedFiles, []string{"state.xml.gz.b64", "system.xml.gz.b64"})
+	assert.Equal(t, result.CheckpointFiles, []string{})
+	assert.Equal(t, result.FrameFiles, []string{})
+
+	token, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+
+	assert.Equal(t, f.postFrame(token, string(frameData)), 200)
+	chkpt_files := map[string]string{
+		"c1": "1234",
+		"c2": "2345",
+	}
+	checkpointData, _ := json.Marshal(map[string]interface{}{"files": chkpt_files})
+	assert.Equal(t, f.postCheckpoint(token, string(checkpointData)), 200)
+
+	result, code = f.syncStream(auth_token, stream_id)
+	assert.Equal(t, result.Partitions, []int{1})
+	assert.Equal(t, result.SeedFiles, []string{"state.xml.gz.b64", "system.xml.gz.b64"})
+	assert.Equal(t, result.CheckpointFiles, []string{"c1", "c2"})
+	assert.Equal(t, result.FrameFiles, []string{"f1", "f2"})
+
+	for i := 0; i < 10; i++ {
+		frame_files := map[string]string{
+			"f1": "1234",
+			"f2": util.RandSeq(12),
+		}
+		frameData, _ := json.Marshal(map[string]interface{}{"files": frame_files})
+		assert.Equal(t, f.postFrame(token, string(frameData)), 200)
+	}
+	assert.Equal(t, f.postCheckpoint(token, string(checkpointData)), 200)
+
+	result, code = f.syncStream(auth_token, stream_id)
+	assert.Equal(t, result.Partitions, []int{1, 11})
+	assert.Equal(t, result.SeedFiles, []string{"state.xml.gz.b64", "system.xml.gz.b64"})
+	assert.Equal(t, result.CheckpointFiles, []string{"c1", "c2"})
+	assert.Equal(t, result.FrameFiles, []string{"f1", "f2"})
+
+	assert.Equal(t, f.coreStop(token, ""), 200)
+
 }
 
 func TestStreamCycle(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -169,6 +170,7 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/streams/start/{stream_id}", app.StreamEnableHandler()).Methods("PUT")
 	app.Router.Handle("/streams/stop/{stream_id}", app.StreamDisableHandler()).Methods("PUT")
 	app.Router.Handle("/streams/delete/{stream_id}", app.StreamDeleteHandler()).Methods("PUT")
+	app.Router.Handle("/streams/sync/{stream_id}", app.StreamSyncHandler()).Methods("GET")
 	app.Router.Handle("/core/start", app.CoreStartHandler()).Methods("GET")
 	app.Router.Handle("/core/frame", app.CoreFrameHandler()).Methods("POST")
 	app.Router.Handle("/core/checkpoint", app.CoreCheckpointHandler()).Methods("POST")
@@ -398,9 +400,6 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			return errors.New("Unable to find user.")
 		}
 		return app.Manager.ReadStream(streamId, func(stream *Stream) error {
-			if err != nil {
-				return errors.New("Unable to find stream's owner.")
-			}
 			if stream.Owner != user {
 				return errors.New("You do not own this stream.")
 			}
@@ -411,6 +410,98 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 			w.Write(binary)
 			return nil
 		})
+	}
+}
+
+func (app *Application) StreamSyncHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		streamId := mux.Vars(r)["stream_id"]
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+
+		result := make(map[string]interface{})
+
+		listPartitions := func() []int {
+			files, err := ioutil.ReadDir(app.StreamDir(streamId))
+			if err != nil {
+				panic("FATAL StreamSyncHandler(), can't read streamDir")
+			}
+			res := make([]int, 0)
+			for _, fileInfo := range files {
+				num, err2 := strconv.Atoi(fileInfo.Name())
+				if err2 == nil && num > 0 {
+					res = append(res, num)
+				}
+			}
+			sort.Ints(res)
+			return res
+		}
+
+		listSeeds := func() []string {
+			seedDir := filepath.Join(app.StreamDir(streamId), "files")
+			files, err := ioutil.ReadDir(seedDir)
+			if err != nil {
+				panic("FATAL StreamSyncHandler(), can't read seedDir" + seedDir)
+			}
+			res := make([]string, 0)
+			for _, fileInfo := range files {
+				res = append(res, fileInfo.Name())
+			}
+			return res
+		}
+
+		listFramesAndCheckpoints := func(min_partition int) ([]string, []string) {
+
+			frames := make([]string, 0)
+			checkpoints := make([]string, 0)
+
+			frameDir := filepath.Join(app.StreamDir(streamId), strconv.Itoa(min_partition), "0")
+
+			frameFiles, err := ioutil.ReadDir(frameDir)
+			if err != nil {
+				panic("FATAL StreamSyncHandler(), can't read frameDir: " + frameDir)
+			}
+			for _, fileInfo := range frameFiles {
+				if fileInfo.Name() != "checkpoint_files" {
+					frames = append(frames, fileInfo.Name())
+				}
+			}
+			checkpointDir := filepath.Join(frameDir, "checkpoint_files")
+			checkpointFiles, err := ioutil.ReadDir(checkpointDir)
+			if err != nil {
+				panic("FATAL StreamSyncHandler(), can't read checkpointDir: " + checkpointDir)
+			}
+			for _, fileInfo := range checkpointFiles {
+				if fileInfo.Name() != "checkpoint_files" {
+					checkpoints = append(checkpoints, fileInfo.Name())
+				}
+			}
+			return frames, checkpoints
+		}
+
+		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
+			if stream.Owner != user {
+				return errors.New("You do not own this stream.")
+			}
+			partitions := listPartitions()
+			result["partitions"] = partitions
+			result["seed_files"] = listSeeds()
+			if len(partitions) > 0 {
+				result["frame_files"], result["checkpoint_files"] = listFramesAndCheckpoints(partitions[0])
+			}
+			return nil
+		})
+		if e != nil {
+			return e
+		}
+		data, e := json.Marshal(result)
+		if e != nil {
+			return e
+		}
+		w.Write(data)
+		return nil
 	}
 }
 
