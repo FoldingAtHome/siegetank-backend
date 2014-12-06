@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
-	// "strings"
 	"sync"
 	"testing"
 	"time"
@@ -881,4 +880,13 @@ func TestCoreHeartbeat(t *testing.T) {
 	assert.Equal(t, f.coreStop(token, ""), 200)
 	time.Sleep(time.Duration(3) * time.Second)
 	assert.Equal(t, f.coreStop(token, ""), 400)
+}
+
+func TestAlive(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	req, _ := http.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	assert.Equal(t, w.Code, 200)
 }

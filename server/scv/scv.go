@@ -163,6 +163,7 @@ func NewApplication(config Configuration) *Application {
 
 	app.Manager = NewManager(&app)
 	app.Router = mux.NewRouter()
+	app.Router.Handle("/", app.AliveHandler()).Methods("GET")
 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
 	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
@@ -258,6 +259,12 @@ func (app *Application) Shutdown() {
 	app.Mongo.Close()
 }
 
+func (app *Application) AliveHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
+		return nil
+	}
+}
+
 func (app *Application) StreamActivateHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		if r.Header.Get("Authorization") != app.Config.Password {
@@ -311,76 +318,6 @@ func maxCheckpoint(path string) (int, error) {
 		}
 	}
 	return lastCheckpoint, nil
-}
-
-func (app *Application) CoreFrameHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error) {
-		token := r.Header.Get("Authorization")
-		md5String := r.Header.Get("Content-MD5")
-		body, _ := ioutil.ReadAll(r.Body)
-		h := md5.New()
-		io.WriteString(h, string(body))
-		if md5String != hex.EncodeToString(h.Sum(nil)) {
-			return errors.New("MD5 mismatch")
-		}
-		return app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
-			type Message struct {
-				Files  map[string]string `json:"files"`
-				Frames int               `json:"frames"`
-			}
-			msg := Message{Frames: 1}
-			decoder := json.NewDecoder(bytes.NewReader(body))
-			err := decoder.Decode(&msg)
-			if err != nil {
-				return errors.New("Could not decode JSON")
-			}
-			if md5String == stream.activeStream.frameHash {
-				return errors.New("POSTed same frame twice")
-			}
-			stream.activeStream.frameHash = md5String
-			for filename, filestring := range msg.Files {
-				root, ext := splitExt(filename)
-				filebin := []byte(filestring)
-				if ext == ".b64" {
-					filename = root
-					reader := base64.NewDecoder(base64.StdEncoding, bytes.NewReader(filebin))
-					filecopy, err := ioutil.ReadAll(reader)
-					if err != nil {
-						return err
-					}
-					filebin = filecopy
-					root, ext := splitExt(filename)
-					if ext == ".gz" {
-						filename = root
-						reader, err := gzip.NewReader(bytes.NewReader(filebin))
-						defer reader.Close()
-						if err != nil {
-							return err
-						}
-						filecopy, err := ioutil.ReadAll(reader)
-						if err != nil {
-							return err
-						}
-						filebin = filecopy
-					}
-				}
-				dir := filepath.Join(app.StreamDir(stream.StreamId), "buffer_files")
-				os.MkdirAll(dir, 0776)
-				filename = filepath.Join(dir, filename)
-				file, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0776)
-				defer file.Close()
-				if err != nil {
-					return err
-				}
-				_, err = file.Write(filebin)
-				if err != nil {
-					return err
-				}
-			}
-			stream.activeStream.bufferFrames += 1
-			return nil
-		})
-	}
 }
 
 func (app *Application) StreamDownloadHandler() AppHandler {
@@ -505,6 +442,125 @@ func (app *Application) StreamSyncHandler() AppHandler {
 	}
 }
 
+func (app *Application) StreamEnableHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+		streamId := mux.Vars(r)["stream_id"]
+		return app.Manager.EnableStream(streamId, user)
+	}
+}
+
+func (app *Application) StreamDisableHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+		streamId := mux.Vars(r)["stream_id"]
+		return app.Manager.DisableStream(streamId, user)
+	}
+}
+
+func (app *Application) StreamDeleteHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		streamId := mux.Vars(r)["stream_id"]
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+		err := app.Manager.RemoveStream(streamId, user)
+		if err != nil {
+			return err
+		}
+		fn1 := func() error {
+			return app.StreamsCursor().RemoveId(streamId)
+		}
+		app.statsMutex.Lock()
+		app.stats.PushBack(fn1)
+		app.statsMutex.Unlock()
+		return nil
+	}
+}
+
+func (app *Application) StreamsHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
+		user, auth_err := app.CurrentManager(r)
+		if auth_err != nil {
+			return auth_err
+		}
+		type Message struct {
+			TargetId string            `json:"target_id"`
+			Files    map[string]string `json:"files"`
+			Tags     map[string]string `json:"tags,omitempty"`
+		}
+		msg := Message{}
+		decoder := json.NewDecoder(r.Body)
+		err = decoder.Decode(&msg)
+		if err != nil {
+			return errors.New("Bad request: " + err.Error())
+		}
+		streamId := util.RandSeq(36)
+		// Add files to disk
+		stream := NewStream(streamId, msg.TargetId, user, 0, 0, int(time.Now().Unix()))
+		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
+		for Directory, Content := range todo {
+			for filename, fileb64 := range Content {
+				files_dir := filepath.Join(app.StreamDir(streamId), Directory)
+				os.MkdirAll(files_dir, 0776)
+				err = ioutil.WriteFile(filepath.Join(files_dir, filename), []byte(fileb64), 0776)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		cursor := app.StreamsCursor()
+		docOut := make(map[string]interface{})
+		docIn, _ := bson.Marshal(stream)
+		bson.Unmarshal(docIn, docOut)
+		// this field is only used for initial setup and persistence.
+		docOut["status"] = "enabled"
+
+		err = cursor.Insert(docOut)
+		if err != nil {
+			// clean up
+			os.RemoveAll(app.StreamDir(streamId))
+			return errors.New("Unable insert stream into DB")
+		}
+		// Insert stream into Manager after ensuring state is correct.
+		e := app.Manager.AddStream(stream, msg.TargetId, true)
+		if e != nil {
+			return e
+		}
+		data, err := json.Marshal(map[string]string{"stream_id": streamId})
+		if e != nil {
+			return e
+		}
+		w.Write(data)
+		return
+	}
+}
+
+func (app *Application) StreamInfoHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
+		//cursor := app.StreamsCursor()
+		//msg := mongoStream{}
+		streamId := mux.Vars(r)["stream_id"]
+		var result []byte
+		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
+			result, err = json.Marshal(stream)
+			return err
+		})
+		if e != nil {
+			return e
+		}
+		w.Write(result)
+		return nil
+	}
+}
+
 func pathExists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil {
@@ -514,6 +570,76 @@ func pathExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func (app *Application) CoreFrameHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) (err error) {
+		token := r.Header.Get("Authorization")
+		md5String := r.Header.Get("Content-MD5")
+		body, _ := ioutil.ReadAll(r.Body)
+		h := md5.New()
+		io.WriteString(h, string(body))
+		if md5String != hex.EncodeToString(h.Sum(nil)) {
+			return errors.New("MD5 mismatch")
+		}
+		return app.Manager.ModifyActiveStream(token, func(stream *Stream) error {
+			type Message struct {
+				Files  map[string]string `json:"files"`
+				Frames int               `json:"frames"`
+			}
+			msg := Message{Frames: 1}
+			decoder := json.NewDecoder(bytes.NewReader(body))
+			err := decoder.Decode(&msg)
+			if err != nil {
+				return errors.New("Could not decode JSON")
+			}
+			if md5String == stream.activeStream.frameHash {
+				return errors.New("POSTed same frame twice")
+			}
+			stream.activeStream.frameHash = md5String
+			for filename, filestring := range msg.Files {
+				root, ext := splitExt(filename)
+				filebin := []byte(filestring)
+				if ext == ".b64" {
+					filename = root
+					reader := base64.NewDecoder(base64.StdEncoding, bytes.NewReader(filebin))
+					filecopy, err := ioutil.ReadAll(reader)
+					if err != nil {
+						return err
+					}
+					filebin = filecopy
+					root, ext := splitExt(filename)
+					if ext == ".gz" {
+						filename = root
+						reader, err := gzip.NewReader(bytes.NewReader(filebin))
+						defer reader.Close()
+						if err != nil {
+							return err
+						}
+						filecopy, err := ioutil.ReadAll(reader)
+						if err != nil {
+							return err
+						}
+						filebin = filecopy
+					}
+				}
+				dir := filepath.Join(app.StreamDir(stream.StreamId), "buffer_files")
+				os.MkdirAll(dir, 0776)
+				filename = filepath.Join(dir, filename)
+				file, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0776)
+				defer file.Close()
+				if err != nil {
+					return err
+				}
+				_, err = file.Write(filebin)
+				if err != nil {
+					return err
+				}
+			}
+			stream.activeStream.bufferFrames += 1
+			return nil
+		})
+	}
 }
 
 func (app *Application) CoreCheckpointHandler() AppHandler {
@@ -668,124 +794,5 @@ func (app *Application) CoreHeartbeatHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
 		return app.Manager.ResetActiveStream(token)
-	}
-}
-
-func (app *Application) StreamEnableHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		user, auth_err := app.CurrentManager(r)
-		if auth_err != nil {
-			return auth_err
-		}
-		streamId := mux.Vars(r)["stream_id"]
-		return app.Manager.EnableStream(streamId, user)
-	}
-}
-
-func (app *Application) StreamDisableHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		user, auth_err := app.CurrentManager(r)
-		if auth_err != nil {
-			return auth_err
-		}
-		streamId := mux.Vars(r)["stream_id"]
-		return app.Manager.DisableStream(streamId, user)
-	}
-}
-
-func (app *Application) StreamDeleteHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) error {
-		streamId := mux.Vars(r)["stream_id"]
-		user, auth_err := app.CurrentManager(r)
-		if auth_err != nil {
-			return auth_err
-		}
-		err := app.Manager.RemoveStream(streamId, user)
-		if err != nil {
-			return err
-		}
-		fn1 := func() error {
-			return app.StreamsCursor().RemoveId(streamId)
-		}
-		app.statsMutex.Lock()
-		app.stats.PushBack(fn1)
-		app.statsMutex.Unlock()
-		return nil
-	}
-}
-
-func (app *Application) StreamsHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error) {
-		user, auth_err := app.CurrentManager(r)
-		if auth_err != nil {
-			return auth_err
-		}
-		type Message struct {
-			TargetId string            `json:"target_id"`
-			Files    map[string]string `json:"files"`
-			Tags     map[string]string `json:"tags,omitempty"`
-		}
-		msg := Message{}
-		decoder := json.NewDecoder(r.Body)
-		err = decoder.Decode(&msg)
-		if err != nil {
-			return errors.New("Bad request: " + err.Error())
-		}
-		streamId := util.RandSeq(36)
-		// Add files to disk
-		stream := NewStream(streamId, msg.TargetId, user, 0, 0, int(time.Now().Unix()))
-		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
-		for Directory, Content := range todo {
-			for filename, fileb64 := range Content {
-				files_dir := filepath.Join(app.StreamDir(streamId), Directory)
-				os.MkdirAll(files_dir, 0776)
-				err = ioutil.WriteFile(filepath.Join(files_dir, filename), []byte(fileb64), 0776)
-				if err != nil {
-					return err
-				}
-			}
-		}
-		cursor := app.StreamsCursor()
-		docOut := make(map[string]interface{})
-		docIn, _ := bson.Marshal(stream)
-		bson.Unmarshal(docIn, docOut)
-		// this field is only used for initial setup and persistence.
-		docOut["status"] = "enabled"
-
-		err = cursor.Insert(docOut)
-		if err != nil {
-			// clean up
-			os.RemoveAll(app.StreamDir(streamId))
-			return errors.New("Unable insert stream into DB")
-		}
-		// Insert stream into Manager after ensuring state is correct.
-		e := app.Manager.AddStream(stream, msg.TargetId, true)
-		if e != nil {
-			return e
-		}
-		data, err := json.Marshal(map[string]string{"stream_id": streamId})
-		if e != nil {
-			return e
-		}
-		w.Write(data)
-		return
-	}
-}
-
-func (app *Application) StreamInfoHandler() AppHandler {
-	return func(w http.ResponseWriter, r *http.Request) (err error) {
-		//cursor := app.StreamsCursor()
-		//msg := mongoStream{}
-		streamId := mux.Vars(r)["stream_id"]
-		var result []byte
-		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
-			result, err = json.Marshal(stream)
-			return err
-		})
-		if e != nil {
-			return e
-		}
-		w.Write(result)
-		return nil
 	}
 }

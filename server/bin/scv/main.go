@@ -26,6 +26,14 @@ func main() {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
+	type Configuration struct {
+		MongoURI     string
+		Name         string
+		Password     string
+		ExternalHost string
+		InternalHost string
+	}
+
 	app := scv.NewApplication("vspg11")
 	req := func(token string, jsonData string) {
 		client := &http.Client{}
