@@ -34,7 +34,6 @@ package scv
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -70,18 +69,14 @@ func NewServer(addr string, handler http.Handler) *Server {
 		conns: make(map[string]net.Conn),
 	}
 	s.ConnState = func(conn net.Conn, state http.ConnState) {
-		fmt.Println(s.conns)
 		switch state {
 		case http.StateNew:
-			fmt.Println("stateNew")
 			s.wg.Add(1)
 		case http.StateActive:
-			fmt.Println("stateActive")
 			s.mu.Lock()
 			delete(s.conns, conn.LocalAddr().String())
 			s.mu.Unlock()
 		case http.StateIdle:
-			fmt.Println("stateIdle")
 			select {
 			case <-ch:
 				//conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond)) // Doesn't work but seems like the right idea.
@@ -92,7 +87,6 @@ func NewServer(addr string, handler http.Handler) *Server {
 				s.mu.Unlock()
 			}
 		case http.StateHijacked, http.StateClosed:
-			fmt.Println("wait done")
 			s.wg.Done()
 		}
 	}
@@ -146,7 +140,7 @@ func (s *Server) Close() error {
 	s.SetKeepAlivesEnabled(false)
 	s.mu.Lock()
 	for _, l := range s.listeners {
-		fmt.Println("Closing", l)
+		// fmt.Println("Closing", l)
 		if err := l.Close(); nil != err {
 			return err
 		}
@@ -154,7 +148,7 @@ func (s *Server) Close() error {
 	s.listeners = nil
 	t := time.Now().Add(500 * time.Millisecond)
 	for _, c := range s.conns {
-		fmt.Println("closing c")
+		// fmt.Println("closing c")
 		c.SetReadDeadline(t)
 	}
 	s.conns = make(map[string]net.Conn)

@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -139,10 +140,10 @@ func (app *Application) RecordDeferredDocs() {
 
 // Add SSL stuff later
 type Configuration struct {
-	MongoURI     string            `json:"MongoURI"`
-	Name         string            `json:"Name"`
-	Password     string            `json:"Password"`
-	ExternalHost string            `json:"ExternalHost"`
+	MongoURI     string            `json:"MongoURI",bson:"-"`
+	Name         string            `json:"Name",bson:"_id"`
+	Password     string            `json:"Password",bson:"password"`
+	ExternalHost string            `json:"ExternalHost",bson:"host"`
 	InternalHost string            `json:"InternalHost"`
 	SSL          map[string]string `json:"SSL"`
 }
@@ -152,18 +153,30 @@ type Configuration struct {
 
 // }
 
+func (app *Application) RegisterSCV() {
+	log.Printf("Registering SCV %s with database...", app.Config.Name)
+	cursor := app.Mongo.DB("servers").C("scvs")
+	_, err := cursor.UpsertId(app.Config.Name, app.Config)
+	if err != nil {
+		panic("Could not connect to MongoDB: " + err.Error())
+	}
+}
+
 func (app *Application) LoadStreams() {
 	var mongoStreams []Stream
 
 	err := app.StreamsCursor().Find(bson.M{}).All(&mongoStreams)
 	if err != nil {
-		panic("Could not connect to Mongo")
+		panic("Could not connect to MongoDB: " + err.Error())
 	}
 
 	mongoStreamIds := make(map[string]Stream)
 	for _, val := range mongoStreams {
 		mongoStreamIds[val.StreamId] = val
 	}
+
+	log.Printf("Loading %d streams...", len(mongoStreamIds))
+
 	diskStreamIds := make(map[string]struct{})
 	fileData, err := ioutil.ReadDir(filepath.Join(app.Config.Name+"_data", "streams"))
 	for _, v := range fileData {
@@ -189,9 +202,6 @@ func (app *Application) LoadStreams() {
 		stream.Frames = lastFrame
 		mongoStreamIds[streamId] = stream
 	}
-
-	fmt.Println(mongoStreamIds)
-
 	for streamId, _ := range diskStreamIds {
 		_, ok := mongoStreamIds[streamId]
 		if ok == false {
@@ -202,9 +212,6 @@ func (app *Application) LoadStreams() {
 	}
 
 	for _, stream := range mongoStreamIds {
-
-		fmt.Println("debug:", stream.Frames)
-
 		if stream.MongoStatus == "enabled" {
 			app.Manager.AddStream(&stream, stream.TargetId, true)
 		} else if stream.MongoStatus == "disabled" {
@@ -212,7 +219,6 @@ func (app *Application) LoadStreams() {
 		} else {
 			panic("Unknown stream status")
 		}
-
 	}
 }
 
@@ -316,10 +322,12 @@ func (app *Application) StreamDir(stream_id string) string {
 // Run starts the server. Listens and Serves asynchronously. And sets up necessary
 // signal handlers for graceful termination. This blocks until a signal is sent
 func (app *Application) Run() {
-
-	fmt.Println("running server..")
-
+	log.Printf("Starting up server (pid: %d) on %s", os.Getpid(), app.Config.InternalHost)
+	// log.Printf("Internal host: %s, external host: %s", app.Config.InternalHost, app.Config.ExternalHost)
+	app.RegisterSCV()
+	app.LoadStreams()
 	go func() {
+		log.Println("Success! Now serving requests...")
 		err := app.server.ListenAndServe()
 		if err != nil {
 			log.Println("ListenAndServe: ", err)
@@ -327,13 +335,13 @@ func (app *Application) Run() {
 	}()
 	go app.RecordDeferredDocs()
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill)
+	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM)
 	<-c
 	app.Shutdown()
 }
 
 func (app *Application) Shutdown() {
-	// Order matters here!
+	log.Printf("Shutting down gracefully...")
 	app.server.Close()
 	close(app.finish)
 	app.statsWG.Wait()
@@ -457,22 +465,6 @@ func (app *Application) StreamSyncHandler() AppHandler {
 		}
 
 		result := make(map[string]interface{})
-
-		// listPartitions := func() []int {
-		// 	files, err := ioutil.ReadDir(app.StreamDir(streamId))
-		// 	if err != nil {
-		// 		panic("FATAL StreamSyncHandler(), can't read streamDir")
-		// 	}
-		// 	res := make([]int, 0)
-		// 	for _, fileInfo := range files {
-		// 		num, err2 := strconv.Atoi(fileInfo.Name())
-		// 		if err2 == nil && num > 0 {
-		// 			res = append(res, num)
-		// 		}
-		// 	}
-		// 	sort.Ints(res)
-		// 	return res
-		// }
 
 		listSeeds := func() []string {
 			seedDir := filepath.Join(app.StreamDir(streamId), "files")

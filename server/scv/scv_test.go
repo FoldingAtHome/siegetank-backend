@@ -303,6 +303,18 @@ func (f *Fixture) loadMongoStream(stream_id string) map[string]interface{} {
 	return result
 }
 
+func TestRegisterSCV(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	f.app.RegisterSCV()
+	config := Configuration{}
+	cursor := f.app.Mongo.DB("servers").C("scvs")
+	cursor.FindId(f.app.Config.Name).One(&config)
+	assert.Equal(t, config.Name, f.app.Config.Name)
+	assert.Equal(t, config.ExternalHost, f.app.Config.ExternalHost)
+	assert.Equal(t, config.Password, f.app.Config.Password)
+}
+
 func TestLoadStreamsSuccess(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
@@ -405,6 +417,54 @@ func TestLoadDisabledStreams(t *testing.T) {
 	targetImpl := f.app.Manager.targets[target_id]
 	assert.Equal(t, len(targetImpl.disabledStreams), 1)
 	assert.Equal(t, targetImpl.inactiveStreams.Len(), 0)
+}
+
+func TestLoadStreamsErrorCount(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	stream_id, code := f.postStream(auth_token, jsonData)
+	for i := 0; i < MAX_STREAM_FAILS; i++ {
+		token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+		assert.Equal(t, code, 200)
+		assert.Equal(t, f.coreStop(token, "some_error"), 200)
+	}
+	// It takes some time to insert the stream's status into Mongo
+	time.Sleep(1 * time.Second)
+	f.app.Manager = NewManager(f.app)
+	f.app.LoadStreams()
+	stream, code := f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, stream.MongoStatus, "disabled")
+	assert.Equal(t, stream.ErrorCount, MAX_STREAM_FAILS)
+}
+
+func TestLoadStreamsErrorCountOK(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	stream_id, code := f.postStream(auth_token, jsonData)
+	for i := 0; i < 3; i++ {
+		token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+		assert.Equal(t, code, 200)
+		assert.Equal(t, f.coreStop(token, "some_error"), 200)
+	}
+	// It takes some time to insert the stream's status into Mongo
+	time.Sleep(1 * time.Second)
+	f.app.Manager = NewManager(f.app)
+	f.app.LoadStreams()
+	stream, code := f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, stream.MongoStatus, "enabled")
+	assert.Equal(t, stream.ErrorCount, 3)
 }
 
 func TestPostStream(t *testing.T) {
