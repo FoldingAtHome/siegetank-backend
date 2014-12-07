@@ -46,24 +46,30 @@ class TestSimple(tornado.testing.AsyncTestCase):
         io_loop = tornado.ioloop.IOLoop.instance()
         mongo_options = {'host': 'localhost'}
         redis_options = {'port': 2733, 'logfile': os.devnull}
+
         self.scvs = []
         for i in range(5):
-            redis_options = {'port': 2739+i, 'logfile': os.devnull}
-            prop = {}
             name = 'mengsk'+str(i)
             host = '127.0.0.1:'+str(3764+i)
-            prop['host'] = host
-            prop['app'] = scv.SCV(name=name,
-                                  external_host=host,
-                                  redis_options=redis_options,
-                                  mongo_options=mongo_options)
-            prop['app'].initialize_motor()
-            prop['server'] = tornado.httpserver.HTTPServer(
-                prop['app'], io_loop=io_loop,
-                ssl_options={'certfile': 'certs/public.crt',
-                             'keyfile': 'certs/private.pem'})
-            prop['server'].listen(3764+i)
+            config = {
+                'MongoURI': 'localhost:27017',
+                'Name': name,
+                'Password': 'test_pass',
+                'ExternalHost': host,
+                'InternalHost': host,
+                'SSL': {
+                    'Cert': 'certs/public.crt',
+                    'Key': 'certs/private.pem',
+                    'CA': "certs/incommon_ca.pem"
+                }
+            }
+            prop = {
+                'config' : config,
+                'host' : host,
+                'name' : name
+            }
             self.scvs.append(prop)
+
         self.cc_host = '127.0.0.1:7654'
         self.cc = cc.CommandCenter(name='goliath',
                                    redis_options=redis_options,
@@ -87,11 +93,11 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.cc.shutdown()
         self.cc.db.shutdown()
         shutil.rmtree(self.cc.data_folder)
-        for key in self.scvs:
-            key['server'].stop()
-            key['app'].db.shutdown()
-            key['app'].shutdown()
-            shutil.rmtree(key['app'].data_folder)
+        # for key in self.scvs:
+        #     key['server'].stop()
+        #     key['app'].db.shutdown()
+        #     key['app'].shutdown()
+        #     shutil.rmtree(key['app'].data_folder)
 
     def get_new_ioloop(self):
         return tornado.ioloop.IOLoop.instance()
@@ -99,8 +105,16 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(TestSimple, self).setUp()
         for key in self.scvs:
-            tornado.ioloop.IOLoop.instance().run_sync(key['app'].register)
-        tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
+            scv_config = 'scv_'+key[name]+'.json'
+            open(scv_config).write(json.dumps(key['config']))
+            subprocess.Popen(args)
+        #     tornado.ioloop.IOLoop.instance().run_sync(key['app'].register)
+        # tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
+
+        
+
+
+
         result = tests.utils.add_user(manager=True, admin=True)
         self.auth_token = result['token']
         self.manager = result['user']
