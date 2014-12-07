@@ -15,20 +15,22 @@ type Stream struct {
 	Frames       int `json:"frames" bson:"frames"`
 	ErrorCount   int `json:"error_count" bson:"error_count"`
 	CreationDate int `json:"creation_date" bson:"creation_date"`
-	//
+
+	MongoStatus string `json:"status" bson:"status"` // this value is really used for persistence purposes. Real status determined by target
+
 	activeStream *ActiveStream
 }
 
 func NewStream(streamId, targetId, owner string,
 	frames, errorCount, creationDate int) *Stream {
 	stream := &Stream{
-		StreamId: streamId,
-		TargetId: targetId,
-		// Status:       status,
+		StreamId:     streamId,
+		TargetId:     targetId,
 		Frames:       frames,
 		ErrorCount:   errorCount,
 		CreationDate: creationDate,
 		Owner:        owner,
+		MongoStatus:  "enabled", // by default is enabled because we can't
 	}
 	return stream
 }

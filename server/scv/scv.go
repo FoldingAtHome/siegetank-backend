@@ -70,9 +70,11 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	if s.ErrorCount >= MAX_STREAM_FAILS {
 		status = "disabled"
 	}
-	stream_prop := bson.M{"frames": s.Frames, "error_count": s.ErrorCount, "status": status}
+	// Update frames, error_count, and status in Mongo
+	stream_prop := bson.M{"$set": bson.M{"frames": s.Frames, "error_count": s.ErrorCount, "status": status}}
 	stream_cursor := app.Mongo.DB("streams").C(app.Config.Name)
 	fn2 := func() error {
+		// Possible corner case where the stream is actually deleted here.
 		stream_cursor.UpdateId(streamId, stream_prop)
 		// We do not care about the return code.
 		return nil
@@ -89,13 +91,15 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 
 func (app *Application) EnableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
-	return cursor.UpdateId(s.StreamId, bson.M{"status": "enabled", "error_count": 0})
+	s.ErrorCount = 0
+	s.MongoStatus = "enabled"
+	return cursor.UpdateId(s.StreamId, bson.M{"$set": bson.M{"status": "enabled", "error_count": 0}})
 }
 
 func (app *Application) DisableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
 	// fmt.Println("DISABLING STREAM", streamId)
-	return cursor.UpdateId(s.StreamId, bson.M{"status": "disabled"})
+	return cursor.UpdateId(s.StreamId, bson.M{"$set": bson.M{"status": "disabled"}})
 }
 
 func (app *Application) drainStats() {
@@ -141,6 +145,75 @@ type Configuration struct {
 	ExternalHost string            `json:"ExternalHost"`
 	InternalHost string            `json:"InternalHost"`
 	SSL          map[string]string `json:"SSL"`
+}
+
+// func (app *Application) Recover() error {
+// 	// 1. Make sure # of frames in each stream on-disk with the number found in Mongo
+
+// }
+
+func (app *Application) LoadStreams() {
+	var mongoStreams []Stream
+
+	err := app.StreamsCursor().Find(bson.M{}).All(&mongoStreams)
+	if err != nil {
+		panic("Could not connect to Mongo")
+	}
+
+	mongoStreamIds := make(map[string]Stream)
+	for _, val := range mongoStreams {
+		mongoStreamIds[val.StreamId] = val
+	}
+	diskStreamIds := make(map[string]struct{})
+	fileData, err := ioutil.ReadDir(filepath.Join(app.Config.Name+"_data", "streams"))
+	for _, v := range fileData {
+		diskStreamIds[v.Name()] = struct{}{}
+	}
+	// Check that disk streams is equal to mongo streams. That is mongoStreams /subset of diskStreamIds
+	for streamId, stream := range mongoStreamIds {
+		_, ok := diskStreamIds[streamId]
+		if ok == false {
+			log.Panicln("Cannot find data for stream " + streamId + " on disk")
+		}
+		partitions, err := app.ListPartitions(streamId)
+		if err != nil {
+			panic("Unable to list partitions for stream " + streamId)
+		}
+		lastFrame := 0
+		if len(partitions) > 0 {
+			lastFrame = partitions[len(partitions)-1]
+		}
+		if lastFrame != stream.Frames {
+			log.Printf("Warning: frame count mismatch for stream %s. Disk: %d, Mongo: %d, using disk value.", streamId, lastFrame, stream.Frames)
+		}
+		stream.Frames = lastFrame
+		mongoStreamIds[streamId] = stream
+	}
+
+	fmt.Println(mongoStreamIds)
+
+	for streamId, _ := range diskStreamIds {
+		_, ok := mongoStreamIds[streamId]
+		if ok == false {
+			streamDir := app.StreamDir(streamId)
+			log.Println("Warning: stream " + streamId + " is present on disk but not in Mongo, removing " + streamDir)
+			os.RemoveAll(streamDir)
+		}
+	}
+
+	for _, stream := range mongoStreamIds {
+
+		fmt.Println("debug:", stream.Frames)
+
+		if stream.MongoStatus == "enabled" {
+			app.Manager.AddStream(&stream, stream.TargetId, true)
+		} else if stream.MongoStatus == "disabled" {
+			app.Manager.AddStream(&stream, stream.TargetId, false)
+		} else {
+			panic("Unknown stream status")
+		}
+
+	}
 }
 
 func NewApplication(config Configuration) *Application {
@@ -358,6 +431,23 @@ func (app *Application) StreamDownloadHandler() AppHandler {
 	}
 }
 
+// Return the number of partitions in a stream.
+func (app *Application) ListPartitions(streamId string) ([]int, error) {
+	res := make([]int, 0)
+	files, err := ioutil.ReadDir(app.StreamDir(streamId))
+	if err != nil {
+		return nil, errors.New("FATAL StreamSyncHandler(), can't read streamDir")
+	}
+	for _, fileInfo := range files {
+		num, err2 := strconv.Atoi(fileInfo.Name())
+		if err2 == nil && num > 0 {
+			res = append(res, num)
+		}
+	}
+	sort.Ints(res)
+	return res, nil
+}
+
 func (app *Application) StreamSyncHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		streamId := mux.Vars(r)["stream_id"]
@@ -368,21 +458,21 @@ func (app *Application) StreamSyncHandler() AppHandler {
 
 		result := make(map[string]interface{})
 
-		listPartitions := func() []int {
-			files, err := ioutil.ReadDir(app.StreamDir(streamId))
-			if err != nil {
-				panic("FATAL StreamSyncHandler(), can't read streamDir")
-			}
-			res := make([]int, 0)
-			for _, fileInfo := range files {
-				num, err2 := strconv.Atoi(fileInfo.Name())
-				if err2 == nil && num > 0 {
-					res = append(res, num)
-				}
-			}
-			sort.Ints(res)
-			return res
-		}
+		// listPartitions := func() []int {
+		// 	files, err := ioutil.ReadDir(app.StreamDir(streamId))
+		// 	if err != nil {
+		// 		panic("FATAL StreamSyncHandler(), can't read streamDir")
+		// 	}
+		// 	res := make([]int, 0)
+		// 	for _, fileInfo := range files {
+		// 		num, err2 := strconv.Atoi(fileInfo.Name())
+		// 		if err2 == nil && num > 0 {
+		// 			res = append(res, num)
+		// 		}
+		// 	}
+		// 	sort.Ints(res)
+		// 	return res
+		// }
 
 		listSeeds := func() []string {
 			seedDir := filepath.Join(app.StreamDir(streamId), "files")
@@ -430,7 +520,10 @@ func (app *Application) StreamSyncHandler() AppHandler {
 			if stream.Owner != user {
 				return errors.New("You do not own this stream.")
 			}
-			partitions := listPartitions()
+			partitions, err := app.ListPartitions(streamId)
+			if err != nil {
+				return err
+			}
 			result["partitions"] = partitions
 			result["seed_files"] = listSeeds()
 			if len(partitions) > 0 {
@@ -525,13 +618,7 @@ func (app *Application) StreamsHandler() AppHandler {
 			}
 		}
 		cursor := app.StreamsCursor()
-		docOut := make(map[string]interface{})
-		docIn, _ := bson.Marshal(stream)
-		bson.Unmarshal(docIn, docOut)
-		// this field is only used for initial setup and persistence.
-		docOut["status"] = "enabled"
-
-		err = cursor.Insert(docOut)
+		err = cursor.Insert(stream)
 		if err != nil {
 			// clean up
 			os.RemoveAll(app.StreamDir(streamId))
@@ -701,7 +788,8 @@ func (app *Application) CoreCheckpointHandler() AppHandler {
 			stream.Frames = sumFrames
 			stream.activeStream.donorFrames += msg.Frames
 			stream.activeStream.bufferFrames = 0
-			// TODO: update frame count in MongoDB
+			// TODO: update frame count in MongoDB (do we want to?)
+			// This stream is mutex'd
 			return nil
 		})
 	}

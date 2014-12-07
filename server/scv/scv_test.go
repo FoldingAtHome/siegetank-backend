@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -209,6 +211,22 @@ func (f *Fixture) syncStream(token, streamId string) (SyncResult, int) {
 	return result, w.Code
 }
 
+func (f *Fixture) streamStop(token, streamId string) int {
+	req, _ := http.NewRequest("PUT", "/streams/stop/"+streamId, nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	return w.Code
+}
+
+func (f *Fixture) streamStart(token, streamId string) int {
+	req, _ := http.NewRequest("PUT", "/streams/start/"+streamId, nil)
+	req.Header.Add("Authorization", token)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	return w.Code
+}
+
 func (f *Fixture) postCheckpoint(token string, data string) (code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
 	req, _ := http.NewRequest("POST", "/core/checkpoint", dataBuffer)
@@ -285,6 +303,110 @@ func (f *Fixture) loadMongoStream(stream_id string) map[string]interface{} {
 	return result
 }
 
+func TestLoadStreamsSuccess(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	jsonData := `{"target_id":"12345",
+		"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+		"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	f.postStream(token, jsonData)
+	f.app.Manager = NewManager(f.app)
+	defer func() {
+		if recover() != nil {
+			assert.True(t, false)
+		}
+	}()
+	f.app.LoadStreams()
+}
+
+func TestLoadStreamsExistsInMongo(t *testing.T) {
+	// Streams that exist in Mongo but not on disk throws a panic.
+	f := NewFixture()
+	defer f.shutdown()
+	token := f.addManager("yutong", 1)
+	jsonData := `{"target_id":"12345",
+		"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+		"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	stream_id, _ := f.postStream(token, jsonData)
+
+	os.RemoveAll(f.app.StreamDir(stream_id))
+
+	defer func() {
+		if recover() != nil {
+			// passed
+		} else {
+			// failed
+			assert.True(t, false)
+		}
+	}()
+	f.app.LoadStreams()
+}
+
+func TestLoadStreamsExistsOnDisk(t *testing.T) {
+	// Streams that exist on disk but not in Mongo are deleted
+	f := NewFixture()
+	defer f.shutdown()
+
+	someString := "blah"
+
+	os.MkdirAll(f.app.StreamDir("1234"), 0776)
+	err := ioutil.WriteFile(filepath.Join(f.app.StreamDir("1234"), "output.txt"), []byte(someString), 0776)
+	assert.Nil(t, err)
+	_, err = ioutil.ReadDir(f.app.StreamDir("1234"))
+	assert.Nil(t, err)
+	f.app.LoadStreams()
+	_, err = ioutil.ReadDir(f.app.StreamDir("1234"))
+	assert.NotNil(t, err)
+}
+
+func TestLoadStreamsInconsistentFrames(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	stream_id, code := f.postStream(auth_token, jsonData)
+	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 200)
+	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "67890"}}`), 200)
+	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+
+	// manually hack Mongo to use a different frame count.
+	err := f.app.StreamsCursor().UpdateId(stream_id, bson.M{"$set": bson.M{"frames": "50"}})
+	assert.Nil(t, err)
+	stream, code := f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	f.app.Manager = NewManager(f.app)
+	f.app.LoadStreams()
+	stream, code = f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, stream.Frames, 2)
+}
+
+func TestLoadDisabledStreams(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	stream_id, _ := f.postStream(auth_token, jsonData)
+	assert.Equal(t, f.streamStop(auth_token, stream_id), 200)
+	f.app.Manager = NewManager(f.app)
+	f.app.LoadStreams()
+	stream, code := f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, stream.MongoStatus, "disabled")
+	targetImpl := f.app.Manager.targets[target_id]
+	assert.Equal(t, len(targetImpl.disabledStreams), 1)
+	assert.Equal(t, targetImpl.inactiveStreams.Len(), 0)
+}
+
 func TestPostStream(t *testing.T) {
 	f := NewFixture()
 	defer f.shutdown()
@@ -316,6 +438,7 @@ func TestPostStream(t *testing.T) {
 	cursor := f.app.Mongo.DB("streams").C(f.app.Config.Name)
 	result := make(map[string]interface{})
 	cursor.Find(bson.M{"_id": stream_id}).One(&result)
+
 	assert.Equal(t, result["frames"].(int), 0)
 	assert.Equal(t, result["error_count"].(int), 0)
 	assert.Equal(t, result["status"].(string), "enabled")
@@ -637,7 +760,10 @@ func TestStreamStateActive(t *testing.T) {
 				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
 	auth_token := f.addManager("yutong", 1)
 	stream_id, code := f.postStream(auth_token, jsonData)
-	// := int(time.Now().Unix())
+
+	stream, code := f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, stream.MongoStatus, "enabled")
 	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
 	// stopping a core without an error message
@@ -647,6 +773,12 @@ func TestStreamStateActive(t *testing.T) {
 		assert.Equal(t, code, 200)
 		assert.Equal(t, f.coreStop(token, "some_error"), 200)
 	}
+
+	stream, code = f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, stream.MongoStatus, "disabled")
+	assert.Equal(t, stream.ErrorCount, MAX_STREAM_FAILS)
+
 	_, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 400)
 	time.Sleep(time.Second * 2)
@@ -806,6 +938,34 @@ func TestStreamCycle(t *testing.T) {
 	// test that activating a stream removes buffer_files
 	token, code = f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte(""))
+}
+
+func TestStreamStartStop(t *testing.T) {
+	f := NewFixture()
+	defer f.shutdown()
+	target_id := "12345"
+	jsonData := `{"target_id":"` + target_id + `",
+				"files": {"openmm": "ZmlsZWRhdGFibGFoYmFsaA==",
+				"amber": "ZmlsZWRhdGFibGFoYmFsaA=="}}`
+	auth_token := f.addManager("yutong", 1)
+	stream_id, code := f.postStream(auth_token, jsonData)
+
+	result, code := f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, result.MongoStatus, "enabled")
+
+	_, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
+	assert.Equal(t, code, 200)
+
+	assert.Equal(t, f.streamStop(auth_token, stream_id), 200)
+	result, code = f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, result.MongoStatus, "disabled")
+
+	assert.Equal(t, f.streamStart(auth_token, stream_id), 200)
+	result, code = f.getStream(stream_id)
+	assert.Equal(t, code, 200)
+	assert.Equal(t, result.MongoStatus, "enabled")
 }
 
 func TestCoreStart(t *testing.T) {

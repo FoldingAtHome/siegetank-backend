@@ -164,6 +164,7 @@ func (m *Manager) disableStreamImpl(stream *Stream, t *Target) {
 	if isDisabled {
 		return
 	}
+	stream.MongoStatus = "disabled"
 	m.stateTransfer(stream, t.inactiveStreams, t.disabledStreams)
 }
 
@@ -193,8 +194,6 @@ func (m *Manager) DisableStream(streamId, user string) error {
 	return m.injector.DisableStreamService(stream)
 }
 
-// Idempotent, does nothing if stream is already disabled
-// Also sets error_count of stream to zero.
 func (m *Manager) EnableStream(streamId, user string) error {
 	m.Lock()
 	stream, ok := m.streams[streamId]

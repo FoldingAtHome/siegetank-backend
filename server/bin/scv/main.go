@@ -1,25 +1,12 @@
 package main
 
 import (
-	// "encoding/base64"
-	// "encoding/json"
-	// "errors"
+	"../../scv"
+	"encoding/json"
 	"fmt"
-	// "io"
-	// "io/ioutil"
-	// "log"
-	// "net/http"
 	"os"
 	"path/filepath"
-	// "time"
-
-	// "bytes"
-	// "math/rand"
 	"runtime"
-
-	"encoding/json"
-
-	"../../scv"
 )
 
 func main() {
