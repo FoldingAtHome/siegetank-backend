@@ -138,20 +138,14 @@ func (app *Application) RecordDeferredDocs() {
 	}
 }
 
-// Add SSL stuff later
 type Configuration struct {
 	MongoURI     string            `json:"MongoURI",bson:"-"`
 	Name         string            `json:"Name",bson:"_id"`
 	Password     string            `json:"Password",bson:"password"`
 	ExternalHost string            `json:"ExternalHost",bson:"host"`
-	InternalHost string            `json:"InternalHost"`
-	SSL          map[string]string `json:"SSL"`
+	InternalHost string            `json:"InternalHost",bson:"-"`
+	SSL          map[string]string `json:"SSL",bson:"-"`
 }
-
-// func (app *Application) Recover() error {
-// 	// 1. Make sure # of frames in each stream on-disk with the number found in Mongo
-
-// }
 
 func (app *Application) RegisterSCV() {
 	log.Printf("Registering SCV %s with database...", app.Config.Name)
