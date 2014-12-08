@@ -1,7 +1,7 @@
 package main
 
 import (
-	"../../src"
+	"../src"
 	"encoding/json"
 	"flag"
 	"fmt"

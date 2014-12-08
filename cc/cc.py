@@ -30,9 +30,9 @@ import signal
 import sys
 import logging
 
-from server.common import BaseServerMixin, is_domain, configure_options
-from server.common import CommonHandler, kill_children
-from server.apollo import Entity
+from cc.common import BaseServerMixin, is_domain, configure_options
+from cc.common import CommonHandler, kill_children
+from cc.apollo import Entity
 
 
 class SCV(Entity):

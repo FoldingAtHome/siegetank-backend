@@ -28,10 +28,12 @@ import urllib
 import itertools
 import pymongo
 import random
+import subprocess
+import time
 
-import server.scv as scv
-import server.cc as cc
-import server.common as common
+# import server.scv as scv
+import cc.cc as cc
+import cc.common as common
 import sys
 import base64
 import json
@@ -47,8 +49,13 @@ class TestSimple(tornado.testing.AsyncTestCase):
         mongo_options = {'host': 'localhost'}
         redis_options = {'port': 2733, 'logfile': os.devnull}
 
+        rc = subprocess.call(['go', 'build', 'scv/bin/scv_bin.go'])
+        if rc != 0:
+            print(rc)
+            raise
+
         self.scvs = []
-        for i in range(5):
+        for i in range(2):
             name = 'mengsk'+str(i)
             host = '127.0.0.1:'+str(3764+i)
             config = {
@@ -104,16 +111,14 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def setUp(self):
         super(TestSimple, self).setUp()
-        for key in self.scvs:
-            scv_config = 'scv_'+key[name]+'.json'
-            open(scv_config).write(json.dumps(key['config']))
-            subprocess.Popen(args)
-        #     tornado.ioloop.IOLoop.instance().run_sync(key['app'].register)
-        # tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
-
-        
-
-
+        for index, val in enumerate(self.scvs):
+            scv_config = 'scv_'+val['name']+'.json'
+            open(scv_config, 'w').write(json.dumps(val['config']))
+            args = ["./scv_bin", "-config="+scv_config]
+            print(args)
+            p = subprocess.Popen(args)
+            self.scvs[index]["process"] = p
+            time.sleep(1)
 
         result = tests.utils.add_user(manager=True, admin=True)
         self.auth_token = result['token']
@@ -125,11 +130,14 @@ class TestSimple(tornado.testing.AsyncTestCase):
         for db_name in self.mdb.database_names():
             if db_name != 'servers':
                 self.mdb.drop_database(db_name)
-        for key in self.scvs:
-            key['app'].db.flushdb()
-            test_folder = key['app'].streams_folder
-            if os.path.exists(test_folder):
-                shutil.rmtree(test_folder)
+        for val in self.scvs:
+            val["process"].kill()
+            os.remove('scv_'+val['name']+'.json')
+            shutil.rmtree(val['name']+'_data')
+            # key['app'].db.flushdb()
+            # test_folder = key['app'].streams_folder
+            # if os.path.exists(test_folder):
+            #     shutil.rmtree(test_folder)
 
     def fetch(self, host, path, **kwargs):
         uri = 'https://'+host+path
