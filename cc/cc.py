@@ -234,6 +234,7 @@ class CoreAssignHandler(BaseHandler):
             user = None
         cursor = self.motor.data.targets
         if 'target_id' in content:
+            # a target was specified in the request
             target_id = content['target_id']
             result = yield cursor.find_one({'_id': target_id},
                                            {'engines': 1,
@@ -241,10 +242,12 @@ class CoreAssignHandler(BaseHandler):
                                             })
             if core_engine not in result['engines']:
                 self.error('Core engine not allowed for this target')
-            if not result['shards']:
+            
+            if target_id not in self.application.shards:
                 self.error('Target specified has no shards')
-            shards = result['shards']
+            shards = self.application.shards[target_id]
         else:
+            # no target was specified
             results = cursor.find({'engines': {'$in': [core_engine]},
                                    'stage': 'public'},
                                   {'owner': 1,
@@ -254,14 +257,14 @@ class CoreAssignHandler(BaseHandler):
             owner_weights = dict()
             target_weights = dict()
             target_owners = dict()
-            target_shards = dict()
+            # target_shards = dict()
             while (yield results.fetch_next):
                 document = results.next_object()
-                if document['shards']:
+                if document['_id'] in self.application.shards:
                     owner_weights[document['owner']] = None
                     target_weights[document['_id']] = document['weight']
                     target_owners[document['_id']] = document['owner']
-                    target_shards[document['_id']] = document['shards']
+                    # target_shards[document['_id']] = document['shards']
             if not target_weights:
                 self.error('no valid targets could be found')
             # get a list of all managers and their ids
@@ -290,7 +293,7 @@ class CoreAssignHandler(BaseHandler):
             owner_targets = dict((k, v) for k, v in target_weights.items()
                                  if target_owners[k] == picked_owner)
             target_id = weighted_sample(owner_targets)
-            shards = target_shards[target_id]
+            shards = self.application.shards[target_id]
 
         def scv_online(scv_name):
             cursor = SCV(scv_name, self.db)
@@ -754,6 +757,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
 
     def __init__(self, name, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
+        self.shards = {}
         super(CommandCenter, self).__init__([
             (r'/', AliveHandler),
             (r'/engines/keys', EngineKeysHandler),
@@ -798,6 +802,29 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             dummy = tornado.httpclient.HTTPRequest(uri)
             reply = tornado.httpclient.HTTPResponse(dummy, 400, buffer=body)
             return reply
+
+    @tornado.gen.coroutine
+    def _cache_shards(self):
+        streams_cursor = self.motor["streams"]
+        scv_names = yield streams_cursor.collection_names()
+        scv_names.remove('system.indexes')
+        shard_copy = {}
+        for scv_id in scv_names:
+            cursor = streams_cursor[scv_id]
+            results = cursor.find({'status': 'enabled'},
+                                  {'target_id': 1}) # stream_id
+
+            while (yield results.fetch_next):
+                document = results.next_object()
+                tid = document['target_id']
+                if tid not in shard_copy:
+                    shard_copy[tid] = set()
+                shard_copy[tid].add(scv_id)
+
+        self.shards = shard_copy
+
+        print(self.shards)
+
 
     @tornado.gen.coroutine
     def _check_scvs(self):
@@ -866,8 +893,12 @@ def start():
         app.initialize_motor()
         if tornado.process.task_id() == 0:
             tornado.ioloop.IOLoop.instance().add_callback(app._check_scvs)
+            tornado.ioloop.IOLoop.instance().add_callback(app._cache_shards)
             pulse = tornado.ioloop.PeriodicCallback(app._check_scvs, 5000)
             pulse.start()
+            # update target shards every minute
+            pulse2 = tornado.ioloop.PeriodicCallback(app._cache_shards, 60000)
+            pulse2.start()
         tornado.ioloop.IOLoop.instance().start()
     except SystemExit as e:
         print('! parent is shutting down ...')

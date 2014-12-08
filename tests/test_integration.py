@@ -183,6 +183,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         reply = self.fetch(host, '/streams', method='POST', body=body,
                            headers=headers)
         self.assertEqual(reply.code, 200)
+        self.cc._cache_shards()
         return json.loads(reply.body.decode())
 
     def _assign(self, host, target_id=None, core_key=None,
@@ -202,6 +203,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
             body['target_id'] = target_id
         reply = self.fetch(host, '/core/assign', method='POST',
                            body=json.dumps(body), headers=core_headers)
+        print('DEBUG', reply.body.decode())
         self.assertEqual(reply.code, expected_code)
         return json.loads(reply.body.decode())
 
