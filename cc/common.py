@@ -14,7 +14,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import redis
 import subprocess
 import sys
 import time
@@ -54,49 +53,6 @@ def is_domain(url):
 
 def preexec():  # Don't forward signals.
     os.setpgrp()
-
-
-def init_redis(redis_options, cwd=None):
-    """ Spawn a redis subprocess port and returns a redis client. """
-    redis_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                              '..', 'redis', 'src', 'redis-server')
-    redis_path = os.path.abspath(redis_path)
-    args = [redis_path]
-    for option_name, option_value in redis_options.items():
-        args.append('--'+option_name)
-        args.append(str(option_value))
-    redis_process = subprocess.Popen(args, cwd=cwd, preexec_fn=preexec)
-
-    if redis_process.poll() is not None:
-        print('Could not start redis server, aborting')
-        sys.exit(0)
-
-    if 'requirepass' in redis_options:
-        redis_pass = redis_options['requirepass']
-    else:
-        redis_pass = None
-
-    if 'port' in redis_options:
-        redis_port = redis_options['port']
-    else:
-        raise KeyError("port must be specified in redis options")
-
-    redis_client = redis.Redis(host='localhost', password=redis_pass,
-                               port=int(redis_port), decode_responses=True)
-    # poll until redis server is alive
-    alive = False
-    start_time = time.time()
-    while time.time()-start_time < 15.0:
-        try:
-            alive = redis_client.ping()
-            break
-        except Exception:
-            pass
-    if not alive:
-        raise ValueError('Could not start redis')
-
-    return redis_client
-
 
 class CommonHandler(tornado.web.RequestHandler):
 
@@ -179,10 +135,6 @@ class BaseServerMixin():
         self.data_folder = name+'_data'
         if not os.path.exists(self.data_folder):
             os.makedirs(self.data_folder)
-        self.redis_options = redis_options
-        if 'appendfilename' in redis_options:
-            redis_options['appendonly'] = 'yes'
-        self.db = init_redis(redis_options, cwd=self.data_folder)
         access_channel = logging.FileHandler(os.path.join(self.data_folder,
             'access.log'))
         logging.getLogger('tornado.access').addHandler(access_channel)

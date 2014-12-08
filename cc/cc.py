@@ -32,21 +32,12 @@ import logging
 
 from cc.common import BaseServerMixin, is_domain, configure_options
 from cc.common import CommonHandler, kill_children
-from cc.apollo import Entity
-
-
-class SCV(Entity):
-    prefix = 'scv'
-    fields = {'host': str,  # http request url (verify based on if IP or not)
-              'fail_count': int,  # number of times a request has failed
-              'password': str,
-              }
-
 
 class BaseHandler(CommonHandler):
 
     def initialize(self):
         self.fetch = self.application.fetch
+        self.scvs = self.application.scvs
 
     @tornado.gen.coroutine
     def get_target_owner(self, target_id):
@@ -296,8 +287,7 @@ class CoreAssignHandler(BaseHandler):
             shards = self.application.shards[target_id]
 
         def scv_online(scv_name):
-            cursor = SCV(scv_name, self.db)
-            if cursor.hget('fail_count') < self.application._max_ws_fails:
+            if self.scvs[scv_name]['fail_count'] < self.application._max_ws_fails:
                 return True
             else:
                 return False
@@ -310,14 +300,14 @@ class CoreAssignHandler(BaseHandler):
             if user:
                 msg['user'] = user
             try:
-                password = SCV(scv, self.db).hget('password')
+                password = self.scvs[scv_name]['password'] 
                 headers = {'Authorization': password}
                 reply = yield self.fetch(scv, '/streams/activate',
                                          method='POST', body=json.dumps(msg),
                                          headers=headers)
                 if reply.code == 200:
                     token = json.loads(reply.body.decode())["token"]
-                    host = SCV(scv, self.db).hget('host')
+                    host = self.scvs[scv_name]['host']
                     body = {'token': token,
                             'url': 'https://'+host+'/core/start'}
                     self.write(body)
@@ -353,11 +343,10 @@ class SCVStatusHandler(BaseHandler):
         """
         self.set_status(400)
         body = {}
-        for scv_name in SCV.members(self.db):
-            cursor = SCV(scv_name, self.db)
+        for scv_name, scv_prop in self.scvs:
             body[scv_name] = {}
-            body[scv_name]['host'] = cursor.hget('host')
-            if cursor.hget('fail_count') < self.application._max_ws_fails:
+            body[scv_name]['host'] = scv_prop['host']
+            if scv_prop['fail_count'] < self.application._max_ws_fails:
                 body[scv_name]['online'] = True
             else:
                 body[scv_name]['online'] = False
@@ -730,34 +719,34 @@ class AliveHandler(BaseHandler):
 
 class CommandCenter(BaseServerMixin, tornado.web.Application):
 
-    _max_ws_fails = 10
+    _max_ws_fails = 5
 
     @tornado.gen.coroutine
     def _load_scvs(self):
-        """ Load a list of available SCVs from MDB and cache in redis. """
+        """ Load a list of available SCVs from Mongo """
         cursor = self.motor.servers.scvs
         results = cursor.find()
-        while(yield results.fetch_next):
+        while (yield results.fetch_next):
             document = results.next_object()
             scv_name = document['_id']
             scv_host = document['host']
             scv_pass = document['password']
-            if not SCV.exists(scv_name, self.db):
-                fields = {'host': scv_host,
-                          'fail_count': 0,
-                          'password': scv_pass}
-                SCV.create(scv_name, self.db, fields)
+
+            if scv_name not in self.scvs:
+                self.scvs[scv_name] = {
+                    'host': scv_host,
+                    'password': scv_pass,
+                    'fail_count': 0,
+                }
             else:
-                cursor = SCV(scv_name, self.db)
-                pipe = self.db.pipeline()
-                cursor.hset('host', scv_host, pipeline=pipe)
-                cursor.hset('fail_count', 0, pipeline=pipe)
-                cursor.hset('password', scv_pass, pipeline=pipe)
-                pipe.execute()
+                self.scvs[scv_name]['host'] = scv_host
+                self.scvs[scv_name]['password'] = scv_pass
+
+        print('LOAD SCVS', self.scvs)
 
     def __init__(self, name, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
-        self.shards = {}
+        self.scvs = {}
         super(CommandCenter, self).__init__([
             (r'/', AliveHandler),
             (r'/engines/keys', EngineKeysHandler),
@@ -774,17 +763,16 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     @tornado.gen.coroutine
     def fetch(self, scv_id, path, **kwargs):
         """ Make a request to a particular SCV and keep track of whether or not
-        it is alive.
+        it is alive. 
 
         """
-        cursor = SCV(scv_id, self.db)
-        host = cursor.hget('host')
+        host = self.scvs[scv_id]['host']
         uri = 'https://'+host+path
         client = tornado.httpclient.AsyncHTTPClient()
         try:
             reply = yield client.fetch(uri, validate_cert=is_domain(host),
                                        **kwargs)
-            cursor.hset('fail_count', 0)
+            self.scvs[scv_id]['fail_count'] = 0
             return reply
         except (tornado.httpclient.HTTPError, IOError) as e:
             if isinstance(e, tornado.httpclient.HTTPError):
@@ -793,12 +781,12 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 else:
                     body = io.BytesIO(b'scv disabled')
                 if e.code == 599:
-                    cursor.hincrby('fail_count', 1)
+                    self.scvs[scv_id]['fail_count'] += 1
                 else:
-                    cursor.hset('fail_count', 0)
+                    self.scvs[scv_id]['fail_count'] = 0
             else:
                 body = io.BytesIO(json.dumps({'error': 'scv down'}).encode())
-                cursor.hincrby('fail_count', 1)
+                self.scvs[scv_id]['fail_count'] += 1
             dummy = tornado.httpclient.HTTPRequest(uri)
             reply = tornado.httpclient.HTTPResponse(dummy, 400, buffer=body)
             return reply
@@ -830,8 +818,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def _check_scvs(self):
         """ Check all SCVs to see if they are alive or not """
         yield self._load_scvs()
-        scvs = SCV.members(self.db)
-        for scv_name in scvs:
+        for key, scv_name in self.scvs.items():
             yield self.fetch(scv_name, '/')
 
 
