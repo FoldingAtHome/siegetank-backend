@@ -206,7 +206,6 @@ class CoreAssignHandler(BaseHandler):
 
         content = json.loads(self.request.body.decode())
         cursor = self.motor.engines.keys
-
         result = yield cursor.find_one({'_id': key}, fields=['engine'])
         if not result:
             self.error('Bad engine key', code=401)
@@ -300,14 +299,14 @@ class CoreAssignHandler(BaseHandler):
             if user:
                 msg['user'] = user
             try:
-                password = self.scvs[scv_name]['password'] 
+                password = self.scvs[scv]['password'] 
                 headers = {'Authorization': password}
                 reply = yield self.fetch(scv, '/streams/activate',
                                          method='POST', body=json.dumps(msg),
                                          headers=headers)
                 if reply.code == 200:
                     token = json.loads(reply.body.decode())["token"]
-                    host = self.scvs[scv_name]['host']
+                    host = self.scvs[scv]['host']
                     body = {'token': token,
                             'url': 'https://'+host+'/core/start'}
                     self.write(body)
@@ -343,7 +342,7 @@ class SCVStatusHandler(BaseHandler):
         """
         self.set_status(400)
         body = {}
-        for scv_name, scv_prop in self.scvs:
+        for scv_name, scv_prop in self.scvs.items():
             body[scv_name] = {}
             body[scv_name]['host'] = scv_prop['host']
             if scv_prop['fail_count'] < self.application._max_ws_fails:
@@ -391,6 +390,7 @@ class TargetInfoHandler(BaseHandler):
         if not info:
             self.error('Invalid target id')
         self.set_status(200)
+        info["shards"] = list(self.application.shards[target_id])
         self.write(info)
 
 
@@ -414,13 +414,31 @@ class TargetDeleteHandler(BaseHandler):
         if(yield self.get_current_user()) is None:
             self.error('Bad Manager Credentials', 401)
         self.set_status(400)
-        cursor = self.motor.data.targets
-        result = yield cursor.remove({'_id': target_id,
-                                      'shards': {'$size': 0}})
-        if result['n'] > 0:
+
+        streams_cursor = self.motor["streams"]
+        scv_names = yield streams_cursor.collection_names()
+        scv_names.remove('system.indexes')
+        shard_copy = {}
+
+        success = True
+
+        headers = {'Authorization': self.request.headers['Authorization']}
+        
+        for scv_id in scv_names:
+            cursor = streams_cursor[scv_id]
+            results = cursor.find({'target_id': target_id}, {'_id': 1})
+            while (yield results.fetch_next):
+                document = results.next_object()
+                stream_id = document['_id']
+                reply = yield self.fetch(scv_id, '/streams/delete/'+stream_id, method='PUT', headers=headers, body='')
+                if reply.code != 200:
+                    success = False
+                    return self.write({'_id'})
+
+        if success:
+            cursor = self.motor.data.targets
+            yield cursor.remove({'_id': target_id})
             return self.set_status(200)
-        else:
-            self.error('Cannot remove target all streams are removed')
 
 
 class TargetsHandler(BaseHandler):
@@ -742,11 +760,10 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 self.scvs[scv_name]['host'] = scv_host
                 self.scvs[scv_name]['password'] = scv_pass
 
-        print('LOAD SCVS', self.scvs)
-
     def __init__(self, name, redis_options, mongo_options):
         self.base_init(name, redis_options, mongo_options)
         self.scvs = {}
+        self.shards = {}
         super(CommandCenter, self).__init__([
             (r'/', AliveHandler),
             (r'/engines/keys', EngineKeysHandler),

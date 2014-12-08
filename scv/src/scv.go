@@ -139,12 +139,12 @@ func (app *Application) RecordDeferredDocs() {
 }
 
 type Configuration struct {
-	MongoURI     string            `json:"MongoURI",bson:"-"`
-	Name         string            `json:"Name",bson:"_id"`
-	Password     string            `json:"Password",bson:"password"`
-	ExternalHost string            `json:"ExternalHost",bson:"host"`
-	InternalHost string            `json:"InternalHost",bson:"-"`
-	SSL          map[string]string `json:"SSL",bson:"-"`
+	MongoURI     string            `json:"MongoURI" bson:"-"`
+	Name         string            `json:"Name" bson:"_id"`
+	Password     string            `json:"Password" bson:"password"`
+	ExternalHost string            `json:"ExternalHost" bson:"host"`
+	InternalHost string            `json:"InternalHost" bson:"-"`
+	SSL          map[string]string `json:"SSL" bson:"-"`
 }
 
 func (app *Application) RegisterSCV() {
