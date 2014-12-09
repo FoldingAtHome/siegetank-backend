@@ -91,6 +91,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.client = tornado.httpclient.AsyncHTTPClient(io_loop=io_loop)
         self.mdb = pymongo.MongoClient()
 
+        for db_name in self.mdb.database_names():
+            self.mdb.drop_database(db_name)
+
     @classmethod
     def tearDownClass(self):
         super(TestSimple, self).tearDownClass()
@@ -165,6 +168,11 @@ class TestSimple(tornado.testing.AsyncTestCase):
         target_id = json.loads(reply.body.decode())['target_id']
         body['target_id'] = target_id
         return body
+
+    def _list_target_streams(self, target_id):
+        reply = self.fetch(self.cc_host, '/targets/streams/'+target_id, method='GET')
+        self.assertEqual(reply.code, 200)
+        return json.loads(reply.body.decode())['streams']
 
     def _delete_stream(self, stream_id):
         headers = {'Authorization': self.auth_token}
@@ -272,6 +280,15 @@ class TestSimple(tornado.testing.AsyncTestCase):
         # make sure that this stream is put to to one of the SCVs
         self.assertTrue(info['shards'][0] in
                         [k['name'] for k in self.scvs])
+
+    def test_post_N_streams(self):
+        target_id = self._post_target(self.cc_host)['target_id']
+        input_streams = set()
+        for k in range(10):
+            result = self._post_stream(target_id)
+            input_streams.add(result['stream_id'])
+        output_streams = set(self._list_target_streams(target_id))
+        self.assertEqual(input_streams, output_streams)
 
     def test_assign(self):
         target_id = self._post_target(self.cc_host)['target_id']

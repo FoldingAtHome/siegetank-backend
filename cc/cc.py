@@ -383,11 +383,16 @@ class TargetInfoHandler(BaseHandler):
         self.set_status(400)
         cursor = self.motor.data.targets
         info = yield cursor.find_one({'_id': target_id})
+
+        print('OK WOW WTF', info, target_id)
+
+
         if not info:
             self.error('Invalid target id')
         self.set_status(200)
-        # it's possible this target has no shards.
+        # it's possible this target has no shards!
         if target_id in self.application.shards:
+            print("WTF???????????", target_id, self.application.shards)
             info["shards"] = list(self.application.shards[target_id])
         self.write(info)
 
@@ -437,6 +442,51 @@ class TargetDeleteHandler(BaseHandler):
             cursor = self.motor.data.targets
             yield cursor.remove({'_id': target_id})
             return self.set_status(200)
+
+# TODO: Cache?
+class TargetStreamsHandler(BaseHandler):
+
+    @tornado.gen.coroutine
+    def get(self, target_id):
+        """
+        .. http:get:: /targets/streams/:target_id
+
+            List all the streams for target target_id.
+
+            :reqheader Authorization: Manager's authorization token (optional)
+
+            **Example reply**
+
+            .. sourcecode:: javascript
+
+                {
+                    'streams': ['target_id1', 'target_id2', '...']
+                }
+
+            :status 200: OK
+            :status 400: Bad request
+
+        """
+        # if(yield self.get_current_user()) is None:
+        #     self.error('Bad Manager Credentials', 401)
+        self.set_status(400)
+        streams_cursor = self.motor["streams"]
+        scv_names = yield streams_cursor.collection_names()
+        streams_result = {
+            "streams": []
+        }
+        if scv_names:
+            scv_names.remove('system.indexes')
+            for scv_id in scv_names:
+                cursor = streams_cursor[scv_id]
+                results = cursor.find({'target_id': target_id},
+                                      {'_id': 1}) # stream_id
+
+                while (yield results.fetch_next):
+                    document = results.next_object()
+                    streams_result['streams'].append(document['_id'])
+        self.write(streams_result)
+        return self.set_status(200)
 
 
 class TargetsHandler(BaseHandler):
@@ -577,7 +627,6 @@ class TargetsHandler(BaseHandler):
             'owner': owner,
             'stage': stage,
             'options': options,
-            'shards': [],
             'weight': weight,
         }
         if 'options' in content:
@@ -773,6 +822,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/info/(.*)', TargetInfoHandler),
             (r'/targets/update/(.*)', TargetUpdateHandler),
             (r'/scvs/status', SCVStatusHandler),
+            (r'/targets/streams/(.*)', TargetStreamsHandler)
             ])
 
     @tornado.gen.coroutine

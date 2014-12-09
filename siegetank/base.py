@@ -306,7 +306,7 @@ class Target(Base):
         self._id = target_id
         self._options = None
         self._creation_date = None
-        self._shards = None
+        # self._shards = None
         self._engines = None
         self._streams = None
         self._weight = None
@@ -391,7 +391,7 @@ class Target(Base):
         info = json.loads(reply.text)
         self._options = info['options']
         self._creation_date = info['creation_date']
-        self._shards = info['shards']
+        # self._shards = info['shards']
         self._engines = info['engines']
         self._weight = info['weight']
         self._stage = info['stage']
@@ -439,12 +439,12 @@ class Target(Base):
             self.reload_info()
         return self._creation_date
 
-    @property
-    def shards(self):
-        """ Return a list of SCVs that the streams are sharded across. """
-        if not self._shards:
-            self.reload_info()
-        return self._shards
+    # @property
+    # def shards(self):
+    #     """ Return a list of SCVs that the streams are sharded across. """
+    #     if not self._shards:
+    #         self.reload_info()
+    #     return self._shards
 
     @property
     def engines(self):

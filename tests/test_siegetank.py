@@ -44,7 +44,7 @@ class TestSiegeTank(unittest.TestCase):
         self.pid1 = subprocess.Popen(cc_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
-        cc_uri = '127.0.0.1:8980'
+        cc_uri = '127.0.0.1:8981'
         time.sleep(2)
 
         mdb = pymongo.MongoClient()
@@ -52,7 +52,7 @@ class TestSiegeTank(unittest.TestCase):
             mdb.drop_database(db_name)
 
         result = tests.utils.add_user(manager=True)
-        siegetank.login(result['token'], '127.0.0.1:8980')
+        siegetank.login(result['token'], '127.0.0.1:8981')
 
     def tearDown(self):
 
