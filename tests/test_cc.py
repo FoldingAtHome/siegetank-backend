@@ -24,7 +24,7 @@ import random
 import pymongo
 import uuid
 
-import server.cc as cc
+import cc.cc as cc
 import tests.utils
 
 
@@ -38,8 +38,8 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         super(TestCommandCenter, self).setUp()
 
     def tearDown(self):
-        self.cc.db.flushdb()
-        self.cc.db.shutdown()
+        # self.cc.db.flushdb()
+        # self.cc.db.shutdown()
         for db_name in self.mdb.database_names():
             self.mdb.drop_database(db_name)
         super(TestCommandCenter, self).tearDown()
@@ -91,6 +91,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(reply.code, expected_code)
         if expected_code != 200:
             return
+        self.cc._cache_shards()
         target_id = json.loads(reply.body.decode())['target_id']
         reply = self.fetch('/targets/info/'+target_id)
         self.assertEqual(reply.code, expected_code)

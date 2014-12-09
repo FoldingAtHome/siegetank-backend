@@ -386,7 +386,9 @@ class TargetInfoHandler(BaseHandler):
         if not info:
             self.error('Invalid target id')
         self.set_status(200)
-        info["shards"] = list(self.application.shards[target_id])
+        # it's possible this target has no shards.
+        if target_id in self.application.shards:
+            info["shards"] = list(self.application.shards[target_id])
         self.write(info)
 
 
@@ -808,19 +810,20 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
     def _cache_shards(self):
         streams_cursor = self.motor["streams"]
         scv_names = yield streams_cursor.collection_names()
-        scv_names.remove('system.indexes')
         shard_copy = {}
-        for scv_id in scv_names:
-            cursor = streams_cursor[scv_id]
-            results = cursor.find({'status': 'enabled'},
-                                  {'target_id': 1}) # stream_id
+        if scv_names:
+            scv_names.remove('system.indexes')
+            for scv_id in scv_names:
+                cursor = streams_cursor[scv_id]
+                results = cursor.find({'status': 'enabled'},
+                                      {'target_id': 1}) # stream_id
 
-            while (yield results.fetch_next):
-                document = results.next_object()
-                tid = document['target_id']
-                if tid not in shard_copy:
-                    shard_copy[tid] = set()
-                shard_copy[tid].add(scv_id)
+                while (yield results.fetch_next):
+                    document = results.next_object()
+                    tid = document['target_id']
+                    if tid not in shard_copy:
+                        shard_copy[tid] = set()
+                    shard_copy[tid].add(scv_id)
 
         self.shards = shard_copy
 

@@ -33,9 +33,9 @@ class TestSiegeTank(unittest.TestCase):
 
     def setUp(self):
         cc_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                               '..', 'cc')
+                               '..', 'cc_bin')
         scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                                '..', 'scv')
+                                '..', 'scv_bin')
 
         self.pid2 = subprocess.Popen(scv_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
