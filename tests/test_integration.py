@@ -115,12 +115,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
             scv_config = 'scv_'+val['name']+'.json'
             open(scv_config, 'w').write(json.dumps(val['config']))
             args = ["./scv_bin", "-config="+scv_config]
-            print(args)
             p = subprocess.Popen(args)
             self.scvs[index]["process"] = p
             time.sleep(1)
-        
-        print("SETTTTTTING UP")
         tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
         
         result = tests.utils.add_user(manager=True, admin=True)
@@ -147,7 +144,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
     def fetch(self, host, path, **kwargs):
         uri = 'https://'+host+path
-        print("fetching", uri)
         kwargs['validate_cert'] = common.is_domain(host)
         self.client.fetch(uri, self.stop, **kwargs)
         return self.wait()
@@ -202,9 +198,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
                                headers=manager_headers, body=json.dumps(body))
             self.assertEqual(reply.code, 200)
             core_key = json.loads(reply.body.decode())['key']
-
-        print("_assign KEY:", core_key)
-
         core_headers = {'Authorization': core_key}
         body = {'engine': 'openmm'}
         if donor_token:
@@ -213,7 +206,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
             body['target_id'] = target_id
         reply = self.fetch(host, '/core/assign', method='POST',
                            body=json.dumps(body), headers=core_headers)
-        print('DEBUG', reply.body.decode())
         self.assertEqual(reply.code, expected_code)
         return json.loads(reply.body.decode())
 
@@ -377,9 +369,25 @@ class TestSimple(tornado.testing.AsyncTestCase):
         target_id = self._post_target(self.cc_host)['target_id']
         stream_id = self._post_stream(target_id)['stream_id']
         headers = {'Authorization': self.auth_token}
+
+
+        found_stream = False
+        for k in self.scvs:
+            reply = self.fetch(k['host'], '/streams/info/'+stream_id, method='GET')
+            if reply.code == 200:
+                found_stream = True
+        self.assertTrue(found_stream)
+
         reply = self.fetch(self.cc_host, '/targets/delete/'+target_id,
                            method='PUT', headers=headers, body='')
         self.assertEqual(reply.code, 200)
+
+        found_stream = False
+        for k in self.scvs:
+            reply = self.fetch(k['host'], '/streams/info/'+stream_id, method='GET')
+            if reply.code == 200:
+                found_stream = True
+        self.assertFalse(found_stream)
 
         # add tests for Mongo
         # self.mdb.streams.

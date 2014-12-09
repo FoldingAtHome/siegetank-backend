@@ -227,9 +227,7 @@ class CoreAssignHandler(BaseHandler):
             # a target was specified in the request
             target_id = content['target_id']
             result = yield cursor.find_one({'_id': target_id},
-                                           {'engines': 1,
-                                            'shards': 1,
-                                            })
+                                           {'engines': 1})
             if core_engine not in result['engines']:
                 self.error('Core engine not allowed for this target')
             
@@ -242,8 +240,7 @@ class CoreAssignHandler(BaseHandler):
                                    'stage': 'public'},
                                   {'owner': 1,
                                    '_id': 1,
-                                   'weight': 1,
-                                   'shards': 1})
+                                   'weight': 1})
             owner_weights = dict()
             target_weights = dict()
             target_owners = dict()
@@ -254,7 +251,6 @@ class CoreAssignHandler(BaseHandler):
                     owner_weights[document['owner']] = None
                     target_weights[document['_id']] = document['weight']
                     target_owners[document['_id']] = document['owner']
-                    # target_shards[document['_id']] = document['shards']
             if not target_weights:
                 self.error('no valid targets could be found')
             # get a list of all managers and their ids
@@ -827,9 +823,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
                 shard_copy[tid].add(scv_id)
 
         self.shards = shard_copy
-
-        print(self.shards)
-
 
     @tornado.gen.coroutine
     def _check_scvs(self):
