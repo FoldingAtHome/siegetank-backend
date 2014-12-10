@@ -12,8 +12,8 @@ checkout:
 dependencies:
   pre:
     - export GOPATH=~/go/
-    - go get github.com/gorilla/mux"
-    - gopkg.in/mgo.v2"
+    - go get github.com/gorilla/mux
+    - go get gopkg.in/mgo.v2
     - pip install -r requirements.txt
     - cmake --version
     - if [[ ! -e poco-1.5.2-all ]]; then wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz && tar xvf poco-1.5.2-all.tar.gz; fi
