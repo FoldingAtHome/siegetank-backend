@@ -210,9 +210,6 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(stream.active, False)
         new_binary = base64.b64encode(b'hehehe')
         stream.stop()
-        # stream.upload('files/state.xml.gz.b64', new_binary)
-        # self.assertEqual(stream.download('files/state.xml.gz.b64'),
-        #                  new_binary)
         correct_ids = set()
         for s in target.streams:
             correct_ids.add(s.id)
@@ -238,7 +235,7 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.stage, new_stage)
         self.assertEqual(target.weight, weight)
 
-        # it may take sometime...
+        # it may take sometime to update
         time.sleep(1)
 
         target.delete()

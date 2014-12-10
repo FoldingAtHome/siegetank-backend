@@ -7,10 +7,7 @@ machine:
 
 checkout:
   post:
-    - cd redis/src && make -j4
-
-  cache_directories:
-    - "redis"
+    - echo "none"
 
 dependencies:
   pre:
