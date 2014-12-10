@@ -101,13 +101,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
             self.mdb.drop_database(db_name)
         self.cc_server.stop()
         self.cc.shutdown()
-        # self.cc.db.shutdown()
         shutil.rmtree(self.cc.data_folder)
-        # for key in self.scvs:
-        #     key['server'].stop()
-        #     key['app'].db.shutdown()
-        #     key['app'].shutdown()
-        #     shutil.rmtree(key['app'].data_folder)
 
     def get_new_ioloop(self):
         return tornado.ioloop.IOLoop.instance()
@@ -140,10 +134,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
                 shutil.rmtree(val['name']+'_data')
             except:
                 pass
-            # key['app'].db.flushdb()
-            # test_folder = key['app'].streams_folder
-            # if os.path.exists(test_folder):
-            #     shutil.rmtree(test_folder)
 
     def fetch(self, host, path, **kwargs):
         uri = 'https://'+host+path
@@ -369,19 +359,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
             else:
                 self.assertTrue(counters[comb[0]] < counters[comb[1]])
 
-    # def test_stream_shards(self):
-    #     k = 20
-    #     target_id = self._post_target(self.cc_host)['target_id']
-    #     stream_ids = set()
-    #     for i in range(k*len(self.scvs)):
-    #         content = self._post_stream(target_id)
-    #         stream_ids.add(content['stream_id'])
-    #     info = self._get_target_info(self.cc_host, target_id)
-    #     self.assertEqual(set(info['shards']),
-    #                      set(i['name'] for i in self.scvs))
-    #     scv_streams = self._get_streams(self.cc_host, target_id)
-    #     self.assertEqual(set(scv_streams), stream_ids)
-
     def test_target_delete(self):
         target_id = self._post_target(self.cc_host)['target_id']
         stream_id = self._post_stream(target_id)['stream_id']
@@ -405,19 +382,6 @@ class TestSimple(tornado.testing.AsyncTestCase):
             if reply.code == 200:
                 found_stream = True
         self.assertFalse(found_stream)
-
-        # add tests for Mongo
-        # self.mdb.streams.
-
-        # add tests for stream info
-
-        # self._delete_stream(stream_id)
-        # reply = self.fetch(self.cc_host, '/targets/delete/'+target_id,
-        #                    method='PUT', headers=headers, body='')
-        # self.assertEqual(reply.code, 200)
-        # reply = self.fetch(self.cc_host, '/targets', headers=headers)
-        # self.assertEqual(reply.code, 200)
-        # self.assertEqual(json.loads(reply.body.decode())['targets'], [])
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().loadTestsFromModule(sys.modules[__name__])

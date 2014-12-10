@@ -944,8 +944,6 @@ def start():
 
         app.initialize_motor()
 
-        # we are no longer using redis, so we should do this for all instances.
-        # if tornado.process.task_id() == 0:
         tornado.ioloop.IOLoop.instance().add_callback(app._check_scvs)
         tornado.ioloop.IOLoop.instance().add_callback(app._cache_shards)
         pulse = tornado.ioloop.PeriodicCallback(app._check_scvs, 2000)

@@ -32,7 +32,6 @@ import tests.utils
 class TestSiegeTank(unittest.TestCase):
 
     def setUp(self):
-        print("setting up")
         super(TestSiegeTank, self).setUp()
         mdb = pymongo.MongoClient()
         for db_name in mdb.database_names():
@@ -57,37 +56,13 @@ class TestSiegeTank(unittest.TestCase):
         siegetank.login(result['token'], '127.0.0.1:8981')
 
     def tearDown(self):
-        print("tearing down")
         super(TestSiegeTank, self).tearDown()
-        print("tearing down scv", self.pid2.kill())
-
-
 
         p = psutil.Process(int(self.pid1.pid))
         child_pid = p.get_children(recursive=True)
         for pid in child_pid:
-            print(pid, pid.name(), p.name())
             if pid.name() == p.name():
                 os.kill(pid.pid, signal.SIGTERM)
-
-        # parent = psutil.Process(int(self.pid1.pid))
-        # root_pid = 999999999
-        # for child in parent.children():
-        #     print("child pids:", child)
-        #     root_pid = min(child.pid, root_pid)
-        # print('killing', root_pid)
-        # os.kill(int(root_pid), signal.SIGTERM)
-
-
-
-        # pids = [self.pid1.pid]
-        # for pid in pids:
-        #     parent = psutil.Process(int(pid))
-        #     root_pid = 999999999
-        #     for child in parent.children():
-        #         root_pid = min(child.pid, root_pid)
-        #     print('killing', root_pid)
-        #     os.kill(int(root_pid), signal.SIGTERM)
 
         time.sleep(1)
         for data_folder in glob.glob('*_data'):
@@ -215,10 +190,6 @@ class TestSiegeTank(unittest.TestCase):
                  'integrator.xml.gz.b64': encoded_intg,
                  'state.xml.gz.b64': encoded_state}
         siegetank.base.refresh_scvs()
-
-
-        print('AVIALABLE SCVs:', siegetank.base.scvs)
-
 
         random_scv = random.choice(list(siegetank.base.scvs.keys()))
         for i in range(20):

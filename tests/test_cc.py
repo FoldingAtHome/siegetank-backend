@@ -38,8 +38,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         super(TestCommandCenter, self).setUp()
 
     def tearDown(self):
-        # self.cc.db.flushdb()
-        # self.cc.db.shutdown()
         for db_name in self.mdb.database_names():
             self.mdb.drop_database(db_name)
         super(TestCommandCenter, self).tearDown()
@@ -55,26 +53,6 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
     def _add_user(self, *args, **kwargs):
         return tests.utils.add_user(*args, **kwargs)
-
-    #     token = str(uuid.uuid4())
-    #     password = 'riesling'
-    #     email = 'gibberish@gmail.com'
-    #     db_body = {'_id': user,
-    #                'password': password,
-    #                'email': email,
-    #                'token': token}
-    #     self.mdb.users.all.insert(db_body)
-    #     result = db_body
-    #     result['user'] = user
-    #     if manager:
-    #         weight = 1
-    #         db_body = {'_id': user, 'weight': weight}
-    #         self.mdb.users.managers.insert(db_body)
-    #         result['weight'] = weight
-    #     if admin:
-    #         db_body = {'_id': user}
-    #         self.mdb.users.admins.insert(db_body)
-    #     return result
 
     def _post_target(self, auth, expected_code=200, engines=None, stage='private'):
         if engines is None:
