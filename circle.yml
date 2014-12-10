@@ -14,6 +14,7 @@ dependencies:
     - export GOPATH=~/go/
     - go get github.com/gorilla/mux
     - go get gopkg.in/mgo.v2
+    - go build scv/bin/scv_bin.go
     - pip install -r requirements.txt
     - cmake --version
     - if [[ ! -e poco-1.5.2-all ]]; then wget http://pocoproject.org/releases/poco-1.5.2/poco-1.5.2-all.tar.gz && tar xvf poco-1.5.2-all.tar.gz; fi
@@ -29,6 +30,8 @@ dependencies:
 
 test:
   override:
+    - cd scv/src; go test -v -timeout 20
+    - cd scv/src; go test -race -v -timeout 20
     - nosetests -x -v --nocapture
   post:
     - ./tests/start_services
