@@ -161,7 +161,12 @@ func (f *Fixture) activateStream(target_id, engine, user, cc_token string) (toke
 	return
 }
 
-func (f *Fixture) getStream(stream_id string) (result Stream, code int) {
+type testStream struct {
+	Stream
+	Active bool `json:"active"`
+}
+
+func (f *Fixture) getStream(stream_id string) (result testStream, code int) {
 	req, _ := http.NewRequest("GET", "/streams/info/"+stream_id, nil)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
@@ -824,8 +829,12 @@ func TestStreamStateActive(t *testing.T) {
 	stream, code := f.getStream(stream_id)
 	assert.Equal(t, code, 200)
 	assert.Equal(t, stream.MongoStatus, "enabled")
+	assert.Equal(t, stream.Active, false)
 	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
+	stream, code = f.getStream(stream_id)
+	assert.Equal(t, stream.MongoStatus, "enabled")
+	assert.Equal(t, stream.Active, true)
 	// stopping a core without an error message
 	assert.Equal(t, f.coreStop(token, ""), 200)
 	for i := 0; i < MAX_STREAM_FAILS; i++ {

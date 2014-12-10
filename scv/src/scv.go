@@ -589,7 +589,7 @@ func (app *Application) StreamsHandler() AppHandler {
 		if err != nil {
 			return errors.New("Bad request: " + err.Error())
 		}
-		streamId := util.RandSeq(36)
+		streamId := util.RandSeq(36) + ":" + app.Config.Name
 		// Add files to disk
 		stream := NewStream(streamId, msg.TargetId, user, 0, 0, int(time.Now().Unix()))
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
@@ -630,14 +630,24 @@ func (app *Application) StreamInfoHandler() AppHandler {
 		//msg := mongoStream{}
 		streamId := mux.Vars(r)["stream_id"]
 		var result []byte
+		var isActive bool
 		e := app.Manager.ReadStream(streamId, func(stream *Stream) error {
+			if stream.activeStream != nil {
+				isActive = true
+			} else {
+				isActive = false
+			}
 			result, err = json.Marshal(stream)
 			return err
 		})
 		if e != nil {
 			return e
 		}
-		w.Write(result)
+		tmp := make(map[string]interface{})
+		json.Unmarshal(result, &tmp)
+		tmp["active"] = isActive
+		result_final, _ := json.Marshal(tmp)
+		w.Write(result_final)
 		return nil
 	}
 }

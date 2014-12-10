@@ -32,6 +32,12 @@ import tests.utils
 class TestSiegeTank(unittest.TestCase):
 
     def setUp(self):
+        print("setting up")
+        super(TestSiegeTank, self).setUp()
+        mdb = pymongo.MongoClient()
+        for db_name in mdb.database_names():
+            mdb.drop_database(db_name)
+
         cc_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                '..', 'cc_bin')
         scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -40,30 +46,48 @@ class TestSiegeTank(unittest.TestCase):
         self.pid2 = subprocess.Popen(scv_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
-        time.sleep(2)
+        time.sleep(1)
         self.pid1 = subprocess.Popen(cc_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
         cc_uri = '127.0.0.1:8981'
-        time.sleep(2)
-
-        mdb = pymongo.MongoClient()
-        for db_name in mdb.database_names():
-            mdb.drop_database(db_name)
+        time.sleep(3)
 
         result = tests.utils.add_user(manager=True)
         siegetank.login(result['token'], '127.0.0.1:8981')
 
     def tearDown(self):
+        print("tearing down")
+        super(TestSiegeTank, self).tearDown()
+        print("tearing down scv", self.pid2.kill())
 
-        pids = [self.pid1.pid, self.pid2.pid]
-        for pid in pids:
-            parent = psutil.Process(int(pid))
-            root_pid = 999999999
-            for child in parent.children():
-                root_pid = min(child.pid, root_pid)
-            print('killing', root_pid)
-            os.kill(int(root_pid), signal.SIGTERM)
+
+
+        p = psutil.Process(int(self.pid1.pid))
+        child_pid = p.get_children(recursive=True)
+        for pid in child_pid:
+            print(pid, pid.name(), p.name())
+            if pid.name() == p.name():
+                os.kill(pid.pid, signal.SIGTERM)
+
+        # parent = psutil.Process(int(self.pid1.pid))
+        # root_pid = 999999999
+        # for child in parent.children():
+        #     print("child pids:", child)
+        #     root_pid = min(child.pid, root_pid)
+        # print('killing', root_pid)
+        # os.kill(int(root_pid), signal.SIGTERM)
+
+
+
+        # pids = [self.pid1.pid]
+        # for pid in pids:
+        #     parent = psutil.Process(int(pid))
+        #     root_pid = 999999999
+        #     for child in parent.children():
+        #         root_pid = min(child.pid, root_pid)
+        #     print('killing', root_pid)
+        #     os.kill(int(root_pid), signal.SIGTERM)
 
         time.sleep(1)
         for data_folder in glob.glob('*_data'):
@@ -135,7 +159,6 @@ class TestSiegeTank(unittest.TestCase):
                  'integrator.xml.gz.b64': encoded_intg,
                  'state.xml.gz.b64': encoded_state}
         siegetank.base.refresh_scvs()
-
         random_scv = random.choice(list(siegetank.base.scvs.keys()))
         for i in range(3):
             target.add_stream(files, random_scv)
@@ -193,6 +216,10 @@ class TestSiegeTank(unittest.TestCase):
                  'state.xml.gz.b64': encoded_state}
         siegetank.base.refresh_scvs()
 
+
+        print('AVIALABLE SCVs:', siegetank.base.scvs)
+
+
         random_scv = random.choice(list(siegetank.base.scvs.keys()))
         for i in range(20):
             target.add_stream(files, random_scv)
@@ -205,21 +232,22 @@ class TestSiegeTank(unittest.TestCase):
 
         stream = random.sample(target.streams, 1)[0]
 
-        self.assertEqual(stream.status, 'OK')
+        self.assertEqual(stream.status, 'enabled')
         self.assertEqual(stream.frames, 0)
         self.assertEqual(stream.download('files/state.xml.gz.b64'),
                          encoded_state.encode())
         self.assertEqual(stream.active, False)
         new_binary = base64.b64encode(b'hehehe')
         stream.stop()
-        stream.upload('files/state.xml.gz.b64', new_binary)
-        self.assertEqual(stream.download('files/state.xml.gz.b64'),
-                         new_binary)
+        # stream.upload('files/state.xml.gz.b64', new_binary)
+        # self.assertEqual(stream.download('files/state.xml.gz.b64'),
+        #                  new_binary)
         correct_ids = set()
         for s in target.streams:
             correct_ids.add(s.id)
         correct_ids.remove(stream.id)
         stream.delete()
+        time.sleep(3)
         test_ids = set()
         for s in target.streams:
             test_ids.add(s.id)
@@ -238,6 +266,9 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(target.engines, new_engines)
         self.assertEqual(target.stage, new_stage)
         self.assertEqual(target.weight, weight)
+
+        # it may take sometime...
+        time.sleep(1)
 
         target.delete()
         self.assertEqual(siegetank.list_targets(), [])

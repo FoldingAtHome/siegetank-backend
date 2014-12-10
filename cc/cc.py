@@ -338,6 +338,9 @@ class SCVStatusHandler(BaseHandler):
         """
         self.set_status(400)
         body = {}
+
+        print('scv status request received', self.scvs, self.application.scvs)
+
         for scv_name, scv_prop in self.scvs.items():
             body[scv_name] = {}
             body[scv_name]['host'] = scv_prop['host']
@@ -383,16 +386,11 @@ class TargetInfoHandler(BaseHandler):
         self.set_status(400)
         cursor = self.motor.data.targets
         info = yield cursor.find_one({'_id': target_id})
-
-        print('OK WOW WTF', info, target_id)
-
-
         if not info:
             self.error('Invalid target id')
         self.set_status(200)
         # it's possible this target has no shards!
         if target_id in self.application.shards:
-            print("WTF???????????", target_id, self.application.shards)
             info["shards"] = list(self.application.shards[target_id])
         self.write(info)
 
@@ -404,8 +402,7 @@ class TargetDeleteHandler(BaseHandler):
         """
         .. http:put:: /targets/delete/:target_id
 
-            Delete a target from the Command Center. You must delete all the
-            streams from the target to succeed.
+            Delete a target from the Command Center.
 
             This will not affect mongo's community database in order to
             preserve statistics.
@@ -433,10 +430,16 @@ class TargetDeleteHandler(BaseHandler):
             while (yield results.fetch_next):
                 document = results.next_object()
                 stream_id = document['_id']
+
+                print("deleting stream", stream_id)
+
                 reply = yield self.fetch(scv_id, '/streams/delete/'+stream_id, method='PUT', headers=headers, body='')
                 if reply.code != 200:
                     success = False
-                    return self.write({'_id'})
+                    print('\n\nCANT DELETE TARGET :(\n\n', str(reply.body))
+                    self.error("Unable to delete, error:"+str(reply.body))
+                else:
+                    print('deleted', stream_id)
 
         if success:
             cursor = self.motor.data.targets
@@ -884,7 +887,6 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         for key, scv_name in self.scvs.items():
             yield self.fetch(scv_name, '/')
 
-
 def stop_parent(sig, frame):
     kill_children()
 
@@ -941,16 +943,18 @@ def start():
         server.add_sockets(sockets)
 
         app.initialize_motor()
-        if tornado.process.task_id() == 0:
-            tornado.ioloop.IOLoop.instance().add_callback(app._check_scvs)
-            tornado.ioloop.IOLoop.instance().add_callback(app._cache_shards)
-            pulse = tornado.ioloop.PeriodicCallback(app._check_scvs, 5000)
-            pulse.start()
-            # update target shards every minute
-            pulse2 = tornado.ioloop.PeriodicCallback(app._cache_shards, 60000)
-            pulse2.start()
+
+        # we are no longer using redis, so we should do this for all instances.
+        # if tornado.process.task_id() == 0:
+        tornado.ioloop.IOLoop.instance().add_callback(app._check_scvs)
+        tornado.ioloop.IOLoop.instance().add_callback(app._cache_shards)
+        pulse = tornado.ioloop.PeriodicCallback(app._check_scvs, 2000)
+        pulse.start()
+        # update target shards every minute
+        pulse2 = tornado.ioloop.PeriodicCallback(app._cache_shards, 60000)
+        pulse2.start()
         tornado.ioloop.IOLoop.instance().start()
     except SystemExit as e:
         print('! parent is shutting down ...')
-        app.db.shutdown()
+        # app.db.shutdown()
         sys.exit(0)

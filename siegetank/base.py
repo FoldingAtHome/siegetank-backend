@@ -57,13 +57,16 @@ def require_login(method):
 @require_login
 def refresh_scvs():
     """ Update and return the status of the SCVs. This method is rate limited
-        to once every 5 seconds. """
+        to once every 2 seconds. """
     global scvs
     global last_scvs_refresh
     global login_cc
-    if time.time() - last_scvs_refresh > 5:
+    if time.time() - last_scvs_refresh > 1:
         url = 'https://'+login_cc+'/scvs/status'
         reply = requests.get(url, verify=is_domain(login_cc))
+
+        print('REFRESH SCVS called:', reply, reply.status_code, reply.content)
+
         if reply.status_code == 200:
             content = reply.json()
             for scv_name, scv_prop in content.items():
@@ -226,21 +229,21 @@ class Stream(Base):
             #         filepath = os.path.join(c_dir, check_n)
             #         open(filepath, 'wb').write(filedata)
 
-    def upload(self, filename, filedata):
-        """ Upload a file on the stream. The stream must be in the STOPPED
-        state and the file must already exist.
+    # def upload(self, filename, filedata):
+    #     """ Upload a file on the stream. The stream must be in the STOPPED
+    #     state and the file must already exist.
 
-        :param filename: name of the file, eg. state.xml.gz.b64
-        :param filedata: binary data (do not b64 encode).
+    #     :param filename: name of the file, eg. state.xml.gz.b64
+    #     :param filedata: binary data (do not b64 encode).
 
-        """
-        md5 = hashlib.md5(filedata).hexdigest()
-        headers = {'Content-MD5': md5}
-        reply = self._put('/streams/upload/'+self.id+'/'+filename,
-                          body=filedata, headers=headers)
-        if reply.status_code != 200:
-            print(reply.text)
-            raise Exception('Bad status code')
+    #     """
+    #     md5 = hashlib.md5(filedata).hexdigest()
+    #     headers = {'Content-MD5': md5}
+    #     reply = self._put('/streams/upload/'+self.id+'/'+filename,
+    #                       body=filedata, headers=headers)
+    #     if reply.status_code != 200:
+    #         print(reply.text)
+    #         raise Exception('Bad status code')
 
     def reload_info(self):
         reply = self._get('/streams/info/'+self.id)
@@ -408,14 +411,12 @@ class Target(Base):
         streams = []
         self.reload_info()
         global scvs
-        for scv in self.shards:
-            host = scvs[scv]['host']
-            reply = self._get('/targets/streams/'+self.id, host=host)
-            if reply.status_code != 200:
-                print(reply.status_code, reply.content)
-                raise Exception('Failed to load streams from SCV: '+scv)
-            for stream_id in reply.json()['streams']:
-                streams.append(Stream(stream_id))
+        reply = self._get('/targets/streams/'+self.id)
+        if reply.status_code != 200:
+            print(reply.status_code, reply.content)
+            raise Exception('Failed to load streams from SCV: '+scv)
+        for stream_id in reply.json()['streams']:
+            streams.append(Stream(stream_id))
         return streams
 
     @property
