@@ -11,7 +11,6 @@ checkout:
 
 dependencies:
   pre:
-    - export GOPATH=~/go/
     - go get github.com/gorilla/mux
     - go get gopkg.in/mgo.v2
     - go build scv/bin/scv_bin.go
