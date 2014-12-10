@@ -6,8 +6,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"../util"
 )
 
 var _ = fmt.Printf
@@ -47,7 +45,7 @@ func NewManager(inj Injector) *Manager {
 }
 
 func createToken(targetId string) string {
-	return util.RandSeq(36)
+	return RandSeq(36)
 }
 
 func parseToken(token string) string {

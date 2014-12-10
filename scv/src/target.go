@@ -1,12 +1,9 @@
 package scv
 
 type Target struct {
-	// tokens          map[string]*Stream   // map of token to Stream
 	activeStreams   map[*Stream]struct{} // set of active streams
 	disabledStreams map[*Stream]struct{} // set of streams not eligible to be assigned
 	inactiveStreams *Set                 // queue of inactive streams
-	// timers          map[string]*time.Timer
-	// ExpirationTime  int // expiration time in seconds
 }
 
 func StreamComp(l, r interface{}) bool {
@@ -18,14 +15,6 @@ func StreamComp(l, r interface{}) bool {
 		return s1.Frames > s2.Frames
 	}
 }
-
-// func (t *Target) deactivateStreamImpl(s *Stream) {
-// 	delete(t.tokens, s.activeStream.authToken)
-// 	delete(t.timers, s.StreamId)
-// 	delete(t.activeStreams, s)
-// 	s.activeStream = nil
-// 	t.inactiveStreams.Add(s)
-// }
 
 func NewTarget() *Target {
 	target := Target{

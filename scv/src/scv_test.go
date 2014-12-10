@@ -19,9 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"../util"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/mgo.v2/bson"
+
+	"util"
 )
 
 var _ = fmt.Printf
@@ -33,7 +34,7 @@ type Fixture struct {
 }
 
 func (f *Fixture) addUser(user string) (token string) {
-	token = util.RandSeq(36)
+	token = RandSeq(36)
 	type Msg struct {
 		Id    string `bson:"_id"`
 		Token string `bson:"token"`
@@ -691,8 +692,8 @@ func TestStreamActivation(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			engine := util.RandSeq(12)
-			user := util.RandSeq(12)
+			engine := RandSeq(12)
+			user := RandSeq(12)
 			token, code := f.activateStream(target_id, engine, user, f.app.Config.Password)
 			assert.Equal(t, code, 200)
 			mu.Lock()
@@ -758,7 +759,7 @@ func TestHammerTime(t *testing.T) {
 						var concatBin string
 						fCount := rand.Intn(4)
 						for j := 0; j < fCount; j++ {
-							data := util.RandSeq(10)
+							data := RandSeq(10)
 							concatBin += data
 							assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
 							time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
@@ -916,7 +917,7 @@ func TestStreamSync(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		frame_files := map[string]string{
 			"f1": "1234",
-			"f2": util.RandSeq(12),
+			"f2": RandSeq(12),
 		}
 		frameData, _ := json.Marshal(map[string]interface{}{"files": frame_files})
 		assert.Equal(t, f.postFrame(token, string(frameData)), 200)

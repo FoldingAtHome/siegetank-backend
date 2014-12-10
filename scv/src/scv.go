@@ -26,8 +26,6 @@ import (
 	"github.com/gorilla/mux"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-
-	"../util"
 )
 
 var _ = fmt.Printf
@@ -589,7 +587,7 @@ func (app *Application) StreamsHandler() AppHandler {
 		if err != nil {
 			return errors.New("Bad request: " + err.Error())
 		}
-		streamId := util.RandSeq(36) + ":" + app.Config.Name
+		streamId := RandSeq(36) + ":" + app.Config.Name
 		// Add files to disk
 		stream := NewStream(streamId, msg.TargetId, user, 0, 0, int(time.Now().Unix()))
 		todo := map[string]map[string]string{"files": msg.Files, "tags": msg.Tags}
