@@ -13,6 +13,7 @@ dependencies:
   pre:
     - go get github.com/gorilla/mux
     - go get gopkg.in/mgo.v2
+    - go get github.com/stretchr/testify/assert
     - go build scv/bin/scv_bin.go
     - pip install -r requirements.txt
     - cmake --version
