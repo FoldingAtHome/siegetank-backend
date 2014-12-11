@@ -30,6 +30,7 @@ dependencies:
 
 test:
   override:
+    timeout: 1200
     - cd scv/src; go test -v -timeout 20m
     - cd scv/src; go test -race -v -timeout 20m
     - nosetests -x -v --nocapture
