@@ -31,9 +31,9 @@ dependencies:
 test:
   override:
     - cd scv/src; go test -v -timeout 20m:
-      timeout: 1200
+        timeout: 1200
     - cd scv/src; go test -race -v -timeout 20m:
-      timeout: 1200
+        timeout: 1200
     - nosetests -x -v --nocapture
   post:
     - ./tests/start_services
