@@ -9,6 +9,7 @@ import json
 import base64
 import pymongo
 import sys
+import json
 
 import utils
 
@@ -85,13 +86,14 @@ if __name__ == '__main__':
         pid2 = subprocess.Popen(scv_path, stdout=subprocess.PIPE, shell=True,
                                 preexec_fn=lambda: os.setpgid(0, 0))
         time.sleep(1)
-        log.write(str(pid2.pid))
-        log.write(' ')
+        # log.write(str(pid2.pid))
+        # log.write(' ')
     pid1 = subprocess.Popen(cc_path, stdout=subprocess.PIPE, shell=True,
                             preexec_fn=lambda: os.setpgid(0, 0))
     time.sleep(2)
-    log.write(str(pid1.pid))
-    log.close()
+    # log.write(str(pid1.pid))
+    # log.close()
+    log.write(json.dumps({'scv_pid': pid2.pid, 'cc_pid': pid1.pid}))
     result = utils.add_user(manager=True, admin=True,
                             mongo_options=get_mongo_options())
     token = result['token']

@@ -4,19 +4,15 @@ import os
 import signal
 import time
 import psutil
+import json
 
-pids = open('pids.log').read().split(' ')
+pids = json.loads(open('pids.log').read())
 
-for pid in pids:
-    parent = psutil.Process(int(pid))
-    root_pid = 999999999
-    for child in parent.children():
-        root_pid = min(child.pid, root_pid)
-    print('killing', root_pid)
-    os.kill(int(root_pid), signal.SIGTERM)
+psutil.Process(pids['scv_pid']).kill()
 
-# avoid weird error where a file is being written while an rm rf is being
-# issued
+# psutil's kill doesn't quite work for forks
+os.kill(pids['cc_pid'], signal.SIGTERM)
+
 time.sleep(1)
 
-os.system('rm -rf *.log *_data')
+os.system('rm -rf pids.log core_keys.log *_data')
