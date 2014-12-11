@@ -49,11 +49,11 @@ class TestSiegeTank(unittest.TestCase):
         self.pid1 = subprocess.Popen(cc_path, #stdout=open(os.devnull),
             #stderr=open(os.devnull),
             shell=True, preexec_fn=lambda: os.setpgid(0, 0))
-        cc_uri = '127.0.0.1:8981'
+        cc_uri = '127.0.0.1:8980'
         time.sleep(3)
 
         result = tests.utils.add_user(manager=True)
-        siegetank.login(result['token'], '127.0.0.1:8981')
+        siegetank.login(result['token'], '127.0.0.1:8980')
 
     def tearDown(self):
         super(TestSiegeTank, self).tearDown()

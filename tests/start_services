@@ -15,7 +15,7 @@ import utils
 
 def add_engine_token(manager_token):
     headers = {'Authorization': manager_token}
-    reply = requests.post('https://127.0.0.1:8981/engines/keys',
+    reply = requests.post('https://127.0.0.1:8980/engines/keys',
                           data=json.dumps({"engine": "openmm",
                                            "description": "hehehe"}),
                           headers=headers,
@@ -34,7 +34,7 @@ def post_target(auth_token, stage='private'):
                           'stage': stage,
                           'weight': 1,
                           })
-    reply = requests.post('https://127.0.0.1:8981/targets',
+    reply = requests.post('https://127.0.0.1:8980/targets',
                           headers={'Authorization': auth_token},
                           verify=False,
                           data=message,
