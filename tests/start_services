@@ -77,7 +77,7 @@ if __name__ == '__main__':
                                  'stop_services')
         os.system(stop_path)
     cc_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-                           '..', 'cc')
+                           '..', 'cc_bin')
     log = open('pids.log', 'w')
     if '--noscv' not in sys.argv:
         scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
