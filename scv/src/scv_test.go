@@ -174,9 +174,9 @@ func (f *Fixture) getStream(stream_id string) (result testStream, code int) {
 	return
 }
 
-func (f *Fixture) postFrame(token string, data string) (code int) {
+func (f *Fixture) putFrame(token string, data string) (code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
-	req, _ := http.NewRequest("POST", "/core/frame", dataBuffer)
+	req, _ := http.NewRequest("PUT", "/core/frame", dataBuffer)
 	h := md5.New()
 	io.WriteString(h, string(data))
 	req.Header.Add("Authorization", token)
@@ -231,9 +231,9 @@ func (f *Fixture) streamStart(token, streamId string) int {
 	return w.Code
 }
 
-func (f *Fixture) postCheckpoint(token string, data string) (code int) {
+func (f *Fixture) putCheckpoint(token string, data string) (code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
-	req, _ := http.NewRequest("POST", "/core/checkpoint", dataBuffer)
+	req, _ := http.NewRequest("PUT", "/core/checkpoint", dataBuffer)
 	h := md5.New()
 	io.WriteString(h, string(data))
 	req.Header.Add("Authorization", token)
@@ -246,7 +246,7 @@ func (f *Fixture) postCheckpoint(token string, data string) (code int) {
 
 func (f *Fixture) postStream(token string, data string) (stream_id string, code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
-	req, _ := http.NewRequest("POST", "/streams", dataBuffer)
+	req, _ := http.NewRequest("PUT", "/streams", dataBuffer)
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
@@ -387,9 +387,9 @@ func TestLoadStreamsInconsistentFrames(t *testing.T) {
 	stream_id, code := f.postStream(auth_token, jsonData)
 	token, code := f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 200)
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "67890"}}`), 200)
-	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "12345"}}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "67890"}}`), 200)
+	assert.Equal(t, f.putCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
 
 	// manually hack Mongo to use a different frame count.
 	err := f.app.StreamsCursor().UpdateId(stream_id, bson.M{"$set": bson.M{"frames": "50"}})
@@ -759,7 +759,7 @@ func TestHammerTime(t *testing.T) {
 						for j := 0; j < fCount; j++ {
 							data := RandSeq(10)
 							concatBin += data
-							assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
+							assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "`+data+`"}}`), 200)
 							time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
 							assert.Equal(t, f.coreHeartbeat(token), 200)
 							time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
@@ -774,7 +774,7 @@ func TestHammerTime(t *testing.T) {
 						}
 						consChkpt := consecutiveCheckpoints[streamId]
 						mu.Unlock()
-						assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+						assert.Equal(t, f.putCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
 
 						if fCount > 0 {
 							frameBin := f.downloadFrame(auth_token, streamId, "some_file", nFrames)
@@ -807,8 +807,8 @@ func TestStreamCheckpoint(t *testing.T) {
 	streamId, code := f.postStream(auth_token, jsonData)
 	token, code := f.activateStream(target_id, "a", "b", f.app.Config.Password)
 	assert.Equal(t, code, 200)
-	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data1"}, "frames": 0.234}`), 200)
-	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data2"}, "frames": 0.234}`), 200)
+	assert.Equal(t, f.putCheckpoint(token, `{"files": {"chkpt": "data1"}, "frames": 0.234}`), 200)
+	assert.Equal(t, f.putCheckpoint(token, `{"files": {"chkpt": "data2"}, "frames": 0.234}`), 200)
 	chkptBin := f.download(auth_token, streamId, "0/1/checkpoint_files/chkpt")
 	assert.Equal(t, string(chkptBin), "data1")
 	chkptBin = f.download(auth_token, streamId, "0/2/checkpoint_files/chkpt")
@@ -886,7 +886,7 @@ func TestStreamSync(t *testing.T) {
 		"f2": "2345",
 	}
 	frameData, _ := json.Marshal(map[string]interface{}{"files": frame_files})
-	assert.Equal(t, f.postFrame(token, string(frameData)), 200)
+	assert.Equal(t, f.putFrame(token, string(frameData)), 200)
 	assert.Equal(t, f.coreStop(token, ""), 200)
 
 	result, code = f.syncStream(auth_token, stream_id)
@@ -898,13 +898,13 @@ func TestStreamSync(t *testing.T) {
 
 	token, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 
-	assert.Equal(t, f.postFrame(token, string(frameData)), 200)
+	assert.Equal(t, f.putFrame(token, string(frameData)), 200)
 	chkpt_files := map[string]string{
 		"c1": "1234",
 		"c2": "2345",
 	}
 	checkpointData, _ := json.Marshal(map[string]interface{}{"files": chkpt_files})
-	assert.Equal(t, f.postCheckpoint(token, string(checkpointData)), 200)
+	assert.Equal(t, f.putCheckpoint(token, string(checkpointData)), 200)
 
 	result, code = f.syncStream(auth_token, stream_id)
 	assert.Equal(t, result.Partitions, []int{1})
@@ -918,9 +918,9 @@ func TestStreamSync(t *testing.T) {
 			"f2": RandSeq(12),
 		}
 		frameData, _ := json.Marshal(map[string]interface{}{"files": frame_files})
-		assert.Equal(t, f.postFrame(token, string(frameData)), 200)
+		assert.Equal(t, f.putFrame(token, string(frameData)), 200)
 	}
-	assert.Equal(t, f.postCheckpoint(token, string(checkpointData)), 200)
+	assert.Equal(t, f.putCheckpoint(token, string(checkpointData)), 200)
 
 	result, code = f.syncStream(auth_token, stream_id)
 	assert.Equal(t, result.Partitions, []int{1, 11})
@@ -947,29 +947,29 @@ func TestStreamCycle(t *testing.T) {
 	assert.Equal(t, code, 200)
 
 	// test posting plaintext
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "12345"}}`), 200)
 	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 1)
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "67890"}}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "67890"}}`), 200)
 	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 2)
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("1234567890"))
 
-	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
+	assert.Equal(t, f.putCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 200)
 	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.donorFrames, 0.234)
 	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 0)
 
 	assert.Equal(t, f.download(auth_token, stream_id, "2/0/some_file"), []byte("1234567890"))
 	assert.Equal(t, f.download(auth_token, stream_id, "2/0/checkpoint_files/chkpt"), []byte("data"))
 
-	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.123}`), 200)
+	assert.Equal(t, f.putCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.123}`), 200)
 	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.donorFrames, 0.234+0.123)
 	assert.Equal(t, f.app.Manager.streams[stream_id].activeStream.bufferFrames, 0)
 	assert.Equal(t, f.download(auth_token, stream_id, "2/1/checkpoint_files/chkpt"), []byte("data"))
 
 	// test posting base64 encoded
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.b64": "MTIzNDU="}}`), 200)
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.b64": "Njc4OTA="}}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file.b64": "MTIzNDU="}}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file.b64": "Njc4OTA="}}`), 200)
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("1234567890"))
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file.gz.b64": "H4sIAOX+dVQC/zM0MjYxBQAcOvXLBQAAAA=="}}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file.gz.b64": "H4sIAOX+dVQC/zM0MjYxBQAcOvXLBQAAAA=="}}`), 200)
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("123456789012345"))
 
 	assert.Equal(t, f.coreStop(token, ""), 200)
@@ -998,8 +998,8 @@ func TestStreamCycle(t *testing.T) {
 	// assert.Equal(t, result["engine"].(string), "some_engine")
 	// assert.Equal(t, result["user"].(string), "some_donor")
 
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "12345"}}`), 400)
-	assert.Equal(t, f.postCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 400)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "12345"}}`), 400)
+	assert.Equal(t, f.putCheckpoint(token, `{"files": {"chkpt": "data"}, "frames": 0.234}`), 400)
 	assert.Nil(t, f.app.Manager.streams[stream_id].activeStream, nil)
 
 	assert.Equal(t, f.download(auth_token, stream_id, "buffer_files/some_file"), []byte("123456789012345"))
@@ -1067,9 +1067,9 @@ func TestCoreStart(t *testing.T) {
 		assert.Equal(t, w.Code, 400)
 	}
 
-	assert.Equal(t, f.postFrame(token, "12345678"), 400)
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
-	assert.Equal(t, f.postFrame(token, `{"files": {"some_file": "some_data"}}`), 400)
+	assert.Equal(t, f.putFrame(token, "12345678"), 400)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "some_data"}}`), 200)
+	assert.Equal(t, f.putFrame(token, `{"files": {"some_file": "some_data"}}`), 400)
 }
 
 func TestCoreExpiration(t *testing.T) {

@@ -204,7 +204,10 @@ class CoreAssignHandler(BaseHandler):
             self.error('missing Authorization header', code=401)
             return self.set_status(401)
 
-        content = json.loads(self.request.body.decode())
+        try:
+            content = json.loads(self.request.body.decode())
+        except:
+            self.error('Bad POST content', code=401)
         cursor = self.motor.engines.keys
         result = yield cursor.find_one({'_id': key}, fields=['engine'])
         if not result:
