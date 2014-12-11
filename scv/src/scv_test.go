@@ -21,8 +21,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/mgo.v2/bson"
-
-	"util"
 )
 
 var _ = fmt.Printf
