@@ -15,7 +15,7 @@ import utils
 
 def add_engine_token(manager_token):
     headers = {'Authorization': manager_token}
-    reply = requests.post('https://127.0.0.1:8980/engines/keys',
+    reply = requests.post('https://127.0.0.1:8981/engines/keys',
                           data=json.dumps({"engine": "openmm",
                                            "description": "hehehe"}),
                           headers=headers,
@@ -34,7 +34,7 @@ def post_target(auth_token, stage='private'):
                           'stage': stage,
                           'weight': 1,
                           })
-    reply = requests.post('https://127.0.0.1:8980/targets',
+    reply = requests.post('https://127.0.0.1:8981/targets',
                           headers={'Authorization': auth_token},
                           verify=False,
                           data=message,
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         log.write(' ')
     pid1 = subprocess.Popen(cc_path, stdout=subprocess.PIPE, shell=True,
                             preexec_fn=lambda: os.setpgid(0, 0))
-    time.sleep(1)
+    time.sleep(2)
     log.write(str(pid1.pid))
     log.close()
     result = utils.add_user(manager=True, admin=True,
