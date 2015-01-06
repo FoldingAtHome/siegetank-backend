@@ -12,16 +12,12 @@ import (
 )
 
 func main() {
-
-	runtime.GOMAXPROCS(5)
+	runtime.GOMAXPROCS(2 * runtime.NumCPU())
 	conf := scv.Configuration{
 		SSL: make(map[string]string),
 	}
-
 	var configFile = flag.String("config", "", "configuration file for the SCV")
-
 	flag.Parse()
-
 	fmt.Println(*configFile)
 	config := ""
 	if *configFile == "" {
@@ -30,9 +26,7 @@ func main() {
 	} else {
 		config = *configFile
 	}
-
 	log.Println("Config file: ", config)
-
 	file, err := os.Open(config)
 	if err != nil {
 		panic("Could not open config file.")
@@ -40,6 +34,5 @@ func main() {
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&conf)
 	app := scv.NewApplication(conf)
-
 	app.Run()
 }
