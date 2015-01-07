@@ -268,7 +268,7 @@ func NewApplication(config Configuration) *Application {
 
 	if len(config.SSL) > 0 {
 		app.server.TLS(config.SSL["Cert"], config.SSL["Key"])
-		app.server.CA(config.SSL["CA"])
+		// app.server.CA(config.SSL["CA"])
 	}
 	app.statsWG.Add(1)
 	return &app
