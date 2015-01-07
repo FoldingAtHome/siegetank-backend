@@ -3,6 +3,7 @@ package scv
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -152,7 +153,7 @@ func (m *Manager) deactivateStreamImpl(s *Stream, t *Target) {
 		s.activeStream = nil
 		m.stateTransfer(s, t.activeStreams, t.inactiveStreams)
 	} else {
-		panic("tried to deactivate an non-active stream")
+		log.Println("DAMN: tried to deactivate an non-active stream")
 	}
 }
 

@@ -181,7 +181,6 @@ func (f *Fixture) getStream(stream_id string) (result testStream, code int) {
 	f.app.Router.ServeHTTP(w, req)
 	json.Unmarshal(w.Body.Bytes(), &result)
 	code = w.Code
-	fmt.Println("DEBUG CODE:", code)
 	return
 }
 
