@@ -283,9 +283,12 @@ type AppHandler func(http.ResponseWriter, *http.Request) error
 
 // When a handler returns an non-nil error, this method sets the status code to 400.
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	code := 200
 	if err := fn(w, r); err != nil {
 		http.Error(w, err.Error(), 400)
+		code = 400
 	}
+	log.Printf("%s %s %s %d", r.RemoteAddr, r.Method, r.URL, code)
 }
 
 // Look up the User using the Authorization header
