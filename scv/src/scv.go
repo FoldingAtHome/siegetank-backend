@@ -216,8 +216,10 @@ func (app *Application) LoadStreams() {
 
 	for _, stream := range mongoStreamIds {
 		if stream.MongoStatus == "enabled" {
+			log.Println("Adding enabled stream " + stream.StreamId + " to target " + stream.TargetId)
 			app.Manager.AddStream(&stream, stream.TargetId, true)
 		} else if stream.MongoStatus == "disabled" {
+			log.Println("Adding disabled stream " + stream.StreamId + " to target " + stream.TargetId)
 			app.Manager.AddStream(&stream, stream.TargetId, false)
 		} else {
 			panic("Unknown stream status")

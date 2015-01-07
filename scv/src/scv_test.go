@@ -262,7 +262,6 @@ func (f *Fixture) postStream(token string, data string) (stream_id string, code 
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
-	fmt.Println("postStream:", code)
 	if code != 200 {
 		return
 	}
