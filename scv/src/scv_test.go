@@ -25,8 +25,6 @@ import (
 
 var _ = fmt.Printf
 
-var serverAddr string = "http://127.0.0.1/streams/wowsogood"
-
 type Fixture struct {
 	app *Application
 }
@@ -160,6 +158,18 @@ func (f *Fixture) activateStream(target_id, engine, user, cc_token string) (toke
 	return
 }
 
+func (f *Fixture) activeStreams() map[string]interface{} {
+	req, _ := http.NewRequest("GET", "/active_streams", nil)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	if w.Code != 200 {
+		return nil
+	}
+	result := make(map[string]interface{})
+	json.Unmarshal(w.Body.Bytes(), &result)
+	return result
+}
+
 type testStream struct {
 	Stream
 	Active bool `json:"active"`
@@ -171,6 +181,7 @@ func (f *Fixture) getStream(stream_id string) (result testStream, code int) {
 	f.app.Router.ServeHTTP(w, req)
 	json.Unmarshal(w.Body.Bytes(), &result)
 	code = w.Code
+	fmt.Println("DEBUG CODE:", code)
 	return
 }
 
@@ -251,6 +262,7 @@ func (f *Fixture) postStream(token string, data string) (stream_id string, code 
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
 	code = w.Code
+	fmt.Println("postStream:", code)
 	if code != 200 {
 		return
 	}

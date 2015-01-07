@@ -261,6 +261,9 @@ func NewApplication(config Configuration) *Application {
 	app.Router.Handle("/core/stop", app.CoreStopHandler()).Methods("PUT")
 	app.Router.Handle("/core/heartbeat", app.CoreHeartbeatHandler()).Methods("POST")
 	app.server = NewServer(config.InternalHost, app.Router)
+
+	fmt.Println("finished setting up router")
+
 	if len(config.SSL) > 0 {
 		app.server.TLS(config.SSL["Cert"], config.SSL["Key"])
 		app.server.CA(config.SSL["CA"])
@@ -792,6 +795,17 @@ func pathExists(path string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+func (app *Application) ActiveStreamsHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		data, e := json.Marshal(app.Manager.GetActiveStreams())
+		if e != nil {
+			return e
+		}
+		w.Write(data)
+		return nil
+	}
 }
 
 /*
