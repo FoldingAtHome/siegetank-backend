@@ -257,7 +257,7 @@ func (f *Fixture) putCheckpoint(token string, data string) (code int) {
 
 func (f *Fixture) postStream(token string, data string) (stream_id string, code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
-	req, _ := http.NewRequest("PUT", "/streams", dataBuffer)
+	req, _ := http.NewRequest("POST", "/streams", dataBuffer)
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
@@ -1036,6 +1036,10 @@ func TestStreamStartStop(t *testing.T) {
 
 	_, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
+
+	activestreams := f.activeStreams()
+	_, ok := activestreams[stream_id]
+	assert.True(t, ok)
 
 	assert.Equal(t, f.streamStop(auth_token, stream_id), 200)
 	result, code = f.getStream(stream_id)

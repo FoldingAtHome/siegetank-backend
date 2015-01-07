@@ -247,6 +247,7 @@ func NewApplication(config Configuration) *Application {
 	app.Manager = NewManager(&app)
 	app.Router = mux.NewRouter()
 	app.Router.Handle("/", app.AliveHandler()).Methods("GET")
+	app.Router.Handle("/active_streams", app.ActiveStreamsHandler()).Methods("GET")
 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
 	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
