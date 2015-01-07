@@ -34,6 +34,7 @@ package scv
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -198,6 +199,7 @@ func (s *Server) Serve(l net.Listener) error {
 func (s *Server) TLS(cert, key string) error {
 	c, err := tls.LoadX509KeyPair(cert, key)
 	if nil != err {
+		fmt.Println(err)
 		panic("Could not load X509 Key Pair")
 	}
 	s.tlsConfig()
