@@ -25,8 +25,6 @@ import (
 
 var _ = fmt.Printf
 
-var serverAddr string = "http://127.0.0.1/streams/wowsogood"
-
 type Fixture struct {
 	app *Application
 }
@@ -160,6 +158,18 @@ func (f *Fixture) activateStream(target_id, engine, user, cc_token string) (toke
 	return
 }
 
+func (f *Fixture) activeStreams() map[string]interface{} {
+	req, _ := http.NewRequest("GET", "/active_streams", nil)
+	w := httptest.NewRecorder()
+	f.app.Router.ServeHTTP(w, req)
+	if w.Code != 200 {
+		return nil
+	}
+	result := make(map[string]interface{})
+	json.Unmarshal(w.Body.Bytes(), &result)
+	return result
+}
+
 type testStream struct {
 	Stream
 	Active bool `json:"active"`
@@ -246,7 +256,7 @@ func (f *Fixture) putCheckpoint(token string, data string) (code int) {
 
 func (f *Fixture) postStream(token string, data string) (stream_id string, code int) {
 	dataBuffer := bytes.NewBuffer([]byte(data))
-	req, _ := http.NewRequest("PUT", "/streams", dataBuffer)
+	req, _ := http.NewRequest("POST", "/streams", dataBuffer)
 	req.Header.Add("Authorization", token)
 	w := httptest.NewRecorder()
 	f.app.Router.ServeHTTP(w, req)
@@ -1024,6 +1034,10 @@ func TestStreamStartStop(t *testing.T) {
 
 	_, code = f.activateStream(target_id, "some_engine", "some_donor", f.app.Config.Password)
 	assert.Equal(t, code, 200)
+
+	activestreams := f.activeStreams()
+	_, ok := activestreams[stream_id]
+	assert.True(t, ok)
 
 	assert.Equal(t, f.streamStop(auth_token, stream_id), 200)
 	result, code = f.getStream(stream_id)

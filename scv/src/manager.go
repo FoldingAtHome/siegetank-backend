@@ -243,6 +243,24 @@ func (m *Manager) ModifyStream(streamId string, fn func(*Stream) error) error {
 	return fn(stream)
 }
 
+func (m *Manager) GetActiveStreams() interface{} {
+	m.RLock()
+	finalized := map[string]interface{}{}
+	for _, stream := range m.tokens {
+		result := map[string]interface{}{}
+		stream.RLock()
+		result["donor_frames"] = stream.activeStream.donorFrames
+		result["buffer_frames"] = stream.activeStream.bufferFrames
+		result["user"] = stream.activeStream.user
+		result["start_time"] = stream.activeStream.startTime
+		result["engine"] = stream.activeStream.engine
+		finalized[stream.StreamId] = result
+		stream.RUnlock()
+	}
+	m.RUnlock()
+	return finalized
+}
+
 func (m *Manager) ModifyActiveStream(token string, fn func(*Stream) error) error {
 	m.RLock()
 	stream, ok := m.tokens[token]

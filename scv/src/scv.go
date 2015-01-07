@@ -45,10 +45,9 @@ type Application struct {
 }
 
 /*
-Record statistics for the Stream s. There is no need to manually called DisableStreamService to
-set the status to "disabled" if error_count exceeds the limit.
-
-Usually when this method is called, it's in a double mutex.
+Deactivate a stream and record its statistics. It is expected that mutexes are held for both
+the manager and stream. Note that this methods runs very fast. Mongo operations are moved to a queue
+and processed by a separate goroutine.
 */
 func (app *Application) DeactivateStreamService(s *Stream) error {
 	// Record stats for stream and defer insertion until later.
@@ -62,20 +61,21 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	stats["frames"] = donorFrames
 	stats["stream"] = streamId
 	stats_cursor := app.Mongo.DB("stats").C(s.TargetId)
+	// Record statistics for the stream.
 	fn1 := func() error {
 		return stats_cursor.Insert(stats)
 	}
+	// Update the stream's frames, error_count, and status in Mongo
 	status := "enabled"
 	if s.ErrorCount >= MAX_STREAM_FAILS {
 		status = "disabled"
 	}
-	// Update frames, error_count, and status in Mongo
 	stream_prop := bson.M{"$set": bson.M{"frames": s.Frames, "error_count": s.ErrorCount, "status": status}}
 	stream_cursor := app.Mongo.DB("streams").C(app.Config.Name)
 	fn2 := func() error {
-		// Possible corner case where the stream is actually deleted here.
+		// Generally, if the error_count or the status fails to update, it's not a catastrophic error. We
+		// can get away with a slightly dirty state for error_count and status if necessary.
 		stream_cursor.UpdateId(streamId, stream_prop)
-		// We do not care about the return code.
 		return nil
 	}
 
@@ -88,6 +88,7 @@ func (app *Application) DeactivateStreamService(s *Stream) error {
 	return nil
 }
 
+// Implements interface method for Manager's Injector. Only the stream is locked, manager is not.
 func (app *Application) EnableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
 	s.ErrorCount = 0
@@ -95,12 +96,14 @@ func (app *Application) EnableStreamService(s *Stream) error {
 	return cursor.UpdateId(s.StreamId, bson.M{"$set": bson.M{"status": "enabled", "error_count": 0}})
 }
 
+// Implements interface method for Manager's Injector. Only the stream is locked, manager is not.
 func (app *Application) DisableStreamService(s *Stream) error {
 	cursor := app.Mongo.DB("streams").C(app.Config.Name)
 	// fmt.Println("DISABLING STREAM", streamId)
 	return cursor.UpdateId(s.StreamId, bson.M{"$set": bson.M{"status": "disabled"}})
 }
 
+// app.stats contains a list of Mongo functions to be executed. Breaks if the function failed.
 func (app *Application) drainStats() {
 	app.statsMutex.Lock()
 	for app.stats.Len() > 0 {
@@ -117,17 +120,16 @@ func (app *Application) drainStats() {
 	app.statsMutex.Unlock()
 }
 
+// A separate goroutine that populates MongoDB with stats entries.
 func (app *Application) RecordDeferredDocs() {
 	defer app.statsWG.Done()
 	for {
 		select {
 		case <-app.finish:
 			app.drainStats()
-
-			// persist stats here if not empty
+			// TOOD: persist stats here if not empty
 			// if app.stats.Len() > 0 {
 			// }
-
 			return
 		default:
 			app.drainStats()
@@ -145,6 +147,7 @@ type Configuration struct {
 	SSL          map[string]string `json:"SSL" bson:"-"`
 }
 
+// Registers the SCV with MongoDB
 func (app *Application) RegisterSCV() {
 	log.Printf("Registering SCV %s with database...", app.Config.Name)
 	cursor := app.Mongo.DB("servers").C("scvs")
@@ -154,6 +157,14 @@ func (app *Application) RegisterSCV() {
 	}
 }
 
+/*
+Invoked on start of the SCV. The following happens:
+1. Loads the list of streams from Mongo. It is guaranteed that if a stream exists in Mongo, then it must exist on disk.
+2. Any stream that is on the disk but not in Mongo is removed.
+3. The status of the stream (enabled, disabled) is set.
+4. If the frame count on disk (as determined by the folders available) is the canonical value. If it does not match
+   the value inside MongoDB, then frame count value inside Mongo is then updated.
+*/
 func (app *Application) LoadStreams() {
 	var mongoStreams []Stream
 
@@ -229,13 +240,14 @@ func NewApplication(config Configuration) *Application {
 
 	index := mgo.Index{
 		Key:        []string{"target_id"},
-		Background: true, // See notes.
+		Background: true,
 	}
 	app.StreamsCursor().EnsureIndex(index)
 
 	app.Manager = NewManager(&app)
 	app.Router = mux.NewRouter()
 	app.Router.Handle("/", app.AliveHandler()).Methods("GET")
+	app.Router.Handle("/active_streams", app.ActiveStreamsHandler()).Methods("GET")
 	app.Router.Handle("/streams", app.StreamsHandler()).Methods("POST")
 	app.Router.Handle("/streams/info/{stream_id}", app.StreamInfoHandler()).Methods("GET")
 	app.Router.Handle("/streams/activate", app.StreamActivateHandler()).Methods("POST")
@@ -264,8 +276,7 @@ func (app *Application) StreamsCursor() *mgo.Collection {
 
 type AppHandler func(http.ResponseWriter, *http.Request) error
 
-// if we need to return different error codes, simply subclass error class and implement a different type of error
-// and use a dynamic switch type?
+// When a handler returns an non-nil error, this method sets the status code to 400.
 func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := fn(w, r); err != nil {
 		http.Error(w, err.Error(), 400)
@@ -284,6 +295,7 @@ func (app *Application) CurrentUser(r *http.Request) (user string, err error) {
 	return
 }
 
+// Returns True if user is a manager.
 func (app *Application) IsManager(user string) bool {
 	cursor := app.Mongo.DB("users").C("managers")
 	result := make(map[string]interface{})
@@ -311,7 +323,7 @@ func (app *Application) StreamDir(stream_id string) string {
 	return filepath.Join(app.Config.Name+"_data", "streams", stream_id)
 }
 
-// Run starts the server. Listens and Serves asynchronously. And sets up necessary
+// Starts the server. Listens and serves asynchronously. Also sets up necessary
 // signal handlers for graceful termination. This blocks until a signal is sent
 func (app *Application) Run() {
 	log.Printf("Starting up server (pid: %d) on %s", os.Getpid(), app.Config.InternalHost)
@@ -346,6 +358,26 @@ func (app *Application) AliveHandler() AppHandler {
 	}
 }
 
+/*
+.. http:post:: /streams/activate
+    Activate and return the highest priority stream of a target by
+    popping the head of the priority queue.
+    .. note:: This request can only be made by CCs.
+    **Example request**
+    .. sourcecode:: javascript
+        {
+            "target_id": "some_uuid4",
+            "engine": "engine_name",
+            "user": "jesse_v" // optional
+        }
+    **Example reply**
+    .. sourcecode:: javascript
+        {
+            "token": "uuid token"
+        }
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) StreamActivateHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		if r.Header.Get("Authorization") != app.Config.Password {
@@ -401,6 +433,24 @@ func maxCheckpoint(path string) (int, error) {
 	return lastCheckpoint, nil
 }
 
+/*
+.. http:get:: /streams/download/:stream_id/:filename
+	Download file ``filename`` from ``stream_id``. ``filename`` can be
+	either a file in ``files`` or a frame file posted by the core.
+	If it is a frame file, then the frames are concatenated on the fly
+	before returning.
+	.. note:: Even if ``filename`` is not found, this handler will
+	    return an empty file with the status code set to 200. This is
+	    because we cannot distinguish between a frame file that has not
+	    been received from that of a non-existent file.
+	:reqheader Authorization: manager authorization token
+	:resheader Content-Type: application/octet-stream
+	:resheader Content-Disposition: attachment; filename=filename
+	:resheader Content-Length: size of file
+	:status 200: OK
+	:status 400: Bad request
+
+*/
 func (app *Application) StreamDownloadHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		streamId := mux.Vars(r)["stream_id"]
@@ -448,6 +498,27 @@ func (app *Application) ListPartitions(streamId string) ([]int, error) {
 	return res, nil
 }
 
+/*
+.. http:get:: /streams/sync/:stream_id
+    Retrieve the information needed to sync data back in an efficient
+    manner. This method does not invoke os.walk() or anything that
+    requires invoking stat on a large number of files.
+    If the partition is comprised of the list [5, 12, 38], then the
+    stream is divided into the partition (0, 5](5, 12](12, 38], where
+    (a,b] denote the open and closed ends.
+    :reqheader Authorization: Manager token
+    **Example reply**:
+    .. sourcecode:: javascript
+        {
+            'partitions': [5, 12, 38],
+            'frame_files': ['frames.xtc', 'log.txt'],
+            'checkpoint_files': ['state.xml.gz.b64']
+            'seed_files': ['state.xml.gz.b64', 'system.xml.gz.b64',
+                           'integrator.xml.gz.b64']
+        }
+    .. note:: If 'partitions' is not an empty list, then 'frame_files'
+        and 'checkpoint_files' are present.
+*/
 func (app *Application) StreamSyncHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		streamId := mux.Vars(r)["stream_id"]
@@ -527,6 +598,18 @@ func (app *Application) StreamSyncHandler() AppHandler {
 	}
 }
 
+/*
+ .. http:put:: /streams/enable/:stream_id
+    Enable a stream, making it eligible to be assigned.
+    :reqheader Authorization: Manager's authorization token
+    **Example request**:
+    .. sourcecode:: javascript
+        {
+            // empty
+        }
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) StreamEnableHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		user, auth_err := app.CurrentManager(r)
@@ -538,6 +621,18 @@ func (app *Application) StreamEnableHandler() AppHandler {
 	}
 }
 
+/*
+ .. http:put:: /streams/disable/:stream_id
+    Disable a stream, making it ineligible to be assigned.
+    :reqheader Authorization: Manager's authorization token
+    **Example request**:
+    .. sourcecode:: javascript
+        {
+            // empty
+        }
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) StreamDisableHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		user, auth_err := app.CurrentManager(r)
@@ -549,6 +644,20 @@ func (app *Application) StreamDisableHandler() AppHandler {
 	}
 }
 
+/*
+ .. http:put:: /streams/delete/:stream_id
+    Delete a stream permanently.
+    :reqheader Authorization: Manager's authorization token
+    **Example request**:
+    .. sourcecode:: javascript
+        {
+            // empty
+        }
+    .. note:: When all streams belonging to a target is removed, the
+        target and shard information is cleaned up automatically.
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) StreamDeleteHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		streamId := mux.Vars(r)["stream_id"]
@@ -570,6 +679,31 @@ func (app *Application) StreamDeleteHandler() AppHandler {
 	}
 }
 
+/*
+.. http:post:: /streams
+    Add a new stream to this SCV.
+    **Example request**
+    .. sourcecode:: javascript
+        {
+            "target_id": "target_id",
+            "files": {"system.xml.gz.b64": "file1.b64",
+                "integrator.xml.gz.b64": "file2.b64",
+                "state.xml.gz.b64": "file3.b64"
+            }
+            "tags": {
+                "pdb.gz.b64": "file4.b64",
+            } // optional
+        }
+    .. note:: Binary files must be base64 encoded.
+    .. note:: tags are files that are not used by the core.
+    **Example reply**
+    .. sourcecode:: javascript
+        {
+            "stream_id" : "715c592f-8487-46ac-a4b6-838e3b5c2543:hello"
+        }
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) StreamsHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		user, auth_err := app.CurrentManager(r)
@@ -661,6 +795,39 @@ func pathExists(path string) (bool, error) {
 	return false, err
 }
 
+func (app *Application) ActiveStreamsHandler() AppHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		data, e := json.Marshal(app.Manager.GetActiveStreams())
+		if e != nil {
+			return e
+		}
+		w.Write(data)
+		return nil
+	}
+}
+
+/*
+ ..  http:put:: /core/frame
+    Append a frame to the stream's buffer.
+    If the core posts to this method, then the WS assumes that the
+    frame is valid. The data received is stored in a buffer until a
+    checkpoint is received. It is assumed that files given here are
+    binary appendable. Files ending in .b64 or .gz are decoded
+    automatically.
+    :reqheader Content-MD5: MD5 Sum of the body
+    :reqheader Authorization: core Authorization token
+    **Example request**
+    .. sourcecode:: javascript
+        {
+            "files" : {
+                "frames.xtc.b64": "file.b64",
+                "log.txt.gz.b64": "file.gz.b64"
+            },
+            "frames": 25,  // optional, number of frames in the files
+        }
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) CoreFrameHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
@@ -731,6 +898,27 @@ func (app *Application) CoreFrameHandler() AppHandler {
 	}
 }
 
+/*
+.. http:put:: /core/checkpoint
+    Add a checkpoint and flushes buffered files into a state deemed
+    safe. It is assumed that the checkpoint corresponds to the last
+    frame of the buffered frames.
+    :reqheader Content-MD5: MD5 Sum of the body
+    :reqheader Authorization: core Authorization token
+    **Example Request**
+    .. sourcecode:: javascript
+        {
+            "files": {
+                "state.xml.gz.b64" : "state.xml.gz.b64"
+            },
+            "frames": 239.98, # number of frames since last checkpoint
+        }
+    .. note:: filenames must be almost be present in stream_files
+    .. note:: If ``frames`` is not provided, the backend uses
+        buffer frames an approximation
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) CoreCheckpointHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
@@ -789,7 +977,48 @@ func (app *Application) CoreCheckpointHandler() AppHandler {
 	}
 }
 
+/*
+.. http:get:: /core/start
+    Get files needed for the core to start an activated stream.
+    :reqheader Authorization: core Authorization token
+    :resheader Content-MD5: MD5 hexdigest of the body
+    **Example reply**
+    .. sourcecode:: javascript
+        {
+            "stream_id": "uuid4",
+            "target_id": "uuid4",
+            "files": {
+                "state.xml.gz.b64": "content.b64",
+                "integrator.xml.gz.b64": "content.b64",
+                "system.xml.gz.b64": "content.b64"
+            }
+            "options": {
+                "steps_per_frame": 50000,
+                "title": "Dihydrofolate Reductase", // used by some
+                "description": "This protein is the canonical benchmark
+                    protein used by the MD community."
+                "category": "Benchmark"
+            }
+        }
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) CoreStartHandler() AppHandler {
+
+	// We need to be extremely careful about checkpoints and frames, as
+	// it is important we avoid writing duplicate frames on the first
+	// step for the core. We use the follow scheme:
+	//
+	//               (0,10]                      (10,20]
+	//             frameset_10                 frameset_20
+	//      -------------------------------------------------------------
+	//      |c        core 1      |c|              core 2         |c|
+	//      ----                  --|--                           --|--
+	// frame x |1 2 3 4 5 6 7 8 9 10| |11 12 13 14 15 16 17 18 19 20| |21
+	//         ---------------------| ------------------------------- ---
+	//
+	// In other words, the core does not write frames for the zeroth frame.
+
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
 		type Reply struct {
@@ -858,6 +1087,19 @@ func (app *Application) CoreStartHandler() AppHandler {
 	}
 }
 
+/*
+..  http:put:: /core/stop
+    Stop the stream and deactivate.
+    :reqheader Authorization: core Authorization token
+    **Example Request**
+    .. sourcecode:: javascript
+        {
+            "error": "message_b64",  // optional
+        }
+    .. note:: ``error`` must be b64 encoded.
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) CoreStopHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")
@@ -880,6 +1122,14 @@ func (app *Application) CoreStopHandler() AppHandler {
 	}
 }
 
+/*
+.. http:post:: /core/heartbeat
+    Cores POST to this handler to notify the WS that it is still
+    alive.
+    :reqheader Authorization: core Authorization token
+    :status 200: OK
+    :status 400: Bad request
+*/
 func (app *Application) CoreHeartbeatHandler() AppHandler {
 	return func(w http.ResponseWriter, r *http.Request) (err error) {
 		token := r.Header.Get("Authorization")

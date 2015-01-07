@@ -11,12 +11,11 @@ type Stream struct {
 	Owner        string `json:"-" bson:"-"`                 // constant (safe to read without mutex)
 	StreamId     string `json:"-" bson:"_id"`               // constant
 	TargetId     string `json:"target_id" bson:"target_id"` // constant
-	// Status       string `json:"stats" bson:"status"`
-	Frames       int `json:"frames" bson:"frames"`
-	ErrorCount   int `json:"error_count" bson:"error_count"`
-	CreationDate int `json:"creation_date" bson:"creation_date"`
+	Frames       int    `json:"frames" bson:"frames"`
+	ErrorCount   int    `json:"error_count" bson:"error_count"`
+	CreationDate int    `json:"creation_date" bson:"creation_date"`
 
-	MongoStatus string `json:"status" bson:"status"` // this value is really used for persistence purposes. Real status determined by target
+	MongoStatus string `json:"status" bson:"status"` // this value is used only for persistence purposes.
 
 	activeStream *ActiveStream
 }
