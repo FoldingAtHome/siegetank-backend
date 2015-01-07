@@ -198,7 +198,7 @@ func (s *Server) Serve(l net.Listener) error {
 func (s *Server) TLS(cert, key string) error {
 	c, err := tls.LoadX509KeyPair(cert, key)
 	if nil != err {
-		return err
+		panic("Could not load X509 Key Pair")
 	}
 	s.tlsConfig()
 	s.TLSConfig.Certificates = []tls.Certificate{c}
