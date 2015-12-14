@@ -17,10 +17,9 @@ from __future__ import print_function, absolute_import, division
 import requests
 import json
 import os
-import hashlib
 import functools
 import time
-from siegetank.util import is_domain, encode_files
+from siegetank.util import is_domain
 
 auth_token = None
 login_cc = None
@@ -30,7 +29,7 @@ last_scvs_refresh = 0
 
 def login(token, cc='cc.proteneer.com'):
     """ Login to a particular command center using your token. """
-    url = 'https://'+cc+'/users/verify'
+    url = 'https://' + cc + '/users/verify'
     headers = {'Authorization': token}
     reply = requests.get(url, verify=is_domain(cc), headers=headers)
     if reply.status_code != 200:
@@ -62,7 +61,7 @@ def refresh_scvs():
     global last_scvs_refresh
     global login_cc
     if time.time() - last_scvs_refresh > 1:
-        url = 'https://'+login_cc+'/scvs/status'
+        url = 'https://' + login_cc + '/scvs/status'
         reply = requests.get(url, verify=is_domain(login_cc))
 
         print('REFRESH SCVS called:', reply, reply.status_code, reply.content)
@@ -86,7 +85,7 @@ class Base:
         headers['Authorization'] = auth_token
         if host is None:
             host = self.uri
-        url = 'https://'+host+path
+        url = 'https://' + host + path
         return requests.get(url, headers=headers, verify=is_domain(self.uri),
                             timeout=timeout)
 
@@ -94,7 +93,7 @@ class Base:
         if headers is None:
             headers = {}
         headers['Authorization'] = auth_token
-        url = 'https://'+self.uri+path
+        url = 'https://' + self.uri + path
         if body is None:
             body = '{}'
         return requests.put(url, headers=headers, data=body,
@@ -104,7 +103,7 @@ class Base:
         if headers is None:
             headers = {}
         headers['Authorization'] = auth_token
-        url = 'https://'+self.uri+path
+        url = 'https://' + self.uri + path
         if body is None:
             body = '{}'
         return requests.post(url, headers=headers, data=body,
@@ -132,11 +131,11 @@ class Stream(Base):
 
     def __repr__(self):
         frames = str(self.frames)
-        return '<stream '+self.id+' s:'+self.status+' f:'+frames+'>'
+        return '<stream ' + self.id + ' s:' + self.status + ' f:' + frames + '>'
 
     def enable(self):
         """ Start this stream. """
-        reply = self._put('/streams/enable/'+self.id)
+        reply = self._put('/streams/enable/' + self.id)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -144,7 +143,7 @@ class Stream(Base):
 
     def disable(self):
         """ Stop this stream. """
-        reply = self._put('/streams/disable/'+self.id)
+        reply = self._put('/streams/disable/' + self.id)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -155,7 +154,7 @@ class Stream(Base):
         use this stream object anymore afterwards.
 
         """
-        reply = self._put('/streams/delete/'+self.id)
+        reply = self._put('/streams/delete/' + self.id)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -167,7 +166,12 @@ class Stream(Base):
         :param filename: name of the file. eg. '2/checkpoint_files/state.xml.gz'
 
         """
-        reply = self._get('/streams/download/'+self.id+'/'+filename, timeout=10)
+        reply = self._get(
+            '/streams/download/' +
+            self.id +
+            '/' +
+            filename,
+            timeout=10)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -187,9 +191,9 @@ class Stream(Base):
             """ Order matters. """
             required_list = [str(item) for item in required_list]
             have_list = [str(item) for item in have_list]
-            return list(set(required_list)-set(have_list))
+            return list(set(required_list) - set(have_list))
 
-        reply = self._get('/streams/sync/'+self.id)
+        reply = self._get('/streams/sync/' + self.id)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -216,7 +220,8 @@ class Stream(Base):
             if not os.path.exists(p_dir):
                 os.makedirs(p_dir)
             for frame_n in missing(content['frame_files'], os.listdir(p_dir)):
-                filedata = self.download(os.path.join(str(partition), '0', frame_n))
+                filedata = self.download(
+                    os.path.join(str(partition), '0', frame_n))
                 filepath = os.path.join(p_dir, frame_n)
                 open(filepath, 'wb').write(filedata)
             # if 'checkpoint_files' in content:
@@ -246,7 +251,7 @@ class Stream(Base):
     #         raise Exception('Bad status code')
 
     def reload_info(self):
-        reply = self._get('/streams/info/'+self.id)
+        reply = self._get('/streams/info/' + self.id)
         content = json.loads(reply.text)
         self._frames = content['frames']
         self._status = content['status']
@@ -288,7 +293,7 @@ class Stream(Base):
     @property
     def partitions(self):
         """ Return a list of partitions for this stream. """
-        reply = self._get('/streams/sync/'+self.id)
+        reply = self._get('/streams/sync/' + self.id)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -317,7 +322,7 @@ class Target(Base):
         super(Target, self).__init__(login_cc)
 
     def __repr__(self):
-        return '<target '+self.id+'>'
+        return '<target ' + self.id + '>'
 
     def attach_shard(self):
         raise Exception('Not implemented')
@@ -327,7 +332,7 @@ class Target(Base):
 
     def delete(self):
         """ Delete this target from the backend """
-        reply = self._put('/targets/delete/'+self.id)
+        reply = self._put('/targets/delete/' + self.id)
         if reply.status_code != 200:
             print(reply.text)
             raise Exception('Bad status code')
@@ -348,9 +353,9 @@ class Target(Base):
         if stage:
             message['stage'] = stage
         message = json.dumps(message)
-        reply = self._put('/targets/update/'+self.id, body=message)
+        reply = self._put('/targets/update/' + self.id, body=message)
         if reply.status_code != 200:
-            raise Exception('could not update target. Reason:'+reply.content)
+            raise Exception('could not update target. Reason:' + reply.content)
         self.reload_info()
 
     def add_stream(self, files, scv, tags=None):
@@ -373,7 +378,7 @@ class Target(Base):
             global scvs
             global auth_token
             refresh_scvs()
-            url = 'https://'+scvs[scv]['host']+'/streams'
+            url = 'https://' + scvs[scv]['host'] + '/streams'
             headers = {'Authorization': auth_token}
             reply = requests.post(url, headers=headers, data=json.dumps(body),
                                   verify=is_domain(self.uri))
@@ -387,7 +392,7 @@ class Target(Base):
 
     def reload_info(self):
         """ Reload the target's information """
-        reply = self._get('/targets/info/'+self.id)
+        reply = self._get('/targets/info/' + self.id)
         if reply.status_code != 200:
             raise Exception('Failed to load target info')
         info = json.loads(reply.text)
@@ -409,10 +414,10 @@ class Target(Base):
         streams = []
         self.reload_info()
         global scvs
-        reply = self._get('/targets/streams/'+self.id)
+        reply = self._get('/targets/streams/' + self.id)
         if reply.status_code != 200:
             print(reply.status_code, reply.content)
-            raise Exception('Failed to load streams from SCV: '+scv)
+            raise Exception('Failed to load streams from SCV: ' + scv)
         for stream_id in reply.json()['streams']:
             streams.append(Stream(stream_id))
         return streams
@@ -468,10 +473,10 @@ def add_target(options, engines, weight=1, stage='private'):
     body = {}
     body['options'] = options
     body['engines'] = engines
-    assert type(engines) == list
+    assert isinstance(engines, list)
     body['stage'] = stage
     body['weight'] = weight
-    url = 'https://'+login_cc+'/targets'
+    url = 'https://' + login_cc + '/targets'
     global auth_token
     headers = {'Authorization': auth_token}
     reply = requests.post(url, data=json.dumps(body),
@@ -486,22 +491,24 @@ def add_target(options, engines, weight=1, stage='private'):
 load_target = Target
 load_stream = Stream
 
+
 @require_login
 def list_engines():
     global login_cc
     global auth_token
-    url = 'https://'+login_cc+'/engines/keys'
+    url = 'https://' + login_cc + '/engines/keys'
     headers = {'Authorization': auth_token}
     reply = requests.get(url, verify=is_domain(login_cc), headers=headers)
     if reply.status_code != 200:
         raise Exception('Cannot get engines')
+
 
 @require_login
 def list_targets():
     """ Return a list of targets. """
     global login_cc
     global auth_token
-    url = 'https://'+login_cc+'/targets'
+    url = 'https://' + login_cc + '/targets'
     headers = {'Authorization': auth_token}
     reply = requests.get(url, verify=is_domain(login_cc), headers=headers)
     if reply.status_code != 200:

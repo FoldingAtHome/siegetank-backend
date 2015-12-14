@@ -25,11 +25,13 @@ def secret_cookie():
 
 
 class TestHandler(tornado.web.RequestHandler):
+
     def get(self):
         return self.write("I'm alive!")
 
 
 class MainHandler(tornado.web.RequestHandler):
+
     def get(self):
         if self.get_cookie("cookie_monster") == secret_cookie():
             self.redirect("/static/index.html")
@@ -86,7 +88,7 @@ class GithubAuthHandler(tornado.web.RequestHandler):
                                            body=urlencode(parameters))
                 access_token = dict(parse_qsl(reply.body.decode()))\
                     ['access_token']
-                headers = {'Authorization': 'token '+access_token,
+                headers = {'Authorization': 'token ' + access_token,
                            'User-Agent': 'Tornado OAuth'}
                 client = tornado.httpclient.AsyncHTTPClient()
                 uri = "https://api.github.com/user"
@@ -94,9 +96,10 @@ class GithubAuthHandler(tornado.web.RequestHandler):
                 reply = yield client.fetch(uri, headers=headers)
                 content = json.loads(reply.body.decode())
                 username = content['login']
-                uri = "https://api.github.com/repos/proteneer/backend"+\
-                      "/collaborators/"+username
-                headers['Authorization'] = 'token '+self.proteneer_access_token
+                uri = "https://api.github.com/repos/proteneer/backend" +\
+                      "/collaborators/" + username
+                headers['Authorization'] = 'token ' + \
+                    self.proteneer_access_token
                 reply = yield client.fetch(uri, headers=headers)
                 self.set_cookie("cookie_monster", secret_cookie())
                 self.redirect('/static/index.html')
@@ -117,11 +120,11 @@ class GithubAuthHandler(tornado.web.RequestHandler):
             parameters = {
                 'client_id': self.client_id,
                 'state': self.x_site_token,
-                'redirect_uri': hostname()+"auth/github",
+                'redirect_uri': hostname() + "auth/github",
             }
 
             uri = "https://github.com/login/oauth/authorize?"
-            self.redirect(uri+urlencode(parameters))
+            self.redirect(uri + urlencode(parameters))
 
 
 class AuthStaticFileHandler(tornado.web.StaticFileHandler):
@@ -142,7 +145,7 @@ if __name__ == "__main__":
         (r"/", MainHandler),
         (r"/test", TestHandler),
         (r'/static/(.*)', AuthStaticFileHandler, {'path': "_build/html"})
-        ])
+    ])
 
     application.listen(os.environ.get("PORT", 9430))
     tornado.ioloop.IOLoop.instance().start()

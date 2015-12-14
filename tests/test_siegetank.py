@@ -17,17 +17,17 @@ import subprocess
 import os
 import signal
 import time
-import base64
+# import base64
 import shutil
 import glob
 import random
-import filecmp
 import pymongo
 import psutil
 import hashlib
 
 import siegetank.base
 import tests.utils
+
 
 class TestSiegeTank(unittest.TestCase):
 
@@ -42,14 +42,16 @@ class TestSiegeTank(unittest.TestCase):
         scv_path = os.path.join(os.path.dirname(os.path.realpath(__file__)),
                                 '..', 'scv_bin')
 
-        self.pid2 = subprocess.Popen(scv_path, #stdout=open(os.devnull),
-            #stderr=open(os.devnull),
-            shell=True, preexec_fn=lambda: os.setpgid(0, 0))
+        self.pid2 = subprocess.Popen(scv_path,  # stdout=open(os.devnull),
+                                     # stderr=open(os.devnull),
+                                     shell=True,
+                                     preexec_fn=lambda: os.setpgid(0, 0))
         time.sleep(1)
-        self.pid1 = subprocess.Popen(cc_path, #stdout=open(os.devnull),
-            #stderr=open(os.devnull),
-            shell=True, preexec_fn=lambda: os.setpgid(0, 0))
-        cc_uri = '127.0.0.1:8980'
+        self.pid1 = subprocess.Popen(cc_path,  # stdout=open(os.devnull),
+                                     # stderr=open(os.devnull),
+                                     shell=True,
+                                     preexec_fn=lambda: os.setpgid(0, 0))
+        # cc_uri = '127.0.0.1:8980'
         time.sleep(3)
 
         result = tests.utils.add_user(manager=True)
@@ -84,12 +86,12 @@ class TestSiegeTank(unittest.TestCase):
                 os.makedirs(p_dir)
                 open(os.path.join(p_dir, 'bin1'), 'wb').write(os.urandom(5987))
                 open(os.path.join(p_dir, 'bin2'), 'wb').write(os.urandom(9820))
-                
+
                 os.makedirs(os.path.join(p_dir, 'checkpoint_files'))
                 open(os.path.join(p_dir, 'checkpoint_files',
-                     'cin1'), 'wb').write(os.urandom(2048))
+                                  'cin1'), 'wb').write(os.urandom(2048))
                 open(os.path.join(p_dir, 'checkpoint_files',
-                     'cin2'), 'wb').write(os.urandom(2048))
+                                  'cin2'), 'wb').write(os.urandom(2048))
 
         def remove_local_partition(stream_id, partition, filename=None):
             stream_dir = os.path.join('sync_data', stream_id)
@@ -107,12 +109,27 @@ class TestSiegeTank(unittest.TestCase):
             for partition in os.listdir(stream_dir):
                 if partition == 'files':
                     continue
-                for frame_file in os.listdir(os.path.join(stream_dir, partition, '0')):
+                for frame_file in os.listdir(
+                    os.path.join(
+                        stream_dir,
+                        partition,
+                        '0')):
                     if frame_file == 'checkpoint_files':
                         continue
-                    bin1 = open(os.path.join(stream_dir, partition, '0', frame_file), 'rb')
+                    bin1 = open(
+                        os.path.join(
+                            stream_dir,
+                            partition,
+                            '0',
+                            frame_file),
+                        'rb')
                     try:
-                        bin2 = open(os.path.join(sync_dir, partition, frame_file), 'rb')
+                        bin2 = open(
+                            os.path.join(
+                                sync_dir,
+                                partition,
+                                frame_file),
+                            'rb')
                     except:
                         return False
                     if bin1.read() != bin2.read():
@@ -139,7 +156,7 @@ class TestSiegeTank(unittest.TestCase):
             target.add_stream(files, random_scv)
         target.add_stream(files, random_scv)
         stream = random.sample(target.streams, 1)[0]
-        sync_dir = os.path.join('sync_data',stream.id)
+        sync_dir = os.path.join('sync_data', stream.id)
         stream_dir = os.path.join('firebat_data', 'streams', stream.id)
         stream.sync(sync_dir)
         self.assertTrue(are_frame_dirs_equal(sync_dir, stream_dir))
@@ -160,7 +177,7 @@ class TestSiegeTank(unittest.TestCase):
         self.assertFalse(are_frame_dirs_equal(sync_dir, stream_dir))
         stream.sync(sync_dir)
         self.assertTrue(are_frame_dirs_equal(sync_dir, stream_dir))
-        
+
         shutil.rmtree(sync_dir)
 
     def test_add_target(self):
@@ -208,7 +225,7 @@ class TestSiegeTank(unittest.TestCase):
         self.assertEqual(stream.download('files/state.xml.gz.b64'),
                          encoded_state.encode())
         self.assertEqual(stream.active, False)
-        new_binary = base64.b64encode(b'hehehe')
+        # new_binary = base64.b64encode(b'hehehe')
         stream.stop()
         correct_ids = set()
         for s in target.streams:

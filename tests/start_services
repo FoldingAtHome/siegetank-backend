@@ -9,7 +9,6 @@ import json
 import base64
 import pymongo
 import sys
-import json
 
 import utils
 
@@ -45,8 +44,9 @@ def post_target(auth_token, stage='private'):
 
 def get_mongo_options():
     config_path = os.path.join(os.path.dirname(os.path.basename(__file__)),
-        'cc.conf')
+                               'cc.conf')
     config_path = os.path.abspath(config_path)
+
     def exec_in(code, glob, loc=None):
         if isinstance(code, str):
             code = compile(code, '<string>', 'exec', dont_inherit=True)
