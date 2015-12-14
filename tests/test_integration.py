@@ -23,7 +23,6 @@ import tornado.ioloop
 import unittest
 import os
 import shutil
-import uuid
 import urllib
 import itertools
 import pymongo
@@ -56,8 +55,8 @@ class TestSimple(tornado.testing.AsyncTestCase):
 
         self.scvs = []
         for i in range(2):
-            name = 'mengsk'+str(i)
-            host = '127.0.0.1:'+str(3764+i)
+            name = 'mengsk' + str(i)
+            host = '127.0.0.1:' + str(3764 + i)
             config = {
                 'MongoURI': 'localhost:27017',
                 'Name': name,
@@ -71,9 +70,9 @@ class TestSimple(tornado.testing.AsyncTestCase):
                 }
             }
             prop = {
-                'config' : config,
-                'host' : host,
-                'name' : name
+                'config': config,
+                'host': host,
+                'name': name
             }
             self.scvs.append(prop)
 
@@ -109,34 +108,34 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def setUp(self):
         super(TestSimple, self).setUp()
         for index, val in enumerate(self.scvs):
-            scv_config = 'scv_'+val['name']+'.json'
+            scv_config = 'scv_' + val['name'] + '.json'
             open(scv_config, 'w').write(json.dumps(val['config']))
-            args = ["./scv_bin", "-config="+scv_config]
+            args = ["./scv_bin", "-config=" + scv_config]
             p = subprocess.Popen(args)
             self.scvs[index]["process"] = p
             time.sleep(1)
         tornado.ioloop.IOLoop.instance().run_sync(self.cc._load_scvs)
-        
+
         result = tests.utils.add_user(manager=True, admin=True)
         self.auth_token = result['token']
         self.manager = result['user']
 
     def tearDown(self):
         super(TestSimple, self).tearDown()
-        #self.cc.db.flushdb()
+        # self.cc.db.flushdb()
         for db_name in self.mdb.database_names():
             if db_name != 'servers':
                 self.mdb.drop_database(db_name)
         for val in self.scvs:
             val["process"].kill()
             try:
-                os.remove('scv_'+val['name']+'.json')
-                shutil.rmtree(val['name']+'_data')
+                os.remove('scv_' + val['name'] + '.json')
+                shutil.rmtree(val['name'] + '_data')
             except:
                 pass
 
     def fetch(self, host, path, **kwargs):
-        uri = 'https://'+host+path
+        uri = 'https://' + host + path
         kwargs['validate_cert'] = common.is_domain(host)
         self.client.fetch(uri, self.stop, **kwargs)
         return self.wait()
@@ -160,7 +159,11 @@ class TestSimple(tornado.testing.AsyncTestCase):
         return body
 
     def _list_target_streams(self, target_id):
-        reply = self.fetch(self.cc_host, '/targets/streams/'+target_id, method='GET')
+        reply = self.fetch(
+            self.cc_host,
+            '/targets/streams/' +
+            target_id,
+            method='GET')
         self.assertEqual(reply.code, 200)
         return json.loads(reply.body.decode())['streams']
 
@@ -168,7 +171,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         headers = {'Authorization': self.auth_token}
         scv_id = stream_id.split(':')[1]
         host = self._get_scv_host(scv_id)
-        reply = self.fetch(host, '/streams/delete/'+stream_id, method='PUT',
+        reply = self.fetch(host, '/streams/delete/' + stream_id, method='PUT',
                            headers=headers, body='')
         self.assertEqual(reply.code, 200)
 
@@ -221,7 +224,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         self.assertEqual(reply.code, 200)
 
     def _get_target_info(self, host, target_id):
-        reply = self.fetch(host, '/targets/info/'+target_id)
+        reply = self.fetch(host, '/targets/info/' + target_id)
         self.assertEqual(reply.code, 200)
         return json.loads(reply.body.decode())
 
@@ -233,7 +236,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
         streams = []
         for scv in shards:
             host = self._get_scv_host(scv)
-            reply = self.fetch(host, '/targets/streams/'+target_id,
+            reply = self.fetch(host, '/targets/streams/' + target_id,
                                headers=headers)
             self.assertEqual(reply.code, 200)
             content = json.loads(reply.body.decode())
@@ -321,7 +324,7 @@ class TestSimple(tornado.testing.AsyncTestCase):
     def test_assign_no_shards(self):
         content = self._post_target(self.cc_host)
         target_id = content['target_id']
-        options = content['options']
+        # options = content['options']
         self._assign(self.cc_host, target_id, expected_code=400)
         self._assign(self.cc_host, expected_code=400)
 
@@ -364,21 +367,28 @@ class TestSimple(tornado.testing.AsyncTestCase):
         stream_id = self._post_stream(target_id)['stream_id']
         headers = {'Authorization': self.auth_token}
 
-
         found_stream = False
         for k in self.scvs:
-            reply = self.fetch(k['host'], '/streams/info/'+stream_id, method='GET')
+            reply = self.fetch(
+                k['host'],
+                '/streams/info/' +
+                stream_id,
+                method='GET')
             if reply.code == 200:
                 found_stream = True
         self.assertTrue(found_stream)
 
-        reply = self.fetch(self.cc_host, '/targets/delete/'+target_id,
+        reply = self.fetch(self.cc_host, '/targets/delete/' + target_id,
                            method='PUT', headers=headers, body='')
         self.assertEqual(reply.code, 200)
 
         found_stream = False
         for k in self.scvs:
-            reply = self.fetch(k['host'], '/streams/info/'+stream_id, method='GET')
+            reply = self.fetch(
+                k['host'],
+                '/streams/info/' +
+                stream_id,
+                method='GET')
             if reply.code == 200:
                 found_stream = True
         self.assertFalse(found_stream)

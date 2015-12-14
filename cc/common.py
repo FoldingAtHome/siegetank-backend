@@ -14,9 +14,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import subprocess
-import sys
-import time
 import tornado
 import ipaddress
 import os
@@ -53,6 +50,7 @@ def is_domain(url):
 
 def preexec():  # Don't forward signals.
     os.setpgrp()
+
 
 class CommonHandler(tornado.web.RequestHandler):
 
@@ -128,17 +126,17 @@ class BaseServerMixin():
         """ A BaseServer is a server that is connected to both a redis server
         and a mongo server """
         self.name = name
-        self.data_folder = name+'_data'
+        self.data_folder = name + '_data'
         if not os.path.exists(self.data_folder):
             os.makedirs(self.data_folder)
         access_channel = logging.FileHandler(os.path.join(self.data_folder,
-            'access.log'))
+                                                          'access.log'))
         logging.getLogger('tornado.access').addHandler(access_channel)
         app_channel = logging.FileHandler(os.path.join(self.data_folder,
-            'application.log'))
+                                                       'application.log'))
         logging.getLogger('tornado.application').addHandler(app_channel)
         general_channel = logging.FileHandler(os.path.join(self.data_folder,
-            'general.log'))
+                                                           'general.log'))
         logging.getLogger('tornado.general').addHandler(general_channel)
         self._mongo_options = mongo_options
 

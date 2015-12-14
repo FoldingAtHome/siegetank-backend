@@ -33,6 +33,7 @@ import logging
 from cc.common import BaseServerMixin, is_domain, configure_options
 from cc.common import CommonHandler, kill_children
 
+
 class BaseHandler(CommonHandler):
 
     def initialize(self):
@@ -143,7 +144,7 @@ class TargetUpdateHandler(BaseHandler):
             payload['weight'] = max(content['weight'], 0)
         if 'options' in content:
             for key, value in content['options'].items():
-                payload['options.'+key] = value
+                payload['options.' + key] = value
         if not payload:
             self.error('Nothing to update')
         cursor = self.motor.data.targets
@@ -151,7 +152,7 @@ class TargetUpdateHandler(BaseHandler):
         if result['updatedExisting']:
             self.set_status(200)
         else:
-            self.error('invalid '+target_id)
+            self.error('invalid ' + target_id)
 
 
 class CoreAssignHandler(BaseHandler):
@@ -233,7 +234,7 @@ class CoreAssignHandler(BaseHandler):
                                            {'engines': 1})
             if core_engine not in result['engines']:
                 self.error('Core engine not allowed for this target')
-            
+
             if target_id not in self.application.shards:
                 self.error('Target specified has no shards')
             shards = self.application.shards[target_id]
@@ -271,7 +272,7 @@ class CoreAssignHandler(BaseHandler):
                 # exclusive prefix sum
                 for index, value in enumerate(values):
                     if index > 0:
-                        values[index] += values[index-1]
+                        values[index] += values[index - 1]
                 x = random.uniform(0, values[-1])
                 for index, value in enumerate(values):
                     if value > x:
@@ -285,7 +286,8 @@ class CoreAssignHandler(BaseHandler):
             shards = self.application.shards[target_id]
 
         def scv_online(scv_name):
-            if self.scvs[scv_name]['fail_count'] < self.application._max_ws_fails:
+            if self.scvs[scv_name][
+                    'fail_count'] < self.application._max_ws_fails:
                 return True
             else:
                 return False
@@ -298,7 +300,7 @@ class CoreAssignHandler(BaseHandler):
             if user:
                 msg['user'] = user
             try:
-                password = self.scvs[scv]['password'] 
+                password = self.scvs[scv]['password']
                 headers = {'Authorization': password}
                 reply = yield self.fetch(scv, '/streams/activate',
                                          method='POST', body=json.dumps(msg),
@@ -307,14 +309,16 @@ class CoreAssignHandler(BaseHandler):
                     token = json.loads(reply.body.decode())["token"]
                     host = self.scvs[scv]['host']
                     body = {'token': token,
-                            'url': 'https://'+host+'/core/start'}
+                            'url': 'https://' + host + '/core/start'}
                     self.write(body)
                     return self.set_status(200)
                 elif reply.code == 400:
-                    message = "Assignment returned 400, target_id: "+target_id+" scv: "+scv
+                    message = ("Assignment returned 400, target_id: " +
+                               target_id + " scv: " + scv)
                     logging.getLogger('tornado.application').critical(message)
-            except tornado.httpclient.HTTPError as e:
-                message = "Assignment failed, target_id: "+target_id+" scv: "+scv
+            except tornado.httpclient.HTTPError:
+                message = ("Assignment failed, target_id: " + target_id +
+                           " scv: " + scv)
                 logging.getLogger('tornado.application').critical(message)
         self.error('no streams available for the target')
 
@@ -421,12 +425,12 @@ class TargetDeleteHandler(BaseHandler):
         streams_cursor = self.motor["streams"]
         scv_names = yield streams_cursor.collection_names()
         scv_names.remove('system.indexes')
-        shard_copy = {}
+        # shard_copy = {}
 
         success = True
 
         headers = {'Authorization': self.request.headers['Authorization']}
-        
+
         for scv_id in scv_names:
             cursor = streams_cursor[scv_id]
             results = cursor.find({'target_id': target_id}, {'_id': 1})
@@ -436,11 +440,14 @@ class TargetDeleteHandler(BaseHandler):
 
                 print("deleting stream", stream_id)
 
-                reply = yield self.fetch(scv_id, '/streams/delete/'+stream_id, method='PUT', headers=headers, body='')
+                reply = yield self.fetch(scv_id,
+                                         '/streams/delete/' + stream_id,
+                                         method='PUT', headers=headers,
+                                         body='')
                 if reply.code != 200:
                     success = False
                     print('\n\nCANT DELETE TARGET :(\n\n', str(reply.body))
-                    self.error("Unable to delete, error:"+str(reply.body))
+                    self.error("Unable to delete, error:" + str(reply.body))
                 else:
                     print('deleted', stream_id)
 
@@ -448,6 +455,7 @@ class TargetDeleteHandler(BaseHandler):
             cursor = self.motor.data.targets
             yield cursor.remove({'_id': target_id})
             return self.set_status(200)
+
 
 # TODO: Cache?
 class TargetStreamsHandler(BaseHandler):
@@ -486,7 +494,7 @@ class TargetStreamsHandler(BaseHandler):
             for scv_id in scv_names:
                 cursor = streams_cursor[scv_id]
                 results = cursor.find({'target_id': target_id},
-                                      {'_id': 1}) # stream_id
+                                      {'_id': 1})  # stream_id
 
                 while (yield results.fetch_next):
                     document = results.next_object()
@@ -600,9 +608,9 @@ class TargetsHandler(BaseHandler):
         if not is_manager:
             self.error('Not a manager', code=401)
         content = json.loads(self.request.body.decode())
-        #----------------#
-        # verify request #
-        #----------------#
+        # ---------------- #
+        #  verify request  #
+        # ---------------- #
         engines = content['engines']
 
         if 'stage' in content:
@@ -621,9 +629,9 @@ class TargetsHandler(BaseHandler):
         else:
             weight = max(content['weight'], 0)
 
-        #------------#
-        # write data #
-        #------------#
+        # ------------ #
+        #  write data  #
+        # ------------ #
         target_id = str(uuid.uuid4())
         owner = yield self.get_current_user()
         payload = {
@@ -685,7 +693,7 @@ class EngineKeysHandler(BaseHandler):
         content = json.loads(self.request.body.decode())
         for required_key in ['engine', 'description']:
             if required_key not in content:
-                self.error('missing: '+required_key)
+                self.error('missing: ' + required_key)
         stored_id = str(uuid.uuid4())
         content['_id'] = stored_id
         content['creation_date'] = time.time()
@@ -829,16 +837,16 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             (r'/targets/update/(.*)', TargetUpdateHandler),
             (r'/scvs/status', SCVStatusHandler),
             (r'/targets/streams/(.*)', TargetStreamsHandler)
-            ])
+        ])
 
     @tornado.gen.coroutine
     def fetch(self, scv_id, path, **kwargs):
         """ Make a request to a particular SCV and keep track of whether or not
-        it is alive. 
+        it is alive.
 
         """
         host = self.scvs[scv_id]['host']
-        uri = 'https://'+host+path
+        uri = 'https://' + host + path
         client = tornado.httpclient.AsyncHTTPClient()
         try:
             reply = yield client.fetch(uri, validate_cert=is_domain(host),
@@ -872,7 +880,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
             for scv_id in scv_names:
                 cursor = streams_cursor[scv_id]
                 results = cursor.find({'status': 'enabled'},
-                                      {'target_id': 1}) # stream_id
+                                      {'target_id': 1})  # stream_id
 
                 while (yield results.fetch_next):
                     document = results.next_object()
@@ -889,6 +897,7 @@ class CommandCenter(BaseServerMixin, tornado.web.Application):
         yield self._load_scvs()
         for key, scv_name in self.scvs.items():
             yield self.fetch(scv_name, '/')
+
 
 def stop_parent(sig, frame):
     kill_children()
@@ -955,7 +964,7 @@ def start():
         pulse2 = tornado.ioloop.PeriodicCallback(app._cache_shards, 60000)
         pulse2.start()
         tornado.ioloop.IOLoop.instance().start()
-    except SystemExit as e:
+    except SystemExit:
         print('! parent is shutting down ...')
         # app.db.shutdown()
         sys.exit(0)

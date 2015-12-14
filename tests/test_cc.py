@@ -22,7 +22,6 @@ import json
 import time
 import random
 import pymongo
-import uuid
 
 import cc.cc as cc
 import tests.utils
@@ -54,7 +53,12 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
     def _add_user(self, *args, **kwargs):
         return tests.utils.add_user(*args, **kwargs)
 
-    def _post_target(self, auth, expected_code=200, engines=None, stage='private'):
+    def _post_target(
+            self,
+            auth,
+            expected_code=200,
+            engines=None,
+            stage='private'):
         if engines is None:
             engines = ['openmm_opencl', 'openmm_cuda']
         headers = {'Authorization': auth}
@@ -71,10 +75,10 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
             return
         self.cc._cache_shards()
         target_id = json.loads(reply.body.decode())['target_id']
-        reply = self.fetch('/targets/info/'+target_id)
+        reply = self.fetch('/targets/info/' + target_id)
         self.assertEqual(reply.code, expected_code)
         content = json.loads(reply.body.decode())
-        self.assertTrue(float(content['creation_date'])-time.time() < 2)
+        self.assertTrue(float(content['creation_date']) - time.time() < 2)
         self.assertEqual(content['stage'], 'private')
         self.assertEqual(content['engines'], ['openmm_opencl', 'openmm_cuda'])
         self.assertEqual(content['options'], options)
@@ -92,7 +96,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
 
     def _delete_core_key(self, auth, core_key, expected_code=200):
         headers = {'Authorization': auth}
-        reply = self.fetch('/engines/keys/delete/'+core_key, method='PUT',
+        reply = self.fetch('/engines/keys/delete/' + core_key, method='PUT',
                            headers=headers, body='')
         self.assertEqual(reply.code, expected_code)
 
@@ -301,10 +305,10 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
             'stage': 'public',
             'engines': new_engines,
         }
-        reply = self.fetch('/targets/update/'+target_id, method='PUT',
+        reply = self.fetch('/targets/update/' + target_id, method='PUT',
                            headers=headers, body=json.dumps(body))
         self.assertEqual(reply.code, 200)
-        reply = self.fetch('/targets/info/'+target_id)
+        reply = self.fetch('/targets/info/' + target_id)
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
         self.assertEqual(content['owner'], user)
@@ -313,10 +317,10 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(content['options'], options)
         options['description'] = 'ram'
         body = {'options': options}
-        reply = self.fetch('/targets/update/'+target_id, method='PUT',
+        reply = self.fetch('/targets/update/' + target_id, method='PUT',
                            headers=headers, body=json.dumps(body))
         self.assertEqual(reply.code, 200)
-        reply = self.fetch('/targets/info/'+target_id)
+        reply = self.fetch('/targets/info/' + target_id)
         self.assertEqual(reply.code, 200)
         content = json.loads(reply.body.decode())
         self.assertEqual(content['options'], options)
@@ -328,7 +332,7 @@ class TestCommandCenter(tornado.testing.AsyncHTTPTestCase):
         result = self._add_user(user='baduser', manager=True)
         auth = result['token']
         headers = {'Authorization': auth}
-        reply = self.fetch('/targets/update/'+target_id, method='PUT',
+        reply = self.fetch('/targets/update/' + target_id, method='PUT',
                            headers=headers, body=json.dumps(body))
         self.assertEqual(reply.code, 401)
 
